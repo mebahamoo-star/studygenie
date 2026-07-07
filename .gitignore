@@ -1,0 +1,74 @@
+### Java / Spring Boot ###
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+*.class
+*.jar
+*.war
+HELP.md
+.mvn/
+mvnw
+mvnw.cmd
+
+### IDE ###
+.idea/
+*.iml
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+*.swp
+
+### Python / FastAPI ###
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.env
+.venv
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+pip-log.txt
+
+### Node / React ###
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnp/
+.pnp.js
+dist/
+build/
+.next/
+.cache/
+coverage/
+
+### Environment & Secrets ###
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+application-local.yml
+application-local.properties
+
+### Docker ###
+*.log
+docker-volumes/
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Misc ###
+*.tmp
+*.bak
+logs/
