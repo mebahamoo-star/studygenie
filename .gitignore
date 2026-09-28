@@ -1,15 +1,12 @@
 ### Java / Spring Boot ###
 target/
-!.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 *.class
 *.jar
 *.war
 HELP.md
-.mvn/
-mvnw
-mvnw.cmd
 
 ### IDE ###
 .idea/
