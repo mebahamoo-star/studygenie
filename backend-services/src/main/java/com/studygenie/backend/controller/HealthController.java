@@ -17,8 +17,11 @@ import java.util.Map;
 @RequestMapping("/api/health")
 public class HealthController {
 
-    @Value("${spring.application.name:backend}")
-    private String appName;
+    private final String appName;
+
+    public HealthController(@Value("${spring.application.name:backend}") String appName) {
+        this.appName = appName;
+    }
 
     @GetMapping
     public ApiResponse<Map<String, Object>> getHealth() {

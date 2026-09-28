@@ -2,11 +2,22 @@
 
 This is the backend for the StudyGenie project, built with Spring Boot 3.3 and Java 17.
 
+## Requirements
+- **JDK 17** is the supported version. Newer JDKs are not supported by this Spring Boot version's managed Lombok dependency.
+- To set `JAVA_HOME` for a single PowerShell session, use:
+  ```powershell
+  $env:JAVA_HOME = "<path to JDK 17>"
+  $env:Path = "$env:JAVA_HOME\bin;$env:Path"
+  ```
+
 ## How to run with the dev profile (no MySQL required)
 
 The `dev` profile uses an in-memory H2 database, which is perfect for local development without Docker or MySQL.
 
 ```bash
+.\mvnw.cmd -f backend-services/pom.xml spring-boot:run -Dspring-boot.run.profiles=dev # Windows
+./mvnw -f backend-services/pom.xml spring-boot:run -Dspring-boot.run.profiles=dev     # Linux/Mac
+# or if Maven is installed globally:
 mvn -f backend-services/pom.xml spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
@@ -21,13 +32,17 @@ By default (without the `dev` profile), the application expects a MySQL database
    - `DB_PASS`
 3. Run the application:
 ```bash
-mvn -f backend-services/pom.xml spring-boot:run
+.\mvnw.cmd -f backend-services/pom.xml spring-boot:run
+./mvnw -f backend-services/pom.xml spring-boot:run
+# or mvn -f backend-services/pom.xml spring-boot:run
 ```
 
 ## How to run tests
 
 ```bash
-mvn -f backend-services/pom.xml clean verify
+.\mvnw.cmd -f backend-services/pom.xml clean verify
+./mvnw -f backend-services/pom.xml clean verify
+# or mvn -f backend-services/pom.xml clean verify
 ```
 
 ## Package Layout

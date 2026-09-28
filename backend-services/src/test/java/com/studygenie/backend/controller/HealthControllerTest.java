@@ -8,7 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -34,6 +34,16 @@ class HealthControllerTest {
     void unauthenticatedRequest_shouldReturnUnauthorizedJson() throws Exception {
         mockMvc.perform(get("/api/some-protected-endpoint")
                 .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Unauthorized"));
+    }
+
+    @Test
+    void postHealth_shouldReturnUnauthorizedJson() throws Exception {
+        mockMvc.perform(post("/api/health")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content("x"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Unauthorized"));
