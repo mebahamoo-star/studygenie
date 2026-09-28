@@ -1,4 +1,4 @@
-from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,12 +8,12 @@ class Settings(BaseSettings):
     ai_internal_token: str
 
     llm_provider: str = "gemini"
-    gemini_api_key: Optional[str] = None
+    gemini_api_key: str | None = None
     
     llm_model_parse: str = "gemini-2.5-flash"
     llm_model_study_kit: str = "gemini-2.5-flash-lite"
     
-    llm_thinking_budget: Optional[int] = None
+    llm_thinking_budget: int | None = None
     
     llm_temperature_parse: float = 0.1
     llm_temperature_study_kit: float = 0.4

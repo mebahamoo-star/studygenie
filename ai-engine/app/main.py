@@ -1,7 +1,8 @@
-import sys
-import uuid
-import time
 import logging
+import sys
+import time
+import uuid
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
@@ -10,11 +11,10 @@ from app.config import settings
 from app.errors import (
     AppError,
     app_error_handler,
-    validation_exception_handler,
     generic_exception_handler,
-    make_envelope
+    make_envelope,
+    validation_exception_handler,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +65,8 @@ def create_app() -> FastAPI:
     # Register Routers (will do in next step)
     from app.api.health import router as health_router
     from app.api.parse import router as parse_router
-    from app.api.study_kit import router as study_kit_router
     from app.api.plan import router as plan_router
+    from app.api.study_kit import router as study_kit_router
 
     app.include_router(health_router)
     app.include_router(parse_router)

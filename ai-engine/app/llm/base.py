@@ -1,5 +1,7 @@
-from typing import Any, Dict, Protocol, Tuple, Type
+from typing import Protocol
+
 from pydantic import BaseModel
+
 
 class ProviderError(Exception):
     pass
@@ -30,8 +32,8 @@ class Provider(Protocol):
         model: str,
         temperature: float,
         max_output_tokens: int,
-        schema: Type[BaseModel]
-    ) -> Tuple[BaseModel, Dict[str, int], str]:
+        schema: type[BaseModel]
+    ) -> tuple[BaseModel, dict[str, int], str]:
         ...
 
     async def generate_json_from_pdf(
@@ -42,6 +44,6 @@ class Provider(Protocol):
         model: str,
         temperature: float,
         max_output_tokens: int,
-        schema: Type[BaseModel]
-    ) -> Tuple[BaseModel, Dict[str, int], str]:
+        schema: type[BaseModel]
+    ) -> tuple[BaseModel, dict[str, int], str]:
         ...

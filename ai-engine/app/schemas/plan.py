@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
 from datetime import date
+
+from pydantic import BaseModel, Field
+
 
 class TopicPlanInput(BaseModel):
     ref: str
@@ -12,9 +13,9 @@ class TopicPlanInput(BaseModel):
 class GeneratePlanRequest(BaseModel):
     start_date: date
     exam_date: date
-    topics: List[TopicPlanInput] = Field(..., min_length=1, max_length=40)
+    topics: list[TopicPlanInput] = Field(..., min_length=1, max_length=40)
     daily_hours: float = Field(default=2.0, ge=0.5, le=12.0)
-    rest_weekdays: List[int] = Field(default_factory=list) # 0 = Monday
+    rest_weekdays: list[int] = Field(default_factory=list) # 0 = Monday
     mode: str = Field(default="NORMAL") # NORMAL | SURVIVAL
     buffer_days_before_exam: int = Field(default=1, ge=0, le=7)
     review_ratio: float = Field(default=0.15, ge=0.0, le=0.4)
@@ -37,9 +38,9 @@ class PlanSummary(BaseModel):
     planned_topics: int
     skipped_count: int
     feasible: bool
-    warnings: List[str]
+    warnings: list[str]
 
 class PlanResponseData(BaseModel):
-    tasks: List[Task]
-    skipped_topics: List[SkippedTopic]
+    tasks: list[Task]
+    skipped_topics: list[SkippedTopic]
     summary: PlanSummary

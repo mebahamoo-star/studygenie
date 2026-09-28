@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Request
-from app.security import verify_internal_token
-from app.schemas.study_kit import GenerateStudyKitRequest
-from app.services.study_kit_generator import generate_study_kit
+
 from app.errors import make_envelope
+from app.schemas.study_kit import GenerateStudyKitRequest
+from app.security import verify_internal_token
+from app.services.study_kit_generator import generate_study_kit
 
 router = APIRouter()
 

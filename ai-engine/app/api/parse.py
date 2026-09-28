@@ -1,10 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, Request
-from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+
+from app.errors import make_envelope
 from app.security import verify_internal_token
 from app.services.pdf_extractor import extract_pdf_content
 from app.services.syllabus_parser import parse_syllabus
-from app.schemas.parse import ParseResponseData
-from app.errors import make_envelope
 
 router = APIRouter()
 
@@ -12,7 +12,7 @@ router = APIRouter()
 async def parse_syllabus_endpoint(
     request: Request,
     file: UploadFile = File(...),
-    course_name: Optional[str] = Form(None, max_length=150),
+    course_name: str | None = Form(None, max_length=150),
     language_hint: str = Form("auto"),
     token: str = Depends(verify_internal_token)
 ):

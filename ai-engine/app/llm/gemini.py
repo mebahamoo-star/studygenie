@@ -2,18 +2,20 @@ import asyncio
 import base64
 import json
 import logging
+from typing import Any
+
 import httpx
-from typing import Any, Dict, Tuple, Type
 from pydantic import BaseModel, ValidationError
+
 from app.config import settings
 from app.llm.base import (
+    LLMInvalidOutput,
     Provider,
     ProviderAuthError,
-    ProviderRateLimited,
-    ProviderTimeout,
     ProviderBadResponse,
     ProviderNotConfigured,
-    LLMInvalidOutput
+    ProviderRateLimited,
+    ProviderTimeout,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +59,7 @@ class GeminiProvider(Provider):
 
                 except (httpx.TimeoutException, httpx.NetworkError) as e:
                     if retries >= settings.llm_max_retries:
-                        raise ProviderTimeout(f"Network error or timeout: {str(e)}")
+                        raise ProviderTimeout(f"Network error or timeout: {e!s}")
                 except ProviderRateLimited as e:
                     if retries >= settings.llm_max_retries:
                         raise e
@@ -91,7 +93,7 @@ class GeminiProvider(Provider):
             "generationConfig": config
         }
 
-    def _parse_response(self, response: httpx.Response) -> Tuple[Any, Dict[str, int]]:
+    def _parse_response(self, response: httpx.Response) -> tuple[Any, dict[str, int]]:
         if response.status_code != 200:
             raise ProviderBadResponse(f"Gemini error {response.status_code}: {response.text}")
             
@@ -124,7 +126,7 @@ class GeminiProvider(Provider):
         
         return parsed_json, usage
 
-    async def _execute_with_repair(self, payload: dict, model: str, schema: Type[BaseModel]) -> Tuple[BaseModel, Dict[str, int], str]:
+    async def _execute_with_repair(self, payload: dict, model: str, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, int], str]:
         response = await self._make_request_with_retries(model, payload)
         parsed_json, usage = self._parse_response(response)
         
@@ -157,14 +159,14 @@ class GeminiProvider(Provider):
                 validated_repaired = schema.model_validate(repair_json)
                 return validated_repaired, usage, model
             except ValidationError as final_e:
-                raise LLMInvalidOutput(f"Failed after repair: {str(final_e)}")
+                raise LLMInvalidOutput(f"Failed after repair: {final_e!s}")
 
-    async def generate_json(self, system: str, user: str, model: str, temperature: float, max_output_tokens: int, schema: Type[BaseModel]) -> Tuple[BaseModel, Dict[str, int], str]:
+    async def generate_json(self, system: str, user: str, model: str, temperature: float, max_output_tokens: int, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, int], str]:
         contents = [{"role": "user", "parts": [{"text": user}]}]
         payload = self._build_payload(system, contents, temperature, max_output_tokens)
         return await self._execute_with_repair(payload, model, schema)
 
-    async def generate_json_from_pdf(self, system: str, user: str, pdf_bytes: bytes, model: str, temperature: float, max_output_tokens: int, schema: Type[BaseModel]) -> Tuple[BaseModel, Dict[str, int], str]:
+    async def generate_json_from_pdf(self, system: str, user: str, pdf_bytes: bytes, model: str, temperature: float, max_output_tokens: int, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, int], str]:
         pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
         contents = [{
             "role": "user", 

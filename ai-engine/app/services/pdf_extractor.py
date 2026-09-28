@@ -1,7 +1,10 @@
 import io
+
 import pdfplumber
-from app.errors import AppError
+
 from app.config import settings
+from app.errors import AppError
+
 
 def extract_pdf_content(file_bytes: bytes) -> tuple[str, int, str]:
     """
@@ -41,4 +44,4 @@ def extract_pdf_content(file_bytes: bytes) -> tuple[str, int, str]:
     except AppError:
         raise
     except Exception as e:
-        raise AppError(status_code=422, error_code="PDF_UNREADABLE", message=f"Could not read PDF: {str(e)}")
+        raise AppError(status_code=422, error_code="PDF_UNREADABLE", message=f"Could not read PDF: {e!s}")

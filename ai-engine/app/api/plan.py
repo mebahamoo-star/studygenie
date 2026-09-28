@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Request
-from app.security import verify_internal_token
-from app.schemas.plan import GeneratePlanRequest
-from app.services.planner import generate_plan
+
 from app.errors import make_envelope
+from app.schemas.plan import GeneratePlanRequest
+from app.security import verify_internal_token
+from app.services.planner import generate_plan
 
 router = APIRouter()
 

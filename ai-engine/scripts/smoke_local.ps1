@@ -51,3 +51,21 @@ try {
 }
 
 Write-Host "`nSmoke test script finished."
+Write-Host "
+4. Generate Study Kit"
+$kitBody = '{"course_name": "CS101", "topics": [{"ref": "ref1", "chapter_title": "AI"}]}'
+Invoke-RestMethod "http://localhost:8000/v1/generate-study-kit" -Method Post -Headers @{"X-Internal-Token"=$token} -Body $kitBody -ContentType "application/json" | ConvertTo-Json -Depth 5 -Compress | Write-Host
+
+Write-Host "
+5. Generate Plan (NORMAL)"
+$planBody = '{"start_date": "2023-10-01", "exam_date": "2023-10-10", "topics": [{"ref": "ref1", "chapter_title": "AI", "order_index": 1, "estimated_hours": 2, "importance": 3}], "mode": "NORMAL"}'
+Invoke-RestMethod "http://localhost:8000/v1/generate-plan" -Method Post -Headers @{"X-Internal-Token"=$token} -Body $planBody -ContentType "application/json" | ConvertTo-Json -Depth 5 -Compress | Write-Host
+
+Write-Host "
+6. Generate Plan (SURVIVAL)"
+$planBodySurv = '{"start_date": "2023-10-01", "exam_date": "2023-10-10", "topics": [{"ref": "ref1", "chapter_title": "AI", "order_index": 1, "estimated_hours": 2, "importance": 3}], "mode": "SURVIVAL"}'
+Invoke-RestMethod "http://localhost:8000/v1/generate-plan" -Method Post -Headers @{"X-Internal-Token"=$token} -Body $planBodySurv -ContentType "application/json" | ConvertTo-Json -Depth 5 -Compress | Write-Host
+
+Write-Host "
+7. OpenAPI"
+Invoke-RestMethod "http://localhost:8000/openapi.json" | Select-Object -Property openapi, info | ConvertTo-Json -Compress | Write-Host

@@ -1,14 +1,14 @@
 import hashlib
-from typing import List, Dict, Any, Optional
+
 from app.config import settings
-from app.llm.factory import get_provider
-from app.prompts.parse import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, PROMPT_VERSION
-from app.schemas.parse import ParseResult, TopicItem, ParseResponseData
-from app.schemas.common import ResponseMeta, UsageMeta
 from app.errors import AppError
+from app.llm.factory import get_provider
+from app.prompts.parse import PROMPT_VERSION, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+from app.schemas.common import ResponseMeta, UsageMeta
+from app.schemas.parse import ParseResponseData, ParseResult, TopicItem
 
 
-async def parse_syllabus(file_bytes: bytes, course_name: Optional[str], language_hint: str, extracted_text: str, pages: int, extraction_method: str) -> ParseResponseData:
+async def parse_syllabus(file_bytes: bytes, course_name: str | None, language_hint: str, extracted_text: str, pages: int, extraction_method: str) -> ParseResponseData:
     provider = get_provider()
     
     warnings = []

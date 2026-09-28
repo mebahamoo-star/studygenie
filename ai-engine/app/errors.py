@@ -1,13 +1,14 @@
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
+
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from fastapi.exceptions import RequestValidationError
-from datetime import datetime, timezone
 
 
 class AppError(Exception):
-    def __init__(self, status_code: int, error_code: str, message: str, details: Optional[List[Dict[str, str]]] = None):
+    def __init__(self, status_code: int, error_code: str, message: str, details: list[dict[str, str]] | None = None):
         self.status_code = status_code
         self.error_code = error_code
         self.message = message
@@ -16,12 +17,12 @@ class AppError(Exception):
 
 def make_envelope(
     success: bool,
-    message: Optional[str] = None,
+    message: str | None = None,
     data: Any = None,
-    errors: Optional[List[Dict[str, str]]] = None,
-    error_code: Optional[str] = None
+    errors: list[dict[str, str]] | None = None,
+    error_code: str | None = None
 ) -> dict:
-    resp = {"success": success, "timestamp": datetime.now(timezone.utc).isoformat()}
+    resp = {"success": success, "timestamp": datetime.now(UTC).isoformat()}
     if message is not None:
         resp["message"] = message
     if data is not None:

@@ -1,8 +1,9 @@
-from datetime import timedelta, date
-from typing import List, Dict
 import math
+from datetime import timedelta
+
 from app.errors import AppError
-from app.schemas.plan import GeneratePlanRequest, PlanResponseData, Task, SkippedTopic, PlanSummary
+from app.schemas.plan import GeneratePlanRequest, PlanResponseData, PlanSummary, SkippedTopic, Task
+
 
 def _round_to_5(minutes: float) -> int:
     return int(math.ceil(minutes / 5.0)) * 5
@@ -25,9 +26,9 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
     daily_cap = _round_to_5(req.daily_hours * 60)
     total_capacity = len(study_dates) * daily_cap
 
-    tasks: List[Task] = []
-    skipped: List[SkippedTopic] = []
-    warnings: List[str] = []
+    tasks: list[Task] = []
+    skipped: list[SkippedTopic] = []
+    warnings: list[str] = []
 
     planned_topics_count = 0
     feasible = True
@@ -106,7 +107,7 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
         day_idx = 0
         day_study_used = {i: 0 for i in range(len(study_dates))}
         
-        topic_completion_day: Dict[str, int] = {} # ref -> day_idx
+        topic_completion_day: dict[str, int] = {} # ref -> day_idx
         
         for t in sorted_topics:
             rem = _round_to_5(t.estimated_hours * 60)

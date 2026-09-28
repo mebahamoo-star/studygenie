@@ -1,16 +1,12 @@
 import asyncio
-from typing import Dict, Tuple, Type
+
 from pydantic import BaseModel
-from app.llm.base import (
-    Provider,
-    ProviderRateLimited,
-    ProviderTimeout,
-    ProviderBadResponse,
-    LLMInvalidOutput
-)
+
+from app.llm.base import LLMInvalidOutput, Provider, ProviderRateLimited, ProviderTimeout
+
 
 class FakeProvider(Provider):
-    async def _execute(self, user: str, model: str, schema: Type[BaseModel]) -> Tuple[BaseModel, Dict[str, int], str]:
+    async def _execute(self, user: str, model: str, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, int], str]:
         # Forced errors
         if "FORCE_ERROR: timeout" in user:
             raise ProviderTimeout("Forced timeout")
@@ -81,8 +77,8 @@ class FakeProvider(Provider):
         usage = {"prompt_tokens": 100, "output_tokens": 50}
         return validated, usage, model
 
-    async def generate_json(self, system: str, user: str, model: str, temperature: float, max_output_tokens: int, schema: Type[BaseModel]) -> Tuple[BaseModel, Dict[str, int], str]:
+    async def generate_json(self, system: str, user: str, model: str, temperature: float, max_output_tokens: int, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, int], str]:
         return await self._execute(user, model, schema)
 
-    async def generate_json_from_pdf(self, system: str, user: str, pdf_bytes: bytes, model: str, temperature: float, max_output_tokens: int, schema: Type[BaseModel]) -> Tuple[BaseModel, Dict[str, int], str]:
+    async def generate_json_from_pdf(self, system: str, user: str, pdf_bytes: bytes, model: str, temperature: float, max_output_tokens: int, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, int], str]:
         return await self._execute(user, model, schema)

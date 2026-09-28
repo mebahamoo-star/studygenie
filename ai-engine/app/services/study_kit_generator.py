@@ -1,16 +1,23 @@
 import asyncio
-import time
 import random
-from typing import Tuple, List, Dict
+import time
+
 from app.config import settings
-from app.llm.factory import get_provider
-from app.prompts.study_kit import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, PROMPT_VERSION
-from app.schemas.study_kit import (
-    GenerateStudyKitRequest, TopicInput, StudyKitResult, 
-    TopicKit, FailedTopic, StudyKitResponseData, Flashcard, QuizQuestion
-)
-from app.schemas.common import ResponseMeta, UsageMeta
 from app.errors import AppError
+from app.llm.factory import get_provider
+from app.prompts.study_kit import PROMPT_VERSION, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+from app.schemas.common import ResponseMeta, UsageMeta
+from app.schemas.study_kit import (
+    FailedTopic,
+    Flashcard,
+    GenerateStudyKitRequest,
+    QuizQuestion,
+    StudyKitResponseData,
+    StudyKitResult,
+    TopicInput,
+    TopicKit,
+)
+
 
 def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand: random.Random) -> TopicKit:
     valid_flashcards = []
@@ -85,7 +92,7 @@ def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand:
     return TopicKit(ref=topic.ref, flashcards=valid_flashcards, quiz=valid_quiz)
 
 
-async def _generate_topic_kit(req: GenerateStudyKitRequest, topic: TopicInput, rand: random.Random) -> Tuple[TopicKit, FailedTopic, Dict[str, int], str]:
+async def _generate_topic_kit(req: GenerateStudyKitRequest, topic: TopicInput, rand: random.Random) -> tuple[TopicKit, FailedTopic, dict[str, int], str]:
     provider = get_provider()
     
     user_prompt = USER_PROMPT_TEMPLATE.format(
