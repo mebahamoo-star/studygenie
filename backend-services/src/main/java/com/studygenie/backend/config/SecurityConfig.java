@@ -29,12 +29,15 @@ public class SecurityConfig {
     private final JsonAuthenticationEntryPoint jsonAuthenticationEntryPoint;
     private final JsonAccessDeniedHandler jsonAccessDeniedHandler;
     private final String[] allowedOrigins;
+    private final com.studygenie.backend.security.JwtService jwtService;
 
     public SecurityConfig(JsonAuthenticationEntryPoint jsonAuthenticationEntryPoint,
                           JsonAccessDeniedHandler jsonAccessDeniedHandler,
+                          com.studygenie.backend.security.JwtService jwtService,
                           @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}") String allowedOrigins) {
         this.jsonAuthenticationEntryPoint = jsonAuthenticationEntryPoint;
         this.jsonAccessDeniedHandler = jsonAccessDeniedHandler;
+        this.jwtService = jwtService;
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
                                     .map(String::trim)
                                     .filter(s -> !s.isEmpty())
@@ -43,6 +46,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        com.studygenie.backend.security.JwtAuthenticationFilter jwtFilter = new com.studygenie.backend.security.JwtAuthenticationFilter(jwtService);
+
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -54,10 +59,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .anyRequest().authenticated()
-                );
-
-        // TODO: JWT filter will be added in the next task
+                )
+                .addFilterBefore(jwtFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
