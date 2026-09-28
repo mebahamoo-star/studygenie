@@ -1,0 +1,444 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "StudyGenie AI Engine",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/parse-syllabus": {
+      "post": {
+        "summary": "Parse Syllabus Endpoint",
+        "operationId": "parse_syllabus_endpoint_v1_parse_syllabus_post",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_parse_syllabus_endpoint_v1_parse_syllabus_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/generate-study-kit": {
+      "post": {
+        "summary": "Generate Study Kit Endpoint",
+        "operationId": "generate_study_kit_endpoint_v1_generate_study_kit_post",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateStudyKitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/generate-plan": {
+      "post": {
+        "summary": "Generate Plan Endpoint",
+        "operationId": "generate_plan_endpoint_v1_generate_plan_post",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePlanRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_parse_syllabus_endpoint_v1_parse_syllabus_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "course_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Name"
+          },
+          "language_hint": {
+            "type": "string",
+            "title": "Language Hint",
+            "default": "auto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_parse_syllabus_endpoint_v1_parse_syllabus_post"
+      },
+      "GeneratePlanRequest": {
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "exam_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Exam Date"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicPlanInput"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "minItems": 1,
+            "title": "Topics"
+          },
+          "daily_hours": {
+            "type": "number",
+            "maximum": 12.0,
+            "minimum": 0.5,
+            "title": "Daily Hours",
+            "default": 2.0
+          },
+          "rest_weekdays": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Rest Weekdays"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "NORMAL"
+          },
+          "buffer_days_before_exam": {
+            "type": "integer",
+            "maximum": 7.0,
+            "minimum": 0.0,
+            "title": "Buffer Days Before Exam",
+            "default": 1
+          },
+          "review_ratio": {
+            "type": "number",
+            "maximum": 0.4,
+            "minimum": 0.0,
+            "title": "Review Ratio",
+            "default": 0.15
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_date",
+          "exam_date",
+          "topics"
+        ],
+        "title": "GeneratePlanRequest"
+      },
+      "GenerateStudyKitRequest": {
+        "properties": {
+          "course_name": {
+            "type": "string",
+            "maxLength": 150,
+            "title": "Course Name"
+          },
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "default": "auto"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicInput"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "minItems": 1,
+            "title": "Topics"
+          },
+          "flashcards_per_topic": {
+            "type": "integer",
+            "maximum": 15.0,
+            "minimum": 1.0,
+            "title": "Flashcards Per Topic",
+            "default": 8
+          },
+          "questions_per_topic": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Questions Per Topic",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "course_name",
+          "topics"
+        ],
+        "title": "GenerateStudyKitRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "TopicInput": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Ref"
+          },
+          "chapter_title": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Chapter Title"
+          },
+          "subtopics": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 12
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtopics"
+          },
+          "source_excerpt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 6000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Excerpt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "chapter_title"
+        ],
+        "title": "TopicInput"
+      },
+      "TopicPlanInput": {
+        "properties": {
+          "ref": {
+            "type": "string",
+            "title": "Ref"
+          },
+          "chapter_title": {
+            "type": "string",
+            "title": "Chapter Title"
+          },
+          "order_index": {
+            "type": "integer",
+            "title": "Order Index"
+          },
+          "estimated_hours": {
+            "type": "number",
+            "maximum": 60.0,
+            "minimum": 0.5,
+            "title": "Estimated Hours"
+          },
+          "importance": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Importance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ref",
+          "chapter_title",
+          "order_index",
+          "estimated_hours",
+          "importance"
+        ],
+        "title": "TopicPlanInput"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

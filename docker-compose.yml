@@ -32,14 +32,28 @@ services:
       - .env
 
 # TODO: uncomment once ai-engine/frontend folders exist
-#  ai-engine:
-#    build:
-#      context: ./ai-engine
-#    container_name: studygenie-ai-engine
-#    ports:
-#      - "8000:8000"
-#    environment:
-#      - ENV=docker
+  ai-engine:
+    build:
+      context: ./ai-engine
+    container_name: studygenie-ai-engine
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=docker
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AI_INTERNAL_TOKEN=${AI_INTERNAL_TOKEN}
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - LLM_MODEL_PARSE=${LLM_MODEL_PARSE:-gemini-2.5-flash}
+      - LLM_MODEL_STUDY_KIT=${LLM_MODEL_STUDY_KIT:-gemini-2.5-flash-lite}
+      - LLM_THINKING_BUDGET=${LLM_THINKING_BUDGET:-0}
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: always
 
 #  frontend:
 #    build:
