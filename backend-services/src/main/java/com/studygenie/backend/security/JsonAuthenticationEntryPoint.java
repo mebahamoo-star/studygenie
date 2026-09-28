@@ -29,7 +29,10 @@ public class JsonAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 
-        ApiResponse<Void> apiResponse = ApiResponse.error("Unauthorized");
+        String errorAttr = (String) request.getAttribute("auth.error");
+        String message = "TOKEN_EXPIRED".equals(errorAttr) ? "Token expired" : "Unauthorized";
+
+        ApiResponse<Void> apiResponse = ApiResponse.error(message);
         objectMapper.writeValue(response.getOutputStream(), apiResponse);
     }
 }
