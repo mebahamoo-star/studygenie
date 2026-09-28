@@ -7,7 +7,7 @@ import java.time.Clock;
 import java.time.ZoneOffset;
 
 @Configuration
-@org.springframework.boot.context.properties.EnableConfigurationProperties(GamificationProperties.class)
+@org.springframework.boot.context.properties.EnableConfigurationProperties({GamificationProperties.class, StudyLogicProperties.class})
 public class GamificationConfig {
     // Clock bean is already provided by AppConfig
 }

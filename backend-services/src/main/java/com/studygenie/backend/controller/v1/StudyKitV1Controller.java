@@ -2,7 +2,7 @@ package com.studygenie.backend.controller.v1;
 
 import com.studygenie.backend.dto.ApiResponse;
 import com.studygenie.backend.dto.ai.GenerateStudyKitRequest;
-import com.studygenie.backend.dto.ai.StudyKitResponseData;
+import com.studygenie.backend.dto.study.ClientStudyKitResponse;
 import com.studygenie.backend.service.ai.StudyKitService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -26,12 +26,11 @@ public class StudyKitV1Controller {
         this.studyKitService = studyKitService;
     }
 
-    @Operation(summary = "Generate Study Kit", description = "Generates flashcards and quizzes for topics")
+    @Operation(summary = "Generate a study kit", description = "Generates flashcards and quizzes using the AI Engine and saves it for the user.")
     @PostMapping("/generate")
-    public ResponseEntity<ApiResponse<StudyKitResponseData>> generateStudyKit(
+    public ResponseEntity<ApiResponse<ClientStudyKitResponse>> generateStudyKit(
             @Valid @RequestBody GenerateStudyKitRequest request) {
-
-        StudyKitResponseData data = studyKitService.generateAndSave(request);
-        return ResponseEntity.ok(ApiResponse.ok("Study kit generated successfully", data));
+        ClientStudyKitResponse data = studyKitService.generateAndSave(request);
+        return ResponseEntity.ok(ApiResponse.ok("Study kit generated and saved successfully", data));
     }
 }

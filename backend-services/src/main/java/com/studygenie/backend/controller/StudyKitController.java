@@ -9,10 +9,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/study-kits")
-@Tag(name = "Study Kits", description = "Endpoints for generating and retrieving flashcards and quizzes")
+@Tag(name = "Study Kits (Mock)", description = "Mock endpoints for generating and retrieving flashcards and quizzes")
 @SecurityRequirement(name = "bearerAuth")
 public class StudyKitController {
 
@@ -33,16 +34,20 @@ public class StudyKitController {
     @GetMapping("/topics/{topicId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getTopicStudyKit(@PathVariable Long topicId) {
         
-        // MOCK RESPONSE
+        // MOCK RESPONSE matching the new ClientStudyKitResponse shape
         Map<String, Object> mockKit = Map.of(
-                "topicId", topicId,
-                "flashcards", List.of(
-                        Map.of("id", 1, "front", "What is Spring Boot?", "back", "An open-source Java-based framework used to create microservices.")
-                ),
-                "quizzes", List.of(
-                        Map.of("id", 1, "type", "MCQ", "question", "Which annotation marks a REST Controller?", 
-                               "options", List.of("@Controller", "@RestController", "@Service", "@Component"), 
-                               "correctOptionIndex", 1)
+                "kitId", UUID.randomUUID().toString(),
+                "topics", List.of(
+                        Map.of(
+                                "ref", "topic-" + topicId,
+                                "flashcards", List.of(
+                                        Map.of("cardId", UUID.randomUUID().toString(), "front", "What is Spring Boot?", "back", "An open-source Java-based framework used to create microservices.")
+                                ),
+                                "quiz", List.of(
+                                        Map.of("questionId", UUID.randomUUID().toString(), "type", "MCQ", "question", "Which annotation marks a REST Controller?", 
+                                               "options", List.of("@Controller", "@RestController", "@Service", "@Component"))
+                                )
+                        )
                 )
         );
         return ResponseEntity.ok(ApiResponse.ok(mockKit));
