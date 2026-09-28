@@ -14,7 +14,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc(addFilters = false) // Disable security filters to test the exception handler directly
+@AutoConfigureMockMvc(addFilters = false)
 @ActiveProfiles("dev")
 class GlobalExceptionHandlerTest {
 
@@ -35,8 +35,6 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleMethodArgumentNotValidException() throws Exception {
         TestExceptionController.DummyRequest request = new TestExceptionController.DummyRequest();
-        // name is null
-
         mockMvc.perform(post("/api/test-exception/validation")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
@@ -53,6 +51,14 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Access denied"));
+    }
+
+    @Test
+    void handleAuthenticationException() throws Exception {
+        mockMvc.perform(get("/api/test-exception/auth"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Unauthorized"));
     }
 
     @Test
@@ -85,5 +91,69 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Resource not found"));
+    }
+
+    @Test
+    void handleHttpMediaTypeNotSupportedException() throws Exception {
+        mockMvc.perform(post("/api/test-exception/media-type")
+                .contentType(MediaType.TEXT_PLAIN)
+                .content("hello"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Unsupported media type"));
+    }
+
+    @Test
+    void handleHttpMediaTypeNotAcceptableException() throws Exception {
+        mockMvc.perform(get("/api/test-exception/not-acceptable")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Not acceptable"));
+    }
+
+    @Test
+    void handleHandlerMethodValidationException() throws Exception {
+        mockMvc.perform(get("/api/test-exception/method-validation?param=1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.errors[0].field").value("param"));
+    }
+
+    @Test
+    void handleMissingServletRequestPartException() throws Exception {
+        mockMvc.perform(multipart("/api/test-exception/missing-part"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Missing request part: file"));
+    }
+
+    @Test
+    void handleMissingPathVariableException() throws Exception {
+        mockMvc.perform(get("/api/test-exception/missing-path"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Missing path variable: id"));
+    }
+
+    @Test
+    void handleConstraintViolationException() throws Exception {
+        mockMvc.perform(get("/api/test-exception/constraint"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                // Expect that the leaked string "createUser.arg0 leaked" is NOT in the message
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("leaked"))));
+    }
+
+    @Test
+    void handleClassLevelValidationException() throws Exception {
+        mockMvc.perform(get("/api/test-exception/class-validation"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.errors[0].field").value("dummyRequest"))
+                .andExpect(jsonPath("$.errors[0].message").value("Class level error"));
     }
 }
