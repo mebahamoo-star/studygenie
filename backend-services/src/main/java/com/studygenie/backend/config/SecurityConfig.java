@@ -28,15 +28,18 @@ public class SecurityConfig {
 
     private final JsonAuthenticationEntryPoint jsonAuthenticationEntryPoint;
     private final JsonAccessDeniedHandler jsonAccessDeniedHandler;
+    private final String[] allowedOrigins;
 
     public SecurityConfig(JsonAuthenticationEntryPoint jsonAuthenticationEntryPoint,
-                          JsonAccessDeniedHandler jsonAccessDeniedHandler) {
+                          JsonAccessDeniedHandler jsonAccessDeniedHandler,
+                          @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}") String allowedOrigins) {
         this.jsonAuthenticationEntryPoint = jsonAuthenticationEntryPoint;
         this.jsonAccessDeniedHandler = jsonAccessDeniedHandler;
+        this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
+                                    .map(String::trim)
+                                    .filter(s -> !s.isEmpty())
+                                    .toArray(String[]::new);
     }
-
-    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
-    private String[] allowedOrigins;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
