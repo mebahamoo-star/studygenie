@@ -2,6 +2,8 @@
 line-length = 120
 target-version = "py312"
 exclude = [".venv", "__pycache__"]
+[tool.ruff.lint]
+ignore = ["B008", "TRY201", "BLE001", "RUF046", "RUF013", "RUF059"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

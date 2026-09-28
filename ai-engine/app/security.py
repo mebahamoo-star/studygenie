@@ -1,10 +1,12 @@
 import hmac
-from fastapi import Header, HTTPException
+
+from fastapi import Header
+
 from app.config import settings
 from app.errors import AppError
 
 
-def verify_internal_token(x_internal_token: str = Header(..., alias="X-Internal-Token")) -> str:
+def verify_internal_token(x_internal_token: str = Header(default=None, alias="X-Internal-Token")) -> str:
     """Verifies the internal auth token using constant-time comparison."""
     if not x_internal_token:
         raise AppError(status_code=401, error_code="UNAUTHORIZED", message="Missing internal token")
