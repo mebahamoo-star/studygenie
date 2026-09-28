@@ -64,14 +64,14 @@ def create_app() -> FastAPI:
 
     # Register Routers (will do in next step)
     from app.api.health import router as health_router
-    # from app.api.parse import router as parse_router
-    # from app.api.study_kit import router as study_kit_router
-    # from app.api.plan import router as plan_router
+    from app.api.parse import router as parse_router
+    from app.api.study_kit import router as study_kit_router
+    from app.api.plan import router as plan_router
 
     app.include_router(health_router)
-    # app.include_router(parse_router)
-    # app.include_router(study_kit_router)
-    # app.include_router(plan_router)
+    app.include_router(parse_router)
+    app.include_router(study_kit_router)
+    app.include_router(plan_router)
 
     return app
 
