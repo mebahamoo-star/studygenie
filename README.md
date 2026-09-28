@@ -47,3 +47,36 @@ Setup instructions for each service are documented within their respective subdi
 ## Documentation
 
 Full academic documentation, including system analysis, requirements, and design chapters, is maintained under `docs/`.
+
+## Docker Compose Setup
+You can run the entire platform using Docker Compose.
+
+### Prerequisites
+- Docker & Docker Compose installed.
+
+### How to Run
+1. Copy the environment variables example:
+   ```bash
+   cp .env.example .env
+   ```
+2. Fill in the required secrets in `.env`.
+3. Start the services:
+   ```bash
+   docker compose up --build -d
+   ```
+
+### URLs
+- Backend API (Swagger): http://localhost:8080/swagger-ui.html
+- n8n Orchestrator: http://localhost:5678 (Login with credentials from `.env`)
+
+### Smoke Test
+After starting the containers, run the smoke test to verify health and end-to-end functionality:
+```bash
+bash scripts/smoke-test.sh
+```
+
+### Resetting Volumes
+If you need to wipe the database and n8n data:
+```bash
+docker compose down -v
+```
