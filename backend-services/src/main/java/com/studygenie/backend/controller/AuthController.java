@@ -12,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@io.swagger.v3.oas.annotations.tags.Tag(name = "Authentication", description = "Endpoints for registering, logging in, and token refresh")
 @RequestMapping("/api/auth")
 public class AuthController {
 
@@ -24,26 +25,26 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         AuthResponse response = authService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(response));
     }
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         String remoteAddr = httpRequest.getRemoteAddr();
         AuthResponse response = authService.login(request, remoteAddr);
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshRequest request) {
         AuthResponse response = authService.refresh(request);
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody LogoutRequest request) {
         authService.logout(request);
-        return ResponseEntity.ok(ApiResponse.success(null));
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
     @GetMapping("/me")
@@ -52,6 +53,6 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build(); // Should be intercepted by entry point usually
         }
         UserSummary summary = authService.getMe(user.id());
-        return ResponseEntity.ok(ApiResponse.success(summary));
+        return ResponseEntity.ok(ApiResponse.ok(summary));
     }
 }
