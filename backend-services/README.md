@@ -149,3 +149,10 @@ To integrate JPA entities:
 5. Annotate these implementation classes with `@Service` or `@Component`.
 6. **No other changes are needed.** The application will automatically detect your beans and disable the in-memory fallbacks.
 7. Re-run `mvnw test` to ensure `InMemoryAuthStoreConfigTest` and `AuthControllerTest` still pass with your JPA implementations (they should if your implementations are correct).
+
+## AI Engine Integration
+The Spring Boot backend communicates securely with the internal Python FastAPI AI Engine. 
+You must provide the following environment variables if not using the defaults:
+
+* AI_ENGINE_URL: Base URL for the AI engine (default: http://localhost:8000/v1 for dev)
+* AI_INTERNAL_TOKEN: The secure internal token matching the Python service's token to authenticate service-to-service communication.
