@@ -156,3 +156,5 @@ You must provide the following environment variables if not using the defaults:
 
 * AI_ENGINE_URL: Base URL for the AI engine (default: http://localhost:8000/v1 for dev)
 * AI_INTERNAL_TOKEN: The secure internal token matching the Python service's token to authenticate service-to-service communication.
+* INTERNAL_N8N_TOKEN: shared secret n8n must send as the X-Internal-Token header when calling /api/internal/** endpoints
+
