@@ -111,3 +111,15 @@ services:
         max-size: "10m"
         max-file: "3"
 
+
+  # TODO: uncomment once the frontend/ folder exists
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   container_name: studygenie_frontend
+  #   networks:
+  #     - public
+  #   ports:
+  #     - "3000:80"
+  #   depends_on:
+  #     - backend
