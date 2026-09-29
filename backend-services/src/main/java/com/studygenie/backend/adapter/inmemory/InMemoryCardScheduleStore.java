@@ -25,9 +25,6 @@ public class InMemoryCardScheduleStore implements CardScheduleStore {
         store.compute(key, (k, current) -> {
             CardSchedule base = current;
             if (base == null) {
-                // In a real system, the initial schedule would be passed, but the service creates it in the updater if needed
-                // We will rely on the updater to handle null, or we construct a default new card.
-                // Wait, the interface doesn't pass 'today', so we'll pass null and let the updater deal with it
                 base = null; 
             }
             CardScheduleUpdateResult result = updater.apply(base);
@@ -36,6 +33,15 @@ public class InMemoryCardScheduleStore implements CardScheduleStore {
         });
         
         return resultRef[0];
+    }
+
+    @Override
+    public List<CardSchedule> findByUserId(Long userId) {
+        String prefix = userId + ":";
+        return store.entrySet().stream()
+                .filter(e -> e.getKey().startsWith(prefix))
+                .map(Map.Entry::getValue)
+                .collect(Collectors.toList());
     }
 
     @Override

@@ -31,13 +31,15 @@ public class SecurityConfig {
     private final String[] allowedOrigins;
     private final com.studygenie.backend.security.JwtService jwtService;
 
+    private final com.studygenie.backend.security.InternalAuthFilter internalAuthFilter;
     public SecurityConfig(JsonAuthenticationEntryPoint jsonAuthenticationEntryPoint,
                           JsonAccessDeniedHandler jsonAccessDeniedHandler,
-                          com.studygenie.backend.security.JwtService jwtService,
+                          com.studygenie.backend.security.JwtService jwtService, com.studygenie.backend.security.InternalAuthFilter internalAuthFilter,
                           @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}") String allowedOrigins) {
         this.jsonAuthenticationEntryPoint = jsonAuthenticationEntryPoint;
         this.jsonAccessDeniedHandler = jsonAccessDeniedHandler;
         this.jwtService = jwtService;
+        this.internalAuthFilter = internalAuthFilter;
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
                                     .map(String::trim)
                                     .filter(s -> !s.isEmpty())
@@ -59,10 +61,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
+                        .requestMatchers("/api/internal/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(internalAuthFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -86,3 +90,4 @@ public class SecurityConfig {
         return source;
     }
 }
+

@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.List;
+import java.util.ArrayList;
 
 public class InMemoryUserAccountStore implements UserAccountStore {
 
@@ -34,6 +36,11 @@ public class InMemoryUserAccountStore implements UserAccountStore {
     @Override
     public boolean existsByEmail(String normalizedEmail) {
         return usersByEmail.containsKey(normalizedEmail);
+    }
+
+    @Override
+    public List<UserAccount> findAll() {
+        return new ArrayList<>(usersById.values());
     }
 
     @Override
