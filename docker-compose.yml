@@ -23,10 +23,10 @@ services:
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASS}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 30s
     restart: unless-stopped
     logging:
@@ -110,3 +110,16 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+
+  # TODO: uncomment once the frontend/ folder exists
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   container_name: studygenie_frontend
+  #   networks:
+  #     - public
+  #   ports:
+  #     - "3000:80"
+  #   depends_on:
+  #     - backend
