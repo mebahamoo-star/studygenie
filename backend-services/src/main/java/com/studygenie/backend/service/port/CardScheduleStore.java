@@ -8,5 +8,7 @@ public interface CardScheduleStore {
     public record CardScheduleUpdateResult(CardSchedule schedule, boolean counted) {}
 
     CardScheduleUpdateResult update(Long userId, String kitId, String cardId, Function<CardSchedule, CardScheduleUpdateResult> updater);
+    List<CardSchedule> findByUserId(Long userId);
     List<CardSchedule> findByUserIdAndKitId(Long userId, String kitId);
 }
+
