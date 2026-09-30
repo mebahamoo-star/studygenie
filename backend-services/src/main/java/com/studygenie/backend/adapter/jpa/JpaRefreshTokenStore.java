@@ -27,11 +27,12 @@ public class JpaRefreshTokenStore implements RefreshTokenStore {
     }
 
     private RefreshTokenRecord mapToRecord(RefreshToken entity) {
+        Instant createdAt = entity.getCreatedAt() != null ? entity.getCreatedAt().toInstant(ZoneOffset.UTC) : Instant.now();
         return new RefreshTokenRecord(
                 entity.getId(),
                 entity.getStudent().getId(),
                 entity.getTokenHash(),
-                Instant.now(), // No createdAt on entity; using now() as fallback
+                createdAt,
                 entity.getExpiresAt().toInstant(ZoneOffset.UTC),
                 entity.getRememberMe(),
                 entity.getRevoked()

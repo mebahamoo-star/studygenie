@@ -56,6 +56,11 @@ public class Student {
     @Builder.Default
     private Integer streakCount = 0;
 
+    @NotNull
+    @Column(name = "longest_streak_days", nullable = false)
+    @Builder.Default
+    private Integer longestStreakDays = 0;
+
     @Column(name = "last_study_date")
     private LocalDate lastStudyDate;
 

@@ -26,6 +26,8 @@ public class GamificationService {
     private final LevelCalculator levelCalculator;
     private final List<BadgeRule> badgeRules;
     private final Clock clock;
+    
+    public static final ThreadLocal<String> currentEventId = new ThreadLocal<>();
 
     public GamificationService(
             GamificationStore store,
@@ -42,6 +44,7 @@ public class GamificationService {
 
     @EventListener
     public void handleUserAction(UserActionCompletedEvent event) {
+        currentEventId.set(event.eventId());
         try {
             store.update(event.userId(), currentProfile -> {
                 // Idempotency check
@@ -90,6 +93,8 @@ public class GamificationService {
             });
         } catch (Exception e) {
             log.error("Failed to process gamification event for user {}: {}", event.userId(), e.getMessage(), e);
+        } finally {
+            currentEventId.remove();
         }
     }
 

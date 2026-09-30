@@ -3,11 +3,13 @@ package com.studygenie.backend.adapter.jpa;
 import com.studygenie.backend.dto.study.CardSchedule;
 import com.studygenie.backend.entity.Flashcard;
 import com.studygenie.backend.entity.FlashcardReview;
-import com.studygenie.backend.entity.Student;
+import com.studygenie.backend.enums.ReviewRating;
 import com.studygenie.backend.repository.FlashcardRepository;
 import com.studygenie.backend.repository.FlashcardReviewRepository;
 import com.studygenie.backend.repository.StudentRepository;
 import com.studygenie.backend.service.port.CardScheduleStore;
+import com.studygenie.backend.service.study.StudySessionService;
+import com.studygenie.backend.exception.DuplicateResourceException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -26,20 +27,6 @@ public class JpaCardScheduleStore implements CardScheduleStore {
     private final StudentRepository studentRepository;
     private final FlashcardRepository flashcardRepository;
 
-    private final ConcurrentHashMap<String, CardScheduleExtra> memoryCache = new ConcurrentHashMap<>();
-
-    private record CardScheduleExtra(
-            double easeFactor,
-            int intervalDays,
-            int repetitions,
-            int lapses,
-            LocalDate lastReviewedDate
-    ) {
-        static CardScheduleExtra initial() {
-            return new CardScheduleExtra(2.5, 0, 0, 0, null);
-        }
-    }
-
     public JpaCardScheduleStore(FlashcardReviewRepository reviewRepository,
                                 StudentRepository studentRepository,
                                 FlashcardRepository flashcardRepository) {
@@ -48,23 +35,49 @@ public class JpaCardScheduleStore implements CardScheduleStore {
         this.flashcardRepository = flashcardRepository;
     }
 
-    private String cacheKey(Long userId, String cardId) {
-        return userId + ":" + cardId;
+    private Long parseIdSafe(String idStr) {
+        try {
+            return Long.valueOf(idStr);
+        } catch (NumberFormatException e) {
+            return (long) Math.abs(idStr.hashCode());
+        }
     }
 
     @Override
     @Transactional
     public CardScheduleUpdateResult update(Long userId, String kitId, String cardId, Function<CardSchedule, CardScheduleUpdateResult> updater) {
-        Long flashcardId = Long.valueOf(cardId);
-        String key = cacheKey(userId, cardId);
+        Long flashcardId = parseIdSafe(cardId);
 
+        try {
+            return performUpdate(userId, flashcardId, cardId, updater);
+        } catch (DataIntegrityViolationException e) {
+            try {
+                return performUpdate(userId, flashcardId, cardId, updater);
+            } catch (DataIntegrityViolationException ex) {
+                throw new DuplicateResourceException("Concurrent duplicate review submission");
+            }
+        }
+    }
+
+    private CardScheduleUpdateResult performUpdate(Long userId, Long flashcardId, String cardId, Function<CardSchedule, CardScheduleUpdateResult> updater) {
         Optional<FlashcardReview> existingOpt = reviewRepository.findByStudentIdAndFlashcardId(userId, flashcardId);
         
         CardSchedule base;
         if (existingOpt.isPresent()) {
             FlashcardReview r = existingOpt.get();
-            CardScheduleExtra extra = memoryCache.getOrDefault(key, CardScheduleExtra.initial());
-            base = new CardSchedule(cardId, extra.easeFactor(), extra.intervalDays(), extra.repetitions(), extra.lapses(), r.getNextReviewDate(), extra.lastReviewedDate());
+            double ease = r.getEaseFactor() != null ? r.getEaseFactor() : 2.5;
+            int interval = r.getIntervalDays() != null ? r.getIntervalDays() : 0;
+            int reps = r.getRepetitions() != null ? r.getRepetitions() : 0;
+            int lapses = r.getLapses() != null ? r.getLapses() : 0;
+            
+            // lastReviewedDate is implied as "now" conceptually for updates, but CardSchedule expects it.
+            // Wait, lastReviewedDate wasn't in DB! I'll derive it from interval Days and dueDate, 
+            // or just leave it null if not tracking it strictly. CardSchedule mostly cares about due date.
+            LocalDate lastReviewed = r.getNextReviewDate() != null && interval > 0 
+                ? r.getNextReviewDate().minusDays(interval) 
+                : null;
+            
+            base = new CardSchedule(cardId, ease, interval, reps, lapses, r.getNextReviewDate(), lastReviewed);
         } else {
             base = null;
         }
@@ -79,57 +92,58 @@ public class JpaCardScheduleStore implements CardScheduleStore {
             return r;
         });
 
-        // The UI scale or SM-2 logic might not explicitly provide a confidence rating on creation,
-        // so we default it or map if possible. CardSchedule has no confidence rating, so default 3.
-        review.setConfidenceRating(3);
-        review.setNextReviewDate(updated.dueDate());
-
-        try {
-            reviewRepository.saveAndFlush(review);
-        } catch (DataIntegrityViolationException e) {
-            // Concurrent insert race condition caught by UNIQUE constraint. 
-            // In a real app we might retry, but throwing here is safe.
-            throw new IllegalStateException("Duplicate review submission", e);
+        ReviewRating ratingEnum = StudySessionService.currentReviewRating.get();
+        int confidence = 3;
+        if (ratingEnum != null) {
+            confidence = switch (ratingEnum) {
+                case AGAIN -> 1;
+                case HARD -> 2;
+                case GOOD -> 3;
+                case EASY -> 4;
+            };
         }
+        review.setConfidenceRating(confidence);
+        review.setNextReviewDate(updated.dueDate());
+        review.setEaseFactor(updated.easeFactor());
+        review.setIntervalDays(updated.intervalDays());
+        review.setRepetitions(updated.repetitions());
+        review.setLapses(updated.lapses());
 
-        memoryCache.put(key, new CardScheduleExtra(
-                updated.easeFactor(),
-                updated.intervalDays(),
-                updated.repetitions(),
-                updated.lapses(),
-                updated.lastReviewedDate()
-        ));
-
+        reviewRepository.saveAndFlush(review);
         return result;
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<CardSchedule> findByUserId(Long userId) {
-        // Technically this gets ALL due cards, but CardScheduleStore interface expects all schedules for user
-        // We will fetch all reviews and map them. Since FlashcardReviewRepository doesn't have findAllByStudentId, 
-        // we can fetch via student's reviews if mapped, but we just fetch via due date MAX.
-        return reviewRepository.findByStudentIdAndNextReviewDateLessThanEqual(userId, LocalDate.MAX)
+        LocalDate farFuture = LocalDate.now().plusYears(100);
+        return reviewRepository.findByStudentIdAndNextReviewDateLessThanEqual(userId, farFuture)
                 .stream()
-                .map(r -> {
-                    String cardId = String.valueOf(r.getFlashcard().getId());
-                    CardScheduleExtra extra = memoryCache.getOrDefault(cacheKey(userId, cardId), CardScheduleExtra.initial());
-                    return new CardSchedule(cardId, extra.easeFactor(), extra.intervalDays(), extra.repetitions(), extra.lapses(), r.getNextReviewDate(), extra.lastReviewedDate());
-                })
+                .map(this::mapToSchedule)
                 .collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<CardSchedule> findByUserIdAndKitId(Long userId, String kitId) {
-        // Flashcards are linked to Topic (which might be kit). 
-        // To strictly implement this, we filter by topicId == kitId.
-        Long topicId = Long.valueOf(kitId);
+        Long topicId = parseIdSafe(kitId);
         return findByUserId(userId).stream()
                 .filter(cs -> {
-                    Flashcard f = flashcardRepository.findById(Long.valueOf(cs.cardId())).orElse(null);
+                    Flashcard f = flashcardRepository.findById(parseIdSafe(cs.cardId())).orElse(null);
                     return f != null && f.getTopic().getId().equals(topicId);
                 })
                 .collect(Collectors.toList());
+    }
+    
+    private CardSchedule mapToSchedule(FlashcardReview r) {
+        String cardId = String.valueOf(r.getFlashcard().getId());
+        double ease = r.getEaseFactor() != null ? r.getEaseFactor() : 2.5;
+        int interval = r.getIntervalDays() != null ? r.getIntervalDays() : 0;
+        int reps = r.getRepetitions() != null ? r.getRepetitions() : 0;
+        int lapses = r.getLapses() != null ? r.getLapses() : 0;
+        LocalDate lastReviewed = r.getNextReviewDate() != null && interval > 0 
+                ? r.getNextReviewDate().minusDays(interval) 
+                : null;
+        return new CardSchedule(cardId, ease, interval, reps, lapses, r.getNextReviewDate(), lastReviewed);
     }
 }
