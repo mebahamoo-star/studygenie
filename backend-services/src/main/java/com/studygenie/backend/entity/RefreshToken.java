@@ -49,6 +49,10 @@ public class RefreshToken {
     @Builder.Default
     private Boolean rememberMe = false;
 
+    @org.hibernate.annotations.CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
