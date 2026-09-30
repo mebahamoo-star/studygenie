@@ -45,6 +45,18 @@ public class FlashcardReview {
     @Column(name = "next_review_date", nullable = false)
     private LocalDate nextReviewDate;
 
+    @Column(name = "ease_factor")
+    private Double easeFactor;
+
+    @Column(name = "interval_days")
+    private Integer intervalDays;
+
+    @Column(name = "repetitions")
+    private Integer repetitions;
+
+    @Column(name = "lapses")
+    private Integer lapses;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
