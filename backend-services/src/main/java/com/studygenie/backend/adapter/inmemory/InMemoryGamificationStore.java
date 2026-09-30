@@ -11,7 +11,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
-@Component
 public class InMemoryGamificationStore implements GamificationStore {
 
     private final ConcurrentHashMap<Long, GamificationProfile> store = new ConcurrentHashMap<>();
