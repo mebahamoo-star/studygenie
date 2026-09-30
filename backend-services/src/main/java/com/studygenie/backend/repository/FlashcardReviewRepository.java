@@ -6,8 +6,10 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface FlashcardReviewRepository extends JpaRepository<FlashcardReview, Long> {
     List<FlashcardReview> findByStudentIdAndNextReviewDateLessThanEqual(Long studentId, LocalDate date);
+    Optional<FlashcardReview> findByStudentIdAndFlashcardId(Long studentId, Long flashcardId);
 }
