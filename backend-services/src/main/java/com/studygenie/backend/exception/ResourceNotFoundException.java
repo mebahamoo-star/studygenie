@@ -1,13 +1,11 @@
 package com.studygenie.backend.exception;
-
 import org.springframework.http.HttpStatus;
 
-/**
- * ResourceNotFoundException exception.
- */
 public class ResourceNotFoundException extends ApiException {
-
     public ResourceNotFoundException(String message) {
         super(message, HttpStatus.NOT_FOUND);
+    }
+    public ResourceNotFoundException(String message, String errorCode) {
+        super(message, HttpStatus.NOT_FOUND, errorCode);
     }
 }

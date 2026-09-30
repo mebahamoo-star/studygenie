@@ -59,6 +59,8 @@ public class BrowseAndJoinIntegrationTest {
     private StudentRepository studentRepository;
     @Autowired
     private StudyPlanRepository studyPlanRepository;
+    @Autowired
+    private com.studygenie.backend.repository.PlanTaskRepository planTaskRepository;
 
     @Autowired
     private JwtService jwtService;
@@ -75,6 +77,7 @@ public class BrowseAndJoinIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        planTaskRepository.deleteAll();
         studyPlanRepository.deleteAll();
         topicRepository.deleteAll();
         syllabusRepository.deleteAll();
@@ -171,7 +174,7 @@ public class BrowseAndJoinIntegrationTest {
     void testGetCourseTopics_NoSyllabus() throws Exception {
         mockMvc.perform(get("/api/v1/courses/" + noSyllabusCourse.getId() + "/topics").header("Authorization", validToken))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Course has no syllabus yet"));
+                .andExpect(jsonPath("$.message").value("This course has no syllabus yet."));
     }
 
     @Test
@@ -186,6 +189,8 @@ public class BrowseAndJoinIntegrationTest {
 
         // Verify StudyPlan was created
         assert studyPlanRepository.findByStudentId(student.getId()).size() == 1;
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        assert planTaskRepository.findByStudyPlanId(sp.getId()).size() == 1;
     }
 
     @Test
@@ -196,7 +201,8 @@ public class BrowseAndJoinIntegrationTest {
                 .header("Authorization", validToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
-                .andExpect(status().isConflict());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("NO_SYLLABUS"));
     }
 
     @Test
@@ -230,6 +236,25 @@ public class BrowseAndJoinIntegrationTest {
     }
 
     @Test
+    void testGetCoursePlan_Unauthenticated() throws Exception {
+        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void testGetCoursePlan_NotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan").header("Authorization", validToken))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.errorCode").value("NOT_JOINED"));
+    }
+
+    @Test
+    void testGetCoursePlan_Success() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(30), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join").header("Authorization", validToken).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(req))).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan").header("Authorization", validToken)).andExpect(status().isOk()).andExpect(jsonPath("$.data.tasks").isArray()).andExpect(jsonPath("$.data.summary").exists());
+    }
+
+    @Test
     void testOldMockPaths_Return404() throws Exception {
         mockMvc.perform(post("/api/plans/generate").header("Authorization", validToken)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -252,6 +277,16 @@ public class BrowseAndJoinIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

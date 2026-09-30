@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Void>> handleApiException(ApiException ex) {
-        return ResponseEntity.status(ex.getStatus()).body(ApiResponse.<Void>error(ex.getMessage()));
+        return ResponseEntity.status(ex.getStatus()).body(ApiResponse.<Void>error(ex.getMessage(), ex.getErrorCode()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -170,3 +170,4 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.<Void>error("An unexpected error occurred"));
     }
 }
+

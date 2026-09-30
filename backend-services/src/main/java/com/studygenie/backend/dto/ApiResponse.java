@@ -18,13 +18,15 @@ public class ApiResponse<T> {
     private final T data;
     private final Instant timestamp;
     private final List<FieldErrorDetail> errors;
+    private final String errorCode;
 
-    private ApiResponse(boolean success, String message, T data, List<FieldErrorDetail> errors) {
+    private ApiResponse(boolean success, String message, T data, List<FieldErrorDetail> errors, String errorCode) {
         this.success = success;
         this.message = message;
         this.data = data;
         this.timestamp = Instant.now();
         this.errors = errors;
+        this.errorCode = errorCode;
     }
 
     public boolean isSuccess() {
@@ -47,49 +49,27 @@ public class ApiResponse<T> {
         return errors;
     }
 
-    /**
-     * Creates a success response with data.
-     *
-     * @param data the response data
-     * @param <T>  the data type
-     * @return ApiResponse
-     */
+    public String getErrorCode() {
+        return errorCode;
+    }
+
     public static <T> ApiResponse<T> ok(T data) {
-        return new ApiResponse<>(true, null, data, null);
+        return new ApiResponse<>(true, null, data, null, null);
     }
 
-    /**
-     * Creates a success response with message and data.
-     *
-     * @param message the success message
-     * @param data    the response data
-     * @param <T>     the data type
-     * @return ApiResponse
-     */
     public static <T> ApiResponse<T> ok(String message, T data) {
-        return new ApiResponse<>(true, message, data, null);
+        return new ApiResponse<>(true, message, data, null, null);
     }
 
-    /**
-     * Creates an error response with a message.
-     *
-     * @param message the error message
-     * @param <T>     the data type
-     * @return ApiResponse
-     */
     public static <T> ApiResponse<T> error(String message) {
-        return new ApiResponse<>(false, message, null, null);
+        return new ApiResponse<>(false, message, null, null, null);
     }
 
-    /**
-     * Creates an error response with a message and field errors.
-     *
-     * @param message the error message
-     * @param errors  the list of field errors
-     * @param <T>     the data type
-     * @return ApiResponse
-     */
     public static <T> ApiResponse<T> error(String message, List<FieldErrorDetail> errors) {
-        return new ApiResponse<>(false, message, null, errors);
+        return new ApiResponse<>(false, message, null, errors, null);
+    }
+
+    public static <T> ApiResponse<T> error(String message, String errorCode) {
+        return new ApiResponse<>(false, message, null, null, errorCode);
     }
 }

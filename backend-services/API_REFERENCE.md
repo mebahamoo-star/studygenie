@@ -57,3 +57,6 @@ GET /api/internal/digest/daily - Retrieve daily summary for n8n email automation
 
 ## System
 GET /api/health - Check backend health
+
+## Known Limitations
+- **Topic Importance Persistence:** Currently, the Topic JPA entity does not have an importance column. Therefore, when parsing a syllabus, the AI engine's generated importance value (1-5) is discarded, and when generating a study plan via CourseService.joinChallenge, all topics are hardcoded to an importance = 1. This materially weakens the "Survival Mode" generation (which prioritizes topics by importance) until a future migration adds the importance column and threads the value through the entire flow.

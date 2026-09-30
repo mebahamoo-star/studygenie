@@ -6,6 +6,9 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
+import java.util.List;
+
 @Component
 @Primary
 @Profile("test")
@@ -23,6 +26,11 @@ public class MockAiEngineClient implements AiEngineClient {
 
     @Override
     public PlanResponseData generatePlan(GeneratePlanRequest request) {
-        return new PlanResponseData(null, null, null);
+        if (request.topics() != null && !request.topics().isEmpty()) {
+            Task task = new Task(LocalDate.now(), request.topics().get(0).ref(), "LEARN", 120);
+            return new PlanResponseData(List.of(task), List.of(), new PlanSummary("NORMAL", 1, 120, 120, 1, 0, true, List.of()));
+        }
+        return new PlanResponseData(List.of(), List.of(), new PlanSummary("NORMAL", 0, 0, 0, 0, 0, true, List.of()));
     }
 }
+

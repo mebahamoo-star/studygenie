@@ -12,7 +12,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -57,6 +56,17 @@ public class CourseController {
         return ResponseEntity.ok(ApiResponse.ok("Course created or fetched successfully", courseService.createCourse(collegeId, request.name())));
     }
 
+    @Operation(summary = "Get the generated study plan for a joined course")
+    @SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/courses/{courseId}/plan")
+    public ResponseEntity<ApiResponse<PlanResponseData>> getCoursePlan(
+            @PathVariable Long courseId,
+            @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
+        Long userId = userDetails.id();
+        PlanResponseData data = courseService.getPlan(courseId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Study plan fetched successfully", data));
+    }
+
     @Operation(summary = "Join a course and generate a study plan")
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/courses/{courseId}/join")
@@ -69,11 +79,9 @@ public class CourseController {
         Double dailyHours = body.dailyHours();
         String mode = body.mode();
 
-        Long userId = userDetails.id(); // Or however the ID is stored in username
+        Long userId = userDetails.id(); 
         
         PlanResponseData data = courseService.joinChallenge(courseId, userId, examDate, dailyHours, mode);
         return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
     }
 }
-
-
