@@ -27,6 +27,8 @@ public class StudySessionService {
     private final Clock clock;
     private final ApplicationEventPublisher publisher;
 
+    public static final ThreadLocal<com.studygenie.backend.enums.ReviewRating> currentReviewRating = new ThreadLocal<>();
+
     public StudySessionService(StudyKitStore kitStore, CardScheduleStore scheduleStore, SubmissionLog submissionLog,
                                StudyLogicProperties properties, Clock clock, ApplicationEventPublisher publisher) {
         this.kitStore = kitStore;
@@ -76,17 +78,23 @@ public class StudySessionService {
                 throw new IllegalArgumentException("Duplicate cardId in review request: " + item.cardId());
             }
 
-            CardScheduleStore.CardScheduleUpdateResult result = scheduleStore.update(userId, kitId, item.cardId(), base -> {
-                CardSchedule scheduleToUse = base != null ? base : CardSchedule.newCard(item.cardId(), properties.getInitialEaseFactor(), today);
-                
-                if (!scheduleToUse.isDue(today)) {
-                    return new CardScheduleStore.CardScheduleUpdateResult(scheduleToUse, false);
-                }
-                
-                CardSchedule updated = SpacedRepetitionScheduler.review(
-                        scheduleToUse, item.rating(), today, properties.getMinEaseFactor(), properties.getMaxIntervalDays());
-                return new CardScheduleStore.CardScheduleUpdateResult(updated, true);
-            });
+            CardScheduleStore.CardScheduleUpdateResult result;
+            currentReviewRating.set(item.rating());
+            try {
+                result = scheduleStore.update(userId, kitId, item.cardId(), base -> {
+                    CardSchedule scheduleToUse = base != null ? base : CardSchedule.newCard(item.cardId(), properties.getInitialEaseFactor(), today);
+                    
+                    if (!scheduleToUse.isDue(today)) {
+                        return new CardScheduleStore.CardScheduleUpdateResult(scheduleToUse, false);
+                    }
+                    
+                    CardSchedule updated = SpacedRepetitionScheduler.review(
+                            scheduleToUse, item.rating(), today, properties.getMinEaseFactor(), properties.getMaxIntervalDays());
+                    return new CardScheduleStore.CardScheduleUpdateResult(updated, true);
+                });
+            } finally {
+                currentReviewRating.remove();
+            }
 
             reviewed++;
             if (result.counted()) {
