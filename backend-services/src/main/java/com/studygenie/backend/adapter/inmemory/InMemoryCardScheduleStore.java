@@ -11,7 +11,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 // TODO(persistence): Replace with JPA repository
-@Component
 public class InMemoryCardScheduleStore implements CardScheduleStore {
 
     // Key: userId:kitId:cardId

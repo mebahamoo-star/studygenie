@@ -140,15 +140,21 @@ Add this to your `.env` file as `JWT_SECRET=<generated_value>`.
 ```
 
 ### Integration guide for the entities teammate
-Currently, user accounts and refresh tokens are stored in-memory (data is lost on restart).
-To integrate JPA entities:
-1. Create `Student` and `RefreshToken` entities mapping to your tables.
-2. Create Spring Data JPA repositories for them.
-3. Create `JpaUserAccountStore` implementing `com.studygenie.backend.service.auth.UserAccountStore`.
-4. Create `JpaRefreshTokenStore` implementing `com.studygenie.backend.service.auth.RefreshTokenStore`.
-5. Annotate these implementation classes with `@Service` or `@Component`.
-6. **No other changes are needed.** The application will automatically detect your beans and disable the in-memory fallbacks.
-7. Re-run `mvnw test` to ensure `InMemoryAuthStoreConfigTest` and `AuthControllerTest` still pass with your JPA implementations (they should if your implementations are correct).
+(Phase 2 complete! In-memory data stores replaced with real JPA-backed adapters.)
+
+## Persistence
+
+The system now runs entirely on JPA entities for durable domain data:
+- **Auth**: Uses `Student` and `RefreshToken` entities (via `JpaUserAccountStore` and `JpaRefreshTokenStore`).
+- **Gamification**: Uses `Student` (for points/streak) and `PointsLedger` (for the audit log) via `JpaGamificationStore`.
+- **Spaced Repetition**: Uses `FlashcardReview` (via `JpaCardScheduleStore`) to persist SM-2 tracking dates.
+
+**Fallback Mechanism (`@ConditionalOnMissingBean`)**: 
+If the application runs without the primary profile or in certain tests, the in-memory adapters (`InMemoryUserAccountStore`, `InMemoryGamificationStore`, etc.) act as fallbacks. They are configured via `InMemoryAuthStoreConfig` and `InMemoryAdapterConfig` and automatically step aside when the JPA `@Service` beans are detected on the classpath during standard execution against MySQL.
+
+**Concurrency & Idempotency Strategy (Gamification)**:
+- **Concurrency**: `JpaGamificationStore` achieves atomicity by relying on database row-level pessimistic locking (`EntityManager.lock(student, LockModeType.PESSIMISTIC_WRITE)`). This ensures concurrent update requests for the same student serialize sequentially, preventing lost updates.
+- **Idempotency**: Event deduplication (e.g., preventing duplicate points for the same `eventId`) is maintained via an in-memory `ConcurrentHashMap` cache storing `processedEventIds` alongside other non-schema gamification tracking data like `unlockedBadges`. This avoids over-engineering the relational schema for transient gamification state while fully securing the point ledger.
 
 ## AI Engine Integration
 The Spring Boot backend communicates securely with the internal Python FastAPI AI Engine. 

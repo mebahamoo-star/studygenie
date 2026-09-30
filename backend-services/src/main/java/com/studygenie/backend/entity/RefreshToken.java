@@ -44,6 +44,11 @@ public class RefreshToken {
     @Builder.Default
     private Boolean revoked = false;
 
+    @NotNull
+    @Column(name = "remember_me", nullable = false)
+    @Builder.Default
+    private Boolean rememberMe = false;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
