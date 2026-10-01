@@ -10,4 +10,6 @@ import java.util.List;
 @Repository
 public interface PlanTaskRepository extends JpaRepository<PlanTask, Long> {
     List<PlanTask> findByStudyPlanIdAndScheduledDate(Long studyPlanId, LocalDate scheduledDate);
+    List<PlanTask> findByStudyPlanId(Long studyPlanId);
 }
+
