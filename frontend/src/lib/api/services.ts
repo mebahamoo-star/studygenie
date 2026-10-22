@@ -324,6 +324,16 @@ export const browseService = {
 
   },
 
+  async resetCourseSyllabus(courseId: number | string): Promise<void> {
+
+    await fetchApi<void>(`/api/v1/courses/${courseId}/syllabus`, {
+
+      method: "DELETE",
+
+    });
+
+  },
+
 
 
   async reportCourse(data: {

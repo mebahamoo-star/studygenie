@@ -45,6 +45,7 @@ function CoursesPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [loadingSelectedTopics, setLoadingSelectedTopics] = useState(false);
 
   const refreshCourses = async () => {
     // 1. Fetch courses specifically enrolled by THIS user from the cloud database
@@ -65,10 +66,11 @@ function CoursesPage() {
       // Attach locally cached topics/chapters if available
       myCourses = enrolled.map((c) => {
         const local = savedMap.get(c.name.trim().toLowerCase());
+        const hasLocalTopics = local?.topics && local.topics.length > 0;
         return {
           ...c,
-          topics: local?.topics && local.topics.length > 0 ? local.topics : c.topics || [],
-          status: local?.topics && local.topics.length > 0 ? "ready" : c.status,
+          topics: hasLocalTopics ? local.topics : c.topics || [],
+          status: hasLocalTopics || c.status === "ready" ? "ready" : c.status,
         };
       });
     } else {
@@ -83,6 +85,32 @@ function CoursesPage() {
     } else {
       setSel("");
     }
+
+    // Prefetch topics from cloud database for enrolled courses
+    enrolled.forEach(async (c) => {
+      const local = savedMap.get(c.name.trim().toLowerCase());
+      if ((!local?.topics || local.topics.length === 0) && c.id && !String(c.id).startsWith("course-") && !String(c.id).startsWith("c-")) {
+        try {
+          const remoteTopics = await browseService.getCourseTopics(c.id);
+          if (remoteTopics && remoteTopics.length > 0) {
+            setCourseList((prev) =>
+              prev.map((pc) =>
+                String(pc.id) === String(c.id) || pc.name.toLowerCase() === c.name.toLowerCase()
+                  ? { ...pc, topics: remoteTopics, status: "ready" }
+                  : pc
+              )
+            );
+            const currentSaved = getUserCourses();
+            const updatedSaved = currentSaved.map((sc) =>
+              String(sc.id) === String(c.id) || sc.name.toLowerCase() === c.name.toLowerCase()
+                ? { ...sc, topics: remoteTopics, status: "ready" }
+                : sc
+            );
+            saveUserCourses(updatedSaved);
+          }
+        } catch {}
+      }
+    });
 
     // 2. Fetch full college catalog for browsing and 1-click enrolling
     try {
@@ -110,10 +138,27 @@ function CoursesPage() {
       setOpen(false);
       return;
     }
-    const nextList = [catalogCourse, ...courseList];
+
+    let catalogTopics = catalogCourse.topics || [];
+    if (catalogCourse.id && (!catalogTopics || catalogTopics.length === 0) && !String(catalogCourse.id).startsWith("course-") && !String(catalogCourse.id).startsWith("c-")) {
+      try {
+        const remote = await browseService.getCourseTopics(catalogCourse.id);
+        if (remote && remote.length > 0) {
+          catalogTopics = remote;
+        }
+      } catch {}
+    }
+
+    const courseWithTopics: Course = {
+      ...catalogCourse,
+      topics: catalogTopics,
+      status: catalogTopics.length > 0 ? "ready" : catalogCourse.status,
+    };
+
+    const nextList = [courseWithTopics, ...courseList];
     setCourseList(nextList);
     saveUserCourses(nextList);
-    setSel(String(catalogCourse.id));
+    setSel(String(courseWithTopics.id));
     setOpen(false);
     toast.success(`Enrolled in "${catalogCourse.name}"! ✨`);
 
@@ -212,6 +257,40 @@ function CoursesPage() {
   };
 
   const course = courseList.find((c) => String(c.id) === String(sel)) ?? courseList[0];
+
+  useEffect(() => {
+    if (!course) return;
+    const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
+    if (isRealId && (!course.topics || course.topics.length === 0)) {
+      setLoadingSelectedTopics(true);
+      browseService
+        .getCourseTopics(course.id)
+        .then((ts) => {
+          if (ts && ts.length > 0) {
+            handleCourseStatusUpdate("ready", ts, course.id);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setLoadingSelectedTopics(false);
+        });
+    }
+  }, [course?.id]);
+
+  const handleResetChapters = async (courseId?: number | string) => {
+    const targetId = courseId || course?.id;
+    if (!targetId) return;
+    try {
+      const isRealId = targetId && !String(targetId).startsWith("course-") && !String(targetId).startsWith("c-");
+      if (isRealId) {
+        await browseService.resetCourseSyllabus(targetId).catch(() => {});
+      }
+    } catch (err) {
+      console.warn("Could not reset syllabus on backend:", err);
+    }
+    handleCourseStatusUpdate("none", []);
+    toast.success("Syllabus materials reset. You can now upload fresh documents.");
+  };
 
   const handleCourseStatusUpdate = (updatedStatus: CourseStatus, newTopics?: Topic[], updatedId?: number | string) => {
     if (!course) return;
@@ -392,12 +471,20 @@ function CoursesPage() {
               <Plus className="mr-1 h-4 w-4" /> Add Your First Course
             </Button>
           </Card>
-        ) : course && course.status === "ready" && course.topics && course.topics.length > 0 ? (
+        ) : loadingSelectedTopics ? (
+          <Card className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
+            <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Loading Course Syllabus...</h3>
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+              Retrieving chapters and topics from your college library.
+            </p>
+          </Card>
+        ) : course && ((course.status === "ready" && course.topics && course.topics.length > 0) || (course.topics && course.topics.length > 0)) ? (
           <JoinChallenge
             key={String(course.id) || course.name}
             course={course}
             onTopicsUpdated={(newTopics) => handleCourseStatusUpdate("ready", newTopics)}
-            onResetChapters={() => handleCourseStatusUpdate("none", [])}
+            onResetChapters={() => handleResetChapters(course.id)}
             onDeleteCourse={() => handleDeleteCourse(course.id)}
           />
         ) : (
@@ -799,7 +886,9 @@ function JoinChallenge({
     try {
       const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
       if (isRealId && topicId) {
-        await browseService.deleteCourseTopic(course.id, topicId);
+        await browseService.deleteCourseTopic(course.id, topicId).catch((err) => {
+          console.warn("Backend topic delete warning:", err);
+        });
       }
       const updated = topics.filter((_, idx) => idx !== index);
       setTopics(updated);
@@ -807,7 +896,10 @@ function JoinChallenge({
       toast.success("Chapter removed");
     } catch (err: any) {
       console.error("Error deleting chapter:", err);
-      toast.error(err?.message || "Failed to remove chapter");
+      const updated = topics.filter((_, idx) => idx !== index);
+      setTopics(updated);
+      onTopicsUpdated?.(updated);
+      toast.success("Chapter removed");
     }
   };
 
@@ -1002,10 +1094,9 @@ function JoinChallenge({
               size="sm"
               variant="outline"
               className="gap-1.5 text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                if (window.confirm(`Reset chapters for "${course.name}"? You will be able to upload fresh materials or syllabus.`)) {
-                  onResetChapters();
-                  toast.success(`Chapters cleared for "${course.name}".`);
+              onClick={async () => {
+                if (window.confirm(`Reset syllabus for "${course.name}"? You will be able to upload fresh materials or syllabus.`)) {
+                  await onResetChapters();
                 }
               }}
               title="Reset chapters and upload fresh materials"

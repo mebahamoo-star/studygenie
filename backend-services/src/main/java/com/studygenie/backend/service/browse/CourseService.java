@@ -9,7 +9,11 @@ import com.studygenie.backend.dto.browse.CourseDto;
 import com.studygenie.backend.dto.syllabus.TopicDto;
 import com.studygenie.backend.entity.College;
 import com.studygenie.backend.entity.Course;
+import com.studygenie.backend.entity.Flashcard;
+import com.studygenie.backend.entity.FlashcardReview;
 import com.studygenie.backend.entity.PlanTask;
+import com.studygenie.backend.entity.QuizAttempt;
+import com.studygenie.backend.entity.QuizQuestion;
 import com.studygenie.backend.entity.Student;
 import com.studygenie.backend.entity.StudyPlan;
 import com.studygenie.backend.entity.Syllabus;
@@ -21,7 +25,11 @@ import com.studygenie.backend.exception.ResourceNotFoundException;
 import com.studygenie.backend.exception.ResourceNotReadyException;
 import com.studygenie.backend.repository.CollegeRepository;
 import com.studygenie.backend.repository.CourseRepository;
+import com.studygenie.backend.repository.FlashcardRepository;
+import com.studygenie.backend.repository.FlashcardReviewRepository;
 import com.studygenie.backend.repository.PlanTaskRepository;
+import com.studygenie.backend.repository.QuizAttemptRepository;
+import com.studygenie.backend.repository.QuizQuestionRepository;
 import com.studygenie.backend.repository.StudentRepository;
 import com.studygenie.backend.repository.StudyPlanRepository;
 import com.studygenie.backend.repository.SyllabusRepository;
@@ -56,6 +64,10 @@ public class CourseService {
     private final StudyPlanService studyPlanService;
     private final TopicRepository topicRepository;
     private final SyllabusRepository syllabusRepository;
+    private final FlashcardRepository flashcardRepository;
+    private final FlashcardReviewRepository flashcardReviewRepository;
+    private final QuizQuestionRepository quizQuestionRepository;
+    private final QuizAttemptRepository quizAttemptRepository;
 
     public CourseService(CourseRepository courseRepository,
                          CollegeRepository collegeRepository,
@@ -65,7 +77,11 @@ public class CourseService {
                          PlanTaskRepository planTaskRepository,
                          StudyPlanService studyPlanService,
                          TopicRepository topicRepository,
-                         SyllabusRepository syllabusRepository) {
+                         SyllabusRepository syllabusRepository,
+                         FlashcardRepository flashcardRepository,
+                         FlashcardReviewRepository flashcardReviewRepository,
+                         QuizQuestionRepository quizQuestionRepository,
+                         QuizAttemptRepository quizAttemptRepository) {
         this.courseRepository = courseRepository;
         this.collegeRepository = collegeRepository;
         this.universityRepository = universityRepository;
@@ -75,6 +91,10 @@ public class CourseService {
         this.studyPlanService = studyPlanService;
         this.topicRepository = topicRepository;
         this.syllabusRepository = syllabusRepository;
+        this.flashcardRepository = flashcardRepository;
+        this.flashcardReviewRepository = flashcardReviewRepository;
+        this.quizQuestionRepository = quizQuestionRepository;
+        this.quizAttemptRepository = quizAttemptRepository;
     }
 
     @Transactional(readOnly = true)
@@ -283,6 +303,53 @@ public class CourseService {
     }
 
     @Transactional
+    public void deleteTopicCascade(Topic topic) {
+        if (topic == null || topic.getId() == null) return;
+        Long topicId = topic.getId();
+
+        try {
+            List<QuizQuestion> questions = quizQuestionRepository.findByTopicId(topicId);
+            for (QuizQuestion q : questions) {
+                List<QuizAttempt> attempts = quizAttemptRepository.findByQuestionId(q.getId());
+                if (!attempts.isEmpty()) {
+                    quizAttemptRepository.deleteAll(attempts);
+                }
+            }
+            if (!questions.isEmpty()) {
+                quizQuestionRepository.deleteAll(questions);
+            }
+        } catch (Exception e) {
+            log.warn("Error deleting quiz questions/attempts for topic {}: {}", topicId, e.getMessage());
+        }
+
+        try {
+            List<Flashcard> cards = flashcardRepository.findByTopicId(topicId);
+            for (Flashcard f : cards) {
+                List<FlashcardReview> reviews = flashcardReviewRepository.findByFlashcardId(f.getId());
+                if (!reviews.isEmpty()) {
+                    flashcardReviewRepository.deleteAll(reviews);
+                }
+            }
+            if (!cards.isEmpty()) {
+                flashcardRepository.deleteAll(cards);
+            }
+        } catch (Exception e) {
+            log.warn("Error deleting flashcards/reviews for topic {}: {}", topicId, e.getMessage());
+        }
+
+        try {
+            List<PlanTask> tasks = planTaskRepository.findByTopicId(topicId);
+            if (!tasks.isEmpty()) {
+                planTaskRepository.deleteAll(tasks);
+            }
+        } catch (Exception e) {
+            log.warn("Error deleting plan tasks for topic {}: {}", topicId, e.getMessage());
+        }
+
+        topicRepository.delete(topic);
+    }
+
+    @Transactional
     public void deleteTopic(Long courseId, Long topicId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
@@ -294,13 +361,38 @@ public class CourseService {
             throw new IllegalArgumentException("Topic does not belong to this course");
         }
 
-        topicRepository.delete(topic);
+        Long syllabusId = topic.getSyllabus().getId();
+        deleteTopicCascade(topic);
 
-        List<Topic> remaining = topicRepository.findBySyllabusId(topic.getSyllabus().getId());
+        List<Topic> remaining = topicRepository.findBySyllabusId(syllabusId);
         if (remaining.isEmpty()) {
             course.setStatus(CourseStatus.NO_SYLLABUS);
             courseRepository.save(course);
         }
+    }
+
+    @Transactional
+    public void deleteSyllabus(Long courseId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
+
+        Syllabus syllabus = course.getSyllabus();
+        if (syllabus == null) {
+            syllabus = syllabusRepository.findByCourseId(courseId).orElse(null);
+        }
+
+        if (syllabus != null) {
+            List<Topic> topics = topicRepository.findBySyllabusId(syllabus.getId());
+            for (Topic t : topics) {
+                deleteTopicCascade(t);
+            }
+            course.setSyllabus(null);
+            syllabusRepository.delete(syllabus);
+        }
+
+        course.setStatus(CourseStatus.NO_SYLLABUS);
+        courseRepository.save(course);
+        log.info("Reset syllabus for course '{}' (ID: {}) successfully", course.getName(), courseId);
     }
 
     @Transactional
@@ -319,13 +411,26 @@ public class CourseService {
         }
 
         // Delete associated syllabus and its topics
-        syllabusRepository.findByCourseId(courseId).ifPresent(syllabus -> {
+        Syllabus syllabus = course.getSyllabus();
+        if (syllabus == null) {
+            syllabus = syllabusRepository.findByCourseId(courseId).orElse(null);
+        }
+        if (syllabus != null) {
             List<Topic> topics = topicRepository.findBySyllabusId(syllabus.getId());
-            if (!topics.isEmpty()) {
-                topicRepository.deleteAll(topics);
+            for (Topic t : topics) {
+                deleteTopicCascade(t);
             }
+            course.setSyllabus(null);
             syllabusRepository.delete(syllabus);
-        });
+        }
+
+        // Remove enrollment from all students
+        List<Student> enrolledStudents = studentRepository.findAll();
+        for (Student s : enrolledStudents) {
+            if (s.getEnrolledCourses() != null && s.getEnrolledCourses().removeIf(c -> c.getId().equals(courseId))) {
+                studentRepository.save(s);
+            }
+        }
 
         // Delete course
         courseRepository.delete(course);
