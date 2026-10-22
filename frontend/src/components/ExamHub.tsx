@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { Bell, Calendar, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { Bell, Calendar, Pencil, Sparkles, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -99,6 +99,14 @@ export function ExamHub({
                 <>
                   <span>·</span>
                   <span>Prof. {exam.professor}</span>
+                </>
+              )}
+              {exam.uploaderName && (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1 text-primary/90 font-semibold bg-primary/10 px-2 py-0.5 rounded-md text-xs">
+                    <User className="h-3 w-3" /> Uploaded by {exam.uploaderName}
+                  </span>
                 </>
               )}
             </div>

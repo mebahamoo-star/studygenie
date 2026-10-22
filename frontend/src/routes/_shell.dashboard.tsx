@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Flag,
   Flame,
   GraduationCap,
   LoaderCircle,
@@ -38,6 +39,7 @@ import { browseService, examService, type CommunityChallenge } from "@/lib/api/s
 import { fetchApi } from "@/lib/api/client";
 import type { Course, Topic } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+import { ReportCourseDialog } from "@/components/ReportCourseDialog";
 
 export const Route = createFileRoute("/_shell/dashboard")({
   head: pageHead("Dashboard", "Your daily checklist, streak and study progress."),
@@ -372,6 +374,8 @@ function Dashboard() {
   // Community challenges state
   const [challenges, setChallenges] = useState<CommunityChallenge[]>([]);
   const [loadingChallenges, setLoadingChallenges] = useState<boolean>(true);
+  const [reportDialogOpen, setReportDialogOpen] = useState<boolean>(false);
+  const [reportingCourse, setReportingCourse] = useState<{ name: string; id?: number | string | null }>({ name: "" });
   const [joiningCourse, setJoiningCourse] = useState<string | null>(null);
   const [successModalOpen, setSuccessModalOpen] = useState<boolean>(false);
   const [joinedResult, setJoinedResult] = useState<{
@@ -1387,9 +1391,24 @@ function Dashboard() {
                 >
                   <div className="flex flex-col gap-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="rounded-lg bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary uppercase tracking-wide border border-primary/20">
-                        {ch.examType || "EXAM"}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="rounded-lg bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary uppercase tracking-wide border border-primary/20">
+                          {ch.examType || "EXAM"}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 rounded-md"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReportingCourse({ name: ch.courseName, id: ch.courseId });
+                            setReportDialogOpen(true);
+                          }}
+                          title="Report this course if syllabus or details are incorrect"
+                        >
+                          <Flag className="h-3 w-3" />
+                        </Button>
+                      </div>
                       <span
                         className={cn(
                           "rounded-md border px-2 py-0.5 text-[11px] font-bold flex items-center gap-1",
@@ -1608,6 +1627,12 @@ function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+      <ReportCourseDialog
+        open={reportDialogOpen}
+        onOpenChange={setReportDialogOpen}
+        courseName={reportingCourse.name}
+        courseId={reportingCourse.id}
+      />
     </div>
   );
 }

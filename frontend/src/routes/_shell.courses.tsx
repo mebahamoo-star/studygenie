@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { CalendarIcon, Clock, Flame, Plus, RotateCcw, Shield, Trash2, Upload, Wand2, BookOpen, ChevronDown, ChevronUp, Sparkles, Loader2 } from "lucide-react";
+import { CalendarIcon, Clock, Flame, Plus, RotateCcw, Shield, Trash2, Upload, Wand2, BookOpen, ChevronDown, ChevronUp, Sparkles, Loader2, Flag, User } from "lucide-react";
+import { ReportCourseDialog } from "@/components/ReportCourseDialog";
 import { toast } from "sonner";
 import { Card, PageTitle } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
@@ -16,7 +17,7 @@ import { pageHead } from "@/lib/head";
 import { browseService, syllabusService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
 import { deduplicateTopics, getUserCourses, saveUserCourses } from "@/lib/courses-util";
-import { clearExam, deleteExam, isCourseEnrolled, loadExam } from "@/lib/exam";
+import { clearExam, deleteExam, isCourseEnrolled, loadExam, loadExams } from "@/lib/exam";
 import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import type { Course, CourseStatus, Topic } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -428,6 +429,7 @@ function EmptyUpload({
   const [analyzing, setAnalyzing] = useState(false);
   const [isApiFinished, setIsApiFinished] = useState(false);
   const [fileCount, setFileCount] = useState(0);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   const handleFileUpload = async (fileList?: FileList | File[] | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -561,15 +563,26 @@ function EmptyUpload({
             )}
             <h3 className="text-lg font-semibold">{course.name}</h3>
           </div>
-          {onDeleteCourse && (
-            <HoldToConfirmButton
-              duration={1500}
-              onConfirm={() => onDeleteCourse()}
-              className="h-8 gap-1.5"
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 h-8 text-xs font-semibold"
+              onClick={() => setReportDialogOpen(true)}
+              title="Report this course if syllabus or details are incorrect"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Hold to Delete
-            </HoldToConfirmButton>
-          )}
+              <Flag className="h-3.5 w-3.5 text-amber-500" /> Report Course
+            </Button>
+            {onDeleteCourse && (
+              <HoldToConfirmButton
+                duration={1500}
+                onConfirm={() => onDeleteCourse()}
+                className="h-8 gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Hold to Delete
+              </HoldToConfirmButton>
+            )}
+          </div>
         </div>
       )}
       <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-magic text-primary-foreground shadow-glow">
@@ -609,6 +622,14 @@ function EmptyUpload({
           <span className="block text-xs text-muted-foreground">PDF or PowerPoint presentations up to 25MB</span>
         </label>
       </div>
+      {course && (
+        <ReportCourseDialog
+          open={reportDialogOpen}
+          onOpenChange={setReportDialogOpen}
+          courseName={course.name}
+          courseId={course.id}
+        />
+      )}
     </Card>
   );
 }
@@ -639,6 +660,11 @@ function JoinChallenge({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState("");
   const [manualHours, setManualHours] = useState("2");
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+
+  const courseExam = loadExams().find(
+    (e) => e.course.toLowerCase() === course.name.toLowerCase()
+  );
 
   useEffect(() => {
     if (course.topics && course.topics.length > 0) {
@@ -889,9 +915,16 @@ function JoinChallenge({
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold">{course.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            {topics.length > 0 ? `${topics.length} chapters / topics ready` : "No chapters added yet"}
-          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            <p className="text-sm text-muted-foreground">
+              {topics.length > 0 ? `${topics.length} chapters / topics ready` : "No chapters added yet"}
+            </p>
+            {courseExam?.uploaderName && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                <User className="h-3 w-3" /> Uploaded by: {courseExam.uploaderName}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -953,6 +986,16 @@ function JoinChallenge({
               </form>
             </DialogContent>
           </Dialog>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 font-semibold"
+            onClick={() => setReportDialogOpen(true)}
+            title="Report this course if syllabus or details are incorrect"
+          >
+            <Flag className="h-3.5 w-3.5 text-amber-500" /> Report Course
+          </Button>
 
           {onResetChapters && (
             <Button
@@ -1136,6 +1179,12 @@ function JoinChallenge({
       <Button variant="magic" size="lg" className="mt-6 w-full" onClick={handleGeneratePlan}>
         <Wand2 /> Generate My Plan
       </Button>
+      <ReportCourseDialog
+        open={reportDialogOpen}
+        onOpenChange={setReportDialogOpen}
+        courseName={course.name}
+        courseId={course.id}
+      />
     </Card>
   );
 }

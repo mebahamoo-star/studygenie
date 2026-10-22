@@ -46,6 +46,10 @@ public class Exam {
     @Column(name = "professor", length = 120)
     private String professor;
 
+    @Size(max = 120)
+    @Column(name = "uploader_name", length = 120)
+    private String uploaderName;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

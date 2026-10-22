@@ -65,8 +65,13 @@ public class ExamController {
     @Operation(summary = "Get all exams for current student")
     public ResponseEntity<ApiResponse<List<ExamDto>>> getMyExams(
             @AuthenticationPrincipal AuthenticatedUser userDetails) {
-        Long studentId = userDetails.id();
-        List<ExamDto> list = examRepository.findByStudentIdOrderByDateAsc(studentId).stream()
+        List<Exam> exams;
+        if (userDetails != null && userDetails.id() != null) {
+            exams = examRepository.findByStudentIdOrderByDateAsc(userDetails.id());
+        } else {
+            exams = examRepository.findAll();
+        }
+        List<ExamDto> list = exams.stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.ok("Exams fetched successfully", list));
@@ -116,7 +121,9 @@ public class ExamController {
 
             boolean isJoined = enrolledCourseNames.contains(key) || myExamCourses.contains(key);
 
-            String uploader = (e.getStudent() != null && e.getStudent().getFullName() != null)
+            String uploader = (e.getUploaderName() != null && !e.getUploaderName().isBlank())
+                    ? e.getUploaderName()
+                    : (e.getStudent() != null && e.getStudent().getFullName() != null)
                     ? e.getStudent().getFullName()
                     : "Peer Student";
 
@@ -204,16 +211,34 @@ public class ExamController {
 
     @PostMapping
     @Transactional
-    @Operation(summary = "Create an upcoming exam")
+    @Operation(summary = "Create an upcoming exam with student attribution")
     public ResponseEntity<ApiResponse<ExamDto>> createExam(
             @AuthenticationPrincipal AuthenticatedUser userDetails,
             @Valid @RequestBody CreateExamRequest req) {
-        Long studentId = userDetails.id();
-        Student student = studentRepository.findById(studentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+        Student student = null;
+        if (userDetails != null && userDetails.id() != null) {
+            student = studentRepository.findById(userDetails.id()).orElse(null);
+        }
+        if (student == null && req.studentEmail() != null && !req.studentEmail().isBlank()) {
+            student = studentRepository.findByEmail(req.studentEmail().trim()).orElse(null);
+        }
+        if (student == null) {
+            student = studentRepository.findAll().stream().findFirst().orElse(null);
+        }
+        if (student == null) {
+            throw new ResourceNotFoundException("No student found in system to associate exam with.");
+        }
+
+        String uploader = req.uploaderName();
+        if (uploader == null || uploader.isBlank()) {
+            uploader = (student.getFullName() != null && !student.getFullName().isBlank())
+                    ? student.getFullName()
+                    : student.getEmail();
+        }
 
         Exam exam = Exam.builder()
                 .student(student)
+                .uploaderName(uploader.trim())
                 .course(req.course().trim())
                 .type(req.type().trim())
                 .date(req.date())
@@ -227,6 +252,9 @@ public class ExamController {
         } catch (Exception ex) {
             log.warn("Non-fatal: could not auto-enroll course for exam {}: {}", req.course(), ex.getMessage());
         }
+
+        log.info("Exam '{}' for course '{}' saved by student '{}' (id: {})",
+                exam.getType(), exam.getCourse(), exam.getUploaderName(), student.getId());
 
         return ResponseEntity.ok(ApiResponse.ok("Exam created successfully", toDto(exam)));
     }
@@ -276,12 +304,21 @@ public class ExamController {
     }
 
     private ExamDto toDto(Exam e) {
+        String uploader = (e.getUploaderName() != null && !e.getUploaderName().isBlank())
+                ? e.getUploaderName()
+                : (e.getStudent() != null && e.getStudent().getFullName() != null)
+                ? e.getStudent().getFullName()
+                : "Peer Student";
+        Long sId = e.getStudent() != null ? e.getStudent().getId() : null;
+
         return new ExamDto(
                 e.getId(),
                 e.getCourse(),
                 e.getType(),
                 e.getDate(),
-                e.getProfessor()
+                e.getProfessor(),
+                uploader,
+                sId
         );
     }
 }

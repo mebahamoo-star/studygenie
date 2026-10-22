@@ -326,6 +326,16 @@ export const browseService = {
 
 
 
+  async reportCourse(data: {
+    courseId?: number | string | null;
+    courseName: string;
+    reason: string;
+    details?: string;
+    reportedBy?: string;
+  }): Promise<any> {
+    return courseReportService.reportCourse(data);
+  },
+
   async enrollCourse(courseId: number | string): Promise<Course> {
 
     const res = await fetchApi<any>(`/api/v1/courses/${courseId}/enroll`, {
@@ -738,6 +748,10 @@ export interface RemoteExam {
   type: string;
   date: string;
   professor?: string;
+  uploaderName?: string;
+  uploader_name?: string;
+  studentId?: number;
+  student_id?: number;
 }
 
 export interface CommunityChallenge {
@@ -787,10 +801,25 @@ export const examService = {
     return res.data || [];
   },
 
-  async createExam(data: { course: string; type: string; date: string; professor?: string }): Promise<RemoteExam> {
+  async createExam(data: {
+    course: string;
+    type: string;
+    date: string;
+    professor?: string;
+    uploaderName?: string;
+    studentEmail?: string;
+  }): Promise<RemoteExam> {
+    const payload = {
+      course: data.course,
+      type: data.type,
+      date: data.date,
+      professor: data.professor,
+      uploader_name: data.uploaderName,
+      student_email: data.studentEmail,
+    };
     const res = await fetchApi<RemoteExam>('/api/v1/exams', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
     return res.data!;
   },
@@ -799,5 +828,35 @@ export const examService = {
     await fetchApi<void>('/api/v1/exams/' + id, {
       method: 'DELETE',
     });
+  },
+};
+
+export const courseReportService = {
+  async reportCourse(data: {
+    courseId?: number | string | null;
+    courseName: string;
+    reason: string;
+    details?: string;
+    reportedBy?: string;
+  }): Promise<any> {
+    const cid = data.courseId && !String(data.courseId).startsWith("c-") && !String(data.courseId).startsWith("course-")
+      ? Number(data.courseId)
+      : null;
+    const res = await fetchApi<any>('/api/v1/courses/report', {
+      method: 'POST',
+      body: JSON.stringify({
+        course_id: cid,
+        course_name: data.courseName,
+        reason: data.reason,
+        details: data.details || "",
+        reported_by: data.reportedBy || "",
+      }),
+    });
+    return res.data;
+  },
+
+  async getReports(): Promise<any[]> {
+    const res = await fetchApi<any[]>('/api/v1/courses/reports');
+    return res.data || [];
   },
 };

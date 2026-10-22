@@ -8,6 +8,8 @@ export interface Exam {
   type: string;
   date: string;
   professor: string;
+  uploaderName?: string;
+  studentId?: number | string;
 }
 
 export function getExamKey(): string {
@@ -26,6 +28,7 @@ export function loadExams(): Exam[] {
         return parsed.map((item: any, idx: number) => ({
           ...item,
           id: item.id || `exam-${idx}-${item.course.toLowerCase().replace(/[^a-z0-9]/g, "-")}`,
+          uploaderName: item.uploaderName || item.uploader_name || "You",
         }));
       }
     }
@@ -98,12 +101,26 @@ export function saveExams(exams: Exam[]): void {
 export function saveExam(e: Exam): Exam {
   const current = loadExams();
   const id = e.id || `exam-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+  let studentName = e.uploaderName || "";
+  let studentEmail = "";
+  try {
+    const userRaw = localStorage.getItem("sg-user");
+    if (userRaw) {
+      const u = JSON.parse(userRaw);
+      if (!studentName) studentName = u.fullName || u.name || "";
+      studentEmail = u.email || "";
+    }
+  } catch {}
+
   const item: Exam = {
     id,
     course: e.course.trim(),
     type: e.type.trim(),
     date: e.date,
-    professor: e.professor.trim(),
+    professor: (e.professor || "").trim(),
+    uploaderName: studentName || "You",
+    studentId: e.studentId,
   };
 
   const existingIdx = current.findIndex(
@@ -124,23 +141,33 @@ export function saveExam(e: Exam): Exam {
 
   saveExams(updated);
 
-  // Background sync to backend if user is authenticated
-  if (getStoredAccessToken() && (!item.id || item.id.startsWith("exam-"))) {
+  // Always sync to database so exams are persisted with student attribution
+  if (!item.id || item.id.startsWith("exam-")) {
     examService
       .createExam({
         course: item.course,
         type: item.type,
         date: item.date,
         professor: item.professor,
+        uploaderName: item.uploaderName,
+        studentEmail,
       })
       .then((remote) => {
         if (remote && remote.id) {
           item.id = String(remote.id);
+          if (remote.uploaderName || remote.uploader_name) {
+            item.uploaderName = remote.uploaderName || remote.uploader_name;
+          }
           const fresh = loadExams().map((ex) =>
             ex.course.toLowerCase() === item.course.toLowerCase() &&
             ex.type.toLowerCase() === item.type.toLowerCase() &&
             ex.date === item.date
-              ? { ...ex, id: String(remote.id) }
+              ? {
+                  ...ex,
+                  id: String(remote.id),
+                  uploaderName: item.uploaderName,
+                  studentId: remote.studentId || remote.student_id,
+                }
               : ex
           );
           saveExams(fresh);
@@ -182,6 +209,8 @@ export async function fetchAndSyncExams(): Promise<Exam[]> {
           type: re.type,
           date: re.date,
           professor: re.professor || "",
+          uploaderName: re.uploaderName || re.uploader_name || "Classmate",
+          studentId: re.studentId || re.student_id,
         }));
         saveExams(mapped);
         return mapped;
