@@ -1,6 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { BookOpen, Check, ChevronLeft, ChevronRight, Pencil, Plus, Timer } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  Brain,
+  Calendar,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Pencil,
+  Play,
+  Plus,
+  Sparkles,
+  Timer,
+} from "lucide-react";
 import { daysUntil, loadExamsForUser, type Exam } from "@/lib/exam";
 import { ExamHub } from "@/components/ExamHub";
 import { Card } from "@/components/AppShell";
@@ -24,11 +38,14 @@ export const Route = createFileRoute("/_shell/dashboard")({
 });
 
 interface TaskItem {
-  id: number | string;
+  id: string;
   label: string;
   course: string;
   min: number;
   tag: string;
+  description?: string;
+  date: string;
+  courseId?: string | number;
 }
 
 function getWeekDays() {
@@ -55,9 +72,12 @@ function getWeekDays() {
 function Dashboard() {
   const { user } = useApp();
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [done, setDone] = useState<(number | string)[]>([]);
+  const [done, setDone] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
   const [courseName, setCourseName] = useState<string>("No active course");
+  const [hasPlans, setHasPlans] = useState<boolean | null>(null);
+  const [checklistDateLabel, setChecklistDateLabel] = useState<string>("Today");
+  const [enrolledCount, setEnrolledCount] = useState<number>(0);
   const [open, setOpen] = useState(false);
   const [exams, setExams] = useState<Exam[]>([]);
   const [currentExamIndex, setCurrentExamIndex] = useState(0);
@@ -66,6 +86,18 @@ function Dashboard() {
     let isMounted = true;
 
     const loadDashboardData = async () => {
+      const prefix = getUserStoragePrefix();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const doneKey = `sg-${prefix}-checklist-done-${todayStr}`;
+
+      // Load saved done checkboxes for today
+      let savedDone: string[] = [];
+      try {
+        const rawDone = localStorage.getItem(doneKey);
+        if (rawDone) savedDone = JSON.parse(rawDone);
+      } catch {}
+      if (isMounted) setDone(savedDone);
+
       // 1. Fetch user enrolled courses
       let enrolled = getUserCourses();
       try {
@@ -82,12 +114,14 @@ function Dashboard() {
       } catch {}
 
       if (!isMounted) return;
+      setEnrolledCount(enrolled.length);
 
       // 2. If user has no courses enrolled, clear active exam, course name, tasks
       if (enrolled.length === 0) {
         setExams([]);
         setCurrentExamIndex(0);
         setCourseName("No active course");
+        setHasPlans(false);
         setTasks([]);
         setProgress(0);
         return;
@@ -99,7 +133,6 @@ function Dashboard() {
       setCurrentExamIndex(0);
 
       // 4. Determine active course
-      const prefix = getUserStoragePrefix();
       const activeCourseRaw =
         localStorage.getItem(`sg-${prefix}-active-course`) ||
         localStorage.getItem("sg-active-course");
@@ -113,7 +146,6 @@ function Dashboard() {
         } catch {}
       }
 
-      // If active course is not set or not in enrolled, default to first enrolled course
       if (!activeCourse) {
         activeCourse = enrolled[0];
       }
@@ -123,35 +155,147 @@ function Dashboard() {
         : activeCourse.name;
       setCourseName(displayName);
 
-      // 5. Load active plan if present
-      const activePlanRaw =
-        localStorage.getItem(`sg-${prefix}-active-plan`) ||
-        localStorage.getItem("sg-active-plan");
-      if (activePlanRaw) {
+      // 5. Discover plans across all enrolled courses and local storage
+      interface DiscoveredPlan {
+        courseName: string;
+        courseCode?: string;
+        courseId?: string | number;
+        topics?: any[];
+        tasks: any[];
+      }
+
+      const allPlans: DiscoveredPlan[] = [];
+
+      for (const c of enrolled) {
+        let planData: any = null;
         try {
-          const plan = JSON.parse(activePlanRaw);
-          if (plan?.tasks && plan.tasks.length > 0) {
-            const mapped: TaskItem[] = plan.tasks.slice(0, 5).map((t: any, idx: number) => ({
-              id: idx + 1,
-              label: t.topic_ref || t.topicRef || "Study topic",
-              course: displayName,
-              min: t.minutes || 30,
-              tag: (t.task_type || t.taskType || "STUDY").toUpperCase(),
-            }));
-            setTasks(mapped);
-            setProgress(25);
-          } else {
-            setTasks([]);
-            setProgress(0);
+          const localPlan =
+            localStorage.getItem(`sg-${prefix}-plan-${c.id}`) ||
+            localStorage.getItem(`sg-plan-${c.id}`);
+          if (localPlan) {
+            planData = JSON.parse(localPlan);
           }
-        } catch {
-          setTasks([]);
-          setProgress(0);
+        } catch {}
+
+        if (!planData && c.id && !String(c.id).startsWith("c-") && !String(c.id).startsWith("course-")) {
+          try {
+            const remotePlan = await browseService.getCoursePlan(c.id);
+            if (remotePlan?.tasks && remotePlan.tasks.length > 0) {
+              planData = remotePlan;
+              try {
+                localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(remotePlan));
+              } catch {}
+            }
+          } catch {}
         }
-      } else {
+
+        if (planData?.tasks && planData.tasks.length > 0) {
+          allPlans.push({
+            courseName: c.name,
+            courseCode: c.code,
+            courseId: c.id,
+            topics: c.topics,
+            tasks: planData.tasks,
+          });
+        }
+      }
+
+      // Also check global active plan
+      try {
+        const activeRaw =
+          localStorage.getItem(`sg-${prefix}-active-plan`) ||
+          localStorage.getItem("sg-active-plan");
+        if (activeRaw) {
+          const parsed = JSON.parse(activeRaw);
+          if (parsed?.tasks && parsed.tasks.length > 0) {
+            const alreadyIn = allPlans.some((p) => p.tasks.length === parsed.tasks.length);
+            if (!alreadyIn) {
+              allPlans.push({
+                courseName: activeCourse?.name || "General Course",
+                courseCode: activeCourse?.code,
+                courseId: activeCourse?.id,
+                topics: activeCourse?.topics,
+                tasks: parsed.tasks,
+              });
+            }
+          }
+        }
+      } catch {}
+
+      if (!isMounted) return;
+
+      if (allPlans.length === 0) {
+        setHasPlans(false);
         setTasks([]);
         setProgress(0);
+        return;
       }
+
+      setHasPlans(true);
+
+      // 6. Map tasks with real topic titles and course info
+      const allMappedTasks: TaskItem[] = [];
+
+      allPlans.forEach((plan) => {
+        const topicMap: Record<string, string> = {};
+        if (plan.topics && Array.isArray(plan.topics)) {
+          plan.topics.forEach((t: any, idx: number) => {
+            const key = String(t.id || idx + 1);
+            topicMap[key] = t.name || t.chapter_title || t.chapterTitle || `Chapter ${idx + 1}`;
+          });
+        }
+
+        plan.tasks.forEach((t: any, idx: number) => {
+          const ref = String(t.topic_ref || t.topicRef || "");
+          const rawTitle = t.topic_title || t.topicTitle || t.chapter_title || t.chapterTitle;
+          const mappedTitle = topicMap[ref];
+
+          const label =
+            rawTitle && !/^\d+$/.test(rawTitle.trim())
+              ? rawTitle
+              : mappedTitle || (ref && !/^\d+$/.test(ref) ? ref : `Chapter ${ref || idx + 1}`);
+
+          const taskDate = t.date || "Today";
+          const courseDisplayName = plan.courseCode ? `${plan.courseCode} · ${plan.courseName}` : plan.courseName;
+
+          allMappedTasks.push({
+            id: `${plan.courseId || plan.courseName}-${taskDate}-${idx}`,
+            label,
+            course: courseDisplayName,
+            courseId: plan.courseId,
+            min: t.minutes || t.min || 30,
+            tag: (t.task_type || t.taskType || t.tag || "STUDY").toUpperCase(),
+            description:
+              t.description ||
+              (Array.isArray(t.subtopics) && t.subtopics.length > 0
+                ? t.subtopics.slice(0, 2).join(", ")
+                : undefined),
+            date: taskDate,
+          });
+        });
+      });
+
+      // 7. Find Today's tasks
+      let todayTasks = allMappedTasks.filter(
+        (t) => t.date === todayStr || t.date === "Today" || t.date.startsWith(todayStr)
+      );
+
+      // If no tasks match today's exact date string, pick the next scheduled date
+      if (todayTasks.length === 0 && allMappedTasks.length > 0) {
+        const uniqueDates = Array.from(new Set(allMappedTasks.map((t) => t.date))).sort();
+        const nextDate = uniqueDates.find((d) => d >= todayStr) || uniqueDates[0];
+        todayTasks = allMappedTasks.filter((t) => t.date === nextDate);
+        setChecklistDateLabel(nextDate ? `Upcoming: ${nextDate}` : "Today");
+      } else {
+        setChecklistDateLabel("Today");
+      }
+
+      setTasks(todayTasks);
+
+      const completedCount = todayTasks.filter((t) => savedDone.includes(t.id)).length;
+      const initialProgress =
+        todayTasks.length > 0 ? Math.round((completedCount / todayTasks.length) * 100) : 0;
+      setProgress(initialProgress);
     };
 
     loadDashboardData();
@@ -160,6 +304,26 @@ function Dashboard() {
       isMounted = false;
     };
   }, []);
+
+  const toggleTask = (taskId: string) => {
+    const prefix = getUserStoragePrefix();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const doneKey = `sg-${prefix}-checklist-done-${todayStr}`;
+
+    setDone((prev) => {
+      const isDone = prev.includes(taskId);
+      const next = isDone ? prev.filter((id) => id !== taskId) : [...prev, taskId];
+      try {
+        localStorage.setItem(doneKey, JSON.stringify(next));
+      } catch {}
+
+      if (tasks.length > 0) {
+        const completedCount = tasks.filter((t) => next.includes(t.id)).length;
+        setProgress(Math.round((completedCount / tasks.length) * 100));
+      }
+      return next;
+    });
+  };
 
   const week = getWeekDays();
   const pose: GeniePose = progress < 34 ? "low" : progress < 67 ? "mid" : "high";
@@ -174,6 +338,11 @@ function Dashboard() {
 
   const firstName = user?.fullName ? user.fullName.split(" ")[0] : "Scholar";
   const activeExam = exams.length > 0 ? exams[Math.min(currentExamIndex, exams.length - 1)] : null;
+  const todayDateStr = new Date().toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -319,75 +488,164 @@ function Dashboard() {
       </Card>
 
       <Card className="lg:col-span-2">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Today's checklist</h2>
-          <button
-            onClick={() => setOpen(true)}
-            aria-label="Adjust my schedule"
-            className="grid h-9 w-9 place-items-center rounded-xl text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold">Today's checklist</h2>
+              {tasks.length > 0 && (
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
+                  {done.filter((id) => tasks.some((t) => t.id === id)).length} / {tasks.length} done
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {todayDateStr} · {checklistDateLabel}
+            </p>
+          </div>
+
+          {hasPlans && (
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Link to="/plan">
+                View Full Plan <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          )}
         </div>
 
-        {tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-            <BookOpen className="mb-2 h-10 w-10 opacity-40" />
-            <p className="text-sm font-medium">No tasks scheduled for today.</p>
-            <p className="text-xs">Add a course or generate a plan to see your daily schedule.</p>
-            <Button variant="outline" size="sm" className="mt-4" asChild>
-              <Link to="/courses">Browse Courses</Link>
-            </Button>
+        {!hasPlans || tasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+            <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+              <Brain className="h-7 w-7" />
+            </div>
+            <h3 className="text-base font-semibold text-foreground">
+              {!hasPlans ? "No active study plan" : "No tasks scheduled for today"}
+            </h3>
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+              {!hasPlans
+                ? enrolledCount === 0
+                  ? "You haven't added any courses yet. Add your courses and generate a study plan to see your daily schedule."
+                  : "You have enrolled courses, but haven't generated a study plan yet. Generate a plan to get your day-by-day checklist."
+                : "You're all caught up for today! Take a break or review your flashcards."}
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+              <Button variant="magic" size="sm" asChild>
+                <Link to={!hasPlans ? (enrolledCount === 0 ? "/courses" : "/plan") : "/plan"}>
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  {!hasPlans ? (enrolledCount === 0 ? "Browse Courses" : "Generate Study Plan") : "Open Study Plan"}
+                </Link>
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5">
             {tasks.map((t) => {
               const on = done.includes(t.id);
               return (
-                <button
+                <div
                   key={t.id}
-                  onClick={() =>
-                    setDone((d) => (on ? d.filter((x) => x !== t.id) : [...d, t.id]))
-                  }
-                  className="flex items-center gap-4 rounded-xl border px-4 py-3 text-left transition hover:bg-accent/50"
+                  className={cn(
+                    "group flex items-center justify-between gap-3 rounded-xl border p-3.5 transition",
+                    on
+                      ? "border-muted bg-muted/30 opacity-70"
+                      : "border-border/60 bg-card hover:border-primary/40 hover:bg-accent/40"
+                  )}
                 >
-                  <span
-                    className={cn(
-                      "grid h-6 w-6 place-items-center rounded-lg border-2",
-                      on
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border"
-                    )}
+                  <button
+                    type="button"
+                    onClick={() => toggleTask(t.id)}
+                    className="flex flex-1 items-start gap-3 text-left"
                   >
-                    {on && <Check className="h-4 w-4" />}
-                  </span>
-                  <span
-                    className={cn("flex-1 font-semibold", on && "text-muted-foreground line-through")}
-                  >
-                    {t.label}
-                  </span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-bold",
-                      t.tag === "STUDY"
-                        ? "bg-info/15 text-info"
-                        : "bg-gold/20 text-gold-foreground dark:text-gold"
-                    )}
-                  >
-                    {t.tag}
-                  </span>
-                  <span className="w-14 text-right text-sm text-muted-foreground">{t.min} min</span>
-                </button>
+                    <span
+                      className={cn(
+                        "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-lg border transition",
+                        on
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-muted-foreground/30 group-hover:border-primary"
+                      )}
+                    >
+                      {on && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          {t.course}
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase",
+                            t.tag === "STUDY"
+                              ? "bg-info/15 text-info"
+                              : t.tag === "REVIEW"
+                                ? "bg-purple-500/15 text-purple-600 dark:text-purple-400"
+                                : t.tag === "QUIZ"
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                  : "bg-gold/20 text-gold-foreground dark:text-gold"
+                          )}
+                        >
+                          {t.tag}
+                        </span>
+                      </div>
+                      <p
+                        className={cn(
+                          "mt-1 text-sm font-semibold text-foreground transition",
+                          on && "line-through text-muted-foreground"
+                        )}
+                      >
+                        {t.label}
+                      </p>
+                      {t.description && (
+                        <p className="mt-0.5 text-xs text-muted-foreground truncate max-w-md">
+                          {t.description}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5 opacity-70" /> {t.min}m
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      asChild
+                      className="h-8 w-8 p-0 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      title="Start Focus Timer for this task"
+                    >
+                      <Link to="/pomodoro">
+                        <Play className="h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
               );
             })}
+
+            {tasks.length > 0 && done.filter((id) => tasks.some((t) => t.id === id)).length === tasks.length && (
+              <div className="mt-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                🎉 All tasks completed for today! Keep that streak shining.
+              </div>
+            )}
           </div>
         )}
 
-        <Button variant="magic" className="mt-4" asChild>
-          <Link to="/pomodoro">
-            <Timer /> Start focus session
-          </Link>
-        </Button>
+        {hasPlans && tasks.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+            <span className="text-xs text-muted-foreground">
+              Total: {tasks.reduce((acc, t) => acc + t.min, 0)} minutes of scheduled study
+            </span>
+            <Button variant="magic" size="sm" asChild>
+              <Link to="/pomodoro">
+                <Timer className="mr-1.5 h-3.5 w-3.5" /> Start Focus Session
+              </Link>
+            </Button>
+          </div>
+        )}
       </Card>
 
       <Card>
@@ -413,14 +671,20 @@ function Dashboard() {
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 text-center">
           <div className="rounded-xl bg-accent p-3">
-            <div className="font-display text-2xl font-semibold">{done.length}</div>
+            <div className="font-display text-2xl font-semibold">
+              {done.filter((id) => tasks.some((t) => t.id === id)).length}
+            </div>
             <div className="text-xs text-muted-foreground">tasks completed</div>
           </div>
           <div className="rounded-xl bg-accent p-3">
             <div className="font-display text-2xl font-semibold">
-              {done.length > 0 ? `${(done.length * 0.5).toFixed(1)}h` : "0h"}
+              {(() => {
+                const completedTasks = tasks.filter((t) => done.includes(t.id));
+                const totalMinutes = completedTasks.reduce((sum, t) => sum + t.min, 0);
+                return totalMinutes > 0 ? `${(totalMinutes / 60).toFixed(1)}h` : "0h";
+              })()}
             </div>
-            <div className="text-xs text-muted-foreground">studied</div>
+            <div className="text-xs text-muted-foreground">studied today</div>
           </div>
         </div>
       </Card>
