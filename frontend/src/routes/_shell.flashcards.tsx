@@ -5,7 +5,9 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Brain,
   Check,
+  CheckCircle2,
   GraduationCap,
   HelpCircle,
   Loader2,
@@ -13,7 +15,9 @@ import {
   Plus,
   RotateCcw,
   Sparkles,
+  Trophy,
 } from "lucide-react";
+import { playCelebrationSound } from "@/lib/sound";
 import { toast } from "sonner";
 import { Riffle } from "@lucasmarkes/hairline/react";
 import { Card, PageTitle } from "@/components/AppShell";
@@ -71,6 +75,14 @@ function Flashcards() {
   const [cardIndex, setCardIndex] = useState(0);
   const [flip, setFlip] = useState(false);
   const [kitId, setKitId] = useState<string | null>(null);
+  const [sessionCompleted, setSessionCompleted] = useState(false);
+  const [sessionStats, setSessionStats] = useState({
+    again: 0,
+    hard: 0,
+    good: 0,
+    easy: 0,
+    totalPoints: 0,
+  });
 
   // Generate more modal state
   const [genModalOpen, setGenModalOpen] = useState(false);
@@ -100,6 +112,8 @@ function Flashcards() {
     setSelectedCourse(course);
     setCardIndex(0);
     setFlip(false);
+    setSessionCompleted(false);
+    setSessionStats({ again: 0, hard: 0, good: 0, easy: 0, totalPoints: 0 });
 
     // 1. Check user-scoped kits for this course
     const allKits = getUserTaskKits();
@@ -159,6 +173,13 @@ function Flashcards() {
     setFlip(false);
     addPoints(20);
 
+    const ratingKey = r.toLowerCase() as "again" | "hard" | "good" | "easy";
+    setSessionStats((prev) => ({
+      ...prev,
+      [ratingKey]: (prev[ratingKey] || 0) + 1,
+      totalPoints: prev.totalPoints + 20,
+    }));
+
     const currentCard = cards[cardIndex];
     if (kitId && currentCard?.id) {
       try {
@@ -166,9 +187,24 @@ function Flashcards() {
       } catch {}
     }
 
-    if (cards.length > 0) {
-      setCardIndex((prev) => (prev + 1) % cards.length);
+    if (cardIndex + 1 < cards.length) {
+      setCardIndex((prev) => prev + 1);
+    } else {
+      // Reached the end of the deck! Stop rolling around and finish the session cleanly!
+      setSessionCompleted(true);
+      try {
+        playCelebrationSound();
+      } catch {}
+      toast.success("Deck completed! Fantastic job! 🎉");
     }
+  };
+
+  const handleRestartDeck = () => {
+    setCardIndex(0);
+    setFlip(false);
+    setSessionCompleted(false);
+    setSessionStats({ again: 0, hard: 0, good: 0, easy: 0, totalPoints: 0 });
+    toast.info("Deck reset. Starting fresh session! ✨");
   };
 
   // Generate flashcards on demand for the selected course
@@ -252,6 +288,9 @@ function Flashcards() {
       newFlashcards = newFlashcards.slice(0, sanitizedCount);
       setCards(newFlashcards);
       setCardIndex(0);
+      setFlip(false);
+      setSessionCompleted(false);
+      setSessionStats({ again: 0, hard: 0, good: 0, easy: 0, totalPoints: 0 });
       setGenModalOpen(false);
       toast.success(`Generated ${newFlashcards.length} active-recall flashcards! ✨`);
     } catch (err: any) {
@@ -403,6 +442,92 @@ function Flashcards() {
             <Sparkles className="h-4 w-4" /> Generate Flashcards Now
           </Button>
         </Card>
+      ) : sessionCompleted ? (
+        <Card className="flex flex-col items-center justify-center py-12 px-6 text-center shadow-soft border-primary/30 bg-card">
+          <div className="relative mb-4">
+            <div className="absolute -inset-2 rounded-full bg-primary/20 blur-xl animate-pulse" />
+            <Genie pose="high" className="relative h-24 w-24 animate-bounce" />
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 mb-3">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Deck Completed
+          </div>
+
+          <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground">
+            Study Session Complete! 🎉
+          </h2>
+          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
+            You reviewed all {cards.length} active-recall flashcards for <span className="font-semibold text-foreground">{selectedCourse.name}</span>.
+          </p>
+
+          <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full max-w-md">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center">
+              <div className="font-display text-xl font-bold text-primary">
+                +{sessionStats.totalPoints || cards.length * 20}
+              </div>
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Points Earned</div>
+            </div>
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
+              <div className="font-display text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                {sessionStats.easy + sessionStats.good}
+              </div>
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Mastered</div>
+            </div>
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+              <div className="font-display text-xl font-bold text-amber-600 dark:text-amber-400">
+                {sessionStats.hard}
+              </div>
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Hard</div>
+            </div>
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-center">
+              <div className="font-display text-xl font-bold text-rose-600 dark:text-rose-400">
+                {sessionStats.again}
+              </div>
+              <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Review Again</div>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col sm:flex-row items-center gap-3 w-full max-w-md">
+            <Button
+              variant="magic"
+              size="lg"
+              className="w-full gap-2 font-bold shadow-soft"
+              onClick={handleRestartDeck}
+            >
+              <RotateCcw className="h-4 w-4" /> Review Deck Again
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full gap-2 font-semibold"
+              onClick={() => setSelectedCourse(null)}
+            >
+              <ArrowLeft className="h-4 w-4" /> Other Courses
+            </Button>
+          </div>
+
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-primary gap-1"
+              asChild
+            >
+              <Link to="/quiz">
+                <Brain className="h-3.5 w-3.5" /> Practice Quiz →
+              </Link>
+            </Button>
+            <span className="text-muted-foreground/40">•</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-primary gap-1"
+              onClick={() => setGenModalOpen(true)}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Generate More Cards
+            </Button>
+          </div>
+        </Card>
       ) : (
         <>
           <div className="mb-5 flex items-center justify-between rounded-2xl border bg-card/60 px-5 py-3 shadow-soft backdrop-blur">
@@ -413,7 +538,7 @@ function Flashcards() {
               <div>
                 <h3 className="text-sm font-bold">Interactive Deck</h3>
                 <p className="text-xs text-muted-foreground">
-                  {cards.length - cardIndex} cards remaining in this session
+                  {cards.length - cardIndex} {cards.length - cardIndex === 1 ? "card" : "cards"} remaining in this session
                 </p>
               </div>
             </div>
@@ -422,11 +547,7 @@ function Flashcards() {
                 size="sm"
                 variant="ghost"
                 className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setCardIndex(0);
-                  setFlip(false);
-                  toast.info("Deck reset to start.");
-                }}
+                onClick={handleRestartDeck}
               >
                 <RotateCcw className="h-3 w-3" /> Reset
               </Button>
@@ -438,7 +559,7 @@ function Flashcards() {
 
           <div className="mb-6 h-2 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full bg-gradient-magic transition-all"
+              className="h-full bg-gradient-magic transition-all duration-300"
               style={{ width: `${((cardIndex + 1) / cards.length) * 100}%` }}
             />
           </div>
@@ -472,7 +593,39 @@ function Flashcards() {
             </motion.button>
           </div>
 
-          <div className={cn("mt-6 grid grid-cols-4 gap-3 transition", !flip && "pointer-events-none opacity-40")}>
+          <div className="mt-4 flex items-center justify-between px-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={cardIndex === 0}
+              onClick={() => {
+                setFlip(false);
+                setCardIndex((prev) => Math.max(0, prev - 1));
+              }}
+              className="gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Previous Card
+            </Button>
+
+            <span className="text-xs font-semibold text-muted-foreground">
+              Card {cardIndex + 1} of {cards.length}
+            </span>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={cardIndex >= cards.length - 1}
+              onClick={() => {
+                setFlip(false);
+                setCardIndex((prev) => Math.min(cards.length - 1, prev + 1));
+              }}
+              className="gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Next Card <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          <div className={cn("mt-4 grid grid-cols-4 gap-3 transition", !flip && "pointer-events-none opacity-40")}>
             {ratings.map((r) => (
               <button
                 key={r.label}
