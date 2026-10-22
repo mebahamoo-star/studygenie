@@ -19,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 @Primary
@@ -91,39 +93,43 @@ public class JpaSyllabusResultStore implements SyllabusResultStore {
             syllabus = syllabusRepository.save(syllabus);
         }
 
-        // Fetch existing topics for this syllabus to append rather than overwrite
+        // Fetch existing topics for this syllabus to avoid duplicate chapters
         List<Topic> existingTopics = topicRepository.findBySyllabusId(syllabus.getId());
-        java.util.Set<String> existingTitles = existingTopics.stream()
-                .map(t -> t.getChapterTitle().trim().toLowerCase())
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> existingTitles = existingTopics.stream()
+                .map(t -> normalizeChapterTitle(t.getChapterTitle()))
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toSet());
 
         int nextOrder = existingTopics.stream()
                 .mapToInt(Topic::getOrderIndex)
                 .max()
                 .orElse(0) + 1;
 
-        // Save new topics, making titles unique if collisions occur rather than dropping
+        // Save new topics, strictly deduplicating identical chapters
         int addedCount = 0;
         for (TopicItem item : data.topics()) {
             if (item.chapterTitle() == null || item.chapterTitle().isBlank()) {
                 continue;
             }
-            String finalTitle = item.chapterTitle().trim();
-            int counter = 2;
-            while (existingTitles.contains(finalTitle.toLowerCase())) {
-                finalTitle = item.chapterTitle().trim() + " (Part " + counter + ")";
-                counter++;
+            String rawTitle = item.chapterTitle().trim().replaceAll("(?i)\\s*\\(part\\s*\\d+\\)$", "").trim();
+            String normKey = normalizeChapterTitle(rawTitle);
+
+            // If a chapter with the same concept/title already exists in the syllabus, DO NOT duplicate!
+            if (existingTitles.contains(normKey)) {
+                log.info("Syllabus chapter '{}' already exists for course '{}'. Skipping duplicate.", rawTitle, course.getName());
+                continue;
             }
+
             double hrs = item.estimatedHours() > 0 ? item.estimatedHours() : 2.0;
             Topic topic = Topic.builder()
                     .syllabus(syllabus)
-                    .chapterTitle(finalTitle)
+                    .chapterTitle(rawTitle)
                     .orderIndex(nextOrder++)
                     .estimatedHours(hrs)
                     .contentExcerpt(item.contentExcerpt())
                     .build();
             topicRepository.save(topic);
-            existingTitles.add(finalTitle.toLowerCase());
+            existingTitles.add(normKey);
             addedCount++;
         }
 
@@ -132,5 +138,14 @@ public class JpaSyllabusResultStore implements SyllabusResultStore {
         courseRepository.save(course);
         log.info("Successfully persisted {} new topics (total: {}) for course '{}' (ID: {}). Status set to READY.",
                 addedCount, existingTopics.size() + addedCount, course.getName(), course.getId());
+    }
+
+    private String normalizeChapterTitle(String title) {
+        if (title == null) return "";
+        return title
+                .replaceAll("(?i)\\s*\\(part\\s*\\d+\\)$", "")
+                .replaceAll("(?i)^chapter\\s*\\d+[:\\s.-]*", "")
+                .trim()
+                .toLowerCase();
     }
 }

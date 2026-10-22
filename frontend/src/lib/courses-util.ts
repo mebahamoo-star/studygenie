@@ -1,4 +1,4 @@
-import type { Course, CourseStatus } from "./api/types";
+import type { Course, CourseStatus, Topic } from "./api/types";
 
 export function getUserStoragePrefix(): string {
   try {
@@ -13,23 +13,76 @@ export function getUserStoragePrefix(): string {
 }
 
 /**
- * Ensures that different courses never share identical chapter/topic lists.
- * If a course mistakenly received a copy of another course's topics (e.g. Operating Systems),
- * its topics are reset so the user can upload its own material.
+ * Deduplicates chapter topics within a course syllabus.
+ * Collapses duplicate chapter titles and removes synthetic "(Part X)" duplicates.
+ */
+export function deduplicateTopics(topics: Topic[]): Topic[] {
+  if (!topics || !Array.isArray(topics)) return [];
+  const seen = new Set<string>();
+  const clean: Topic[] = [];
+
+  for (const t of topics) {
+    if (!t || !t.name) continue;
+    const cleanName = t.name.replace(/\s*\(Part\s*\d+\)$/i, "").trim();
+    const normKey = cleanName
+      .replace(/^chapter\s*\d+[:\s.-]*/i, "")
+      .trim()
+      .toLowerCase();
+
+    if (!normKey || seen.has(normKey)) continue;
+    seen.add(normKey);
+
+    clean.push({
+      ...t,
+      id: clean.length + 1,
+      name: cleanName,
+    });
+  }
+
+  return clean;
+}
+
+/**
+ * Ensures that:
+ * 1. The same syllabus / chapters are NEVER duplicated within a course.
+ * 2. Courses with identical names are collapsed into a single canonical course.
+ * 3. Different courses never mistakenly share identical chapter signatures.
  */
 export function sanitizeUserCourses(courses: Course[]): Course[] {
   if (!courses || !Array.isArray(courses)) return [];
 
-  const seenSignatures = new Map<string, string>(); // signature -> first course name
-
-  return courses.map((c) => {
+  // 1. Deduplicate courses by name (collapsing identical course entries)
+  const seenCourseNames = new Map<string, Course>();
+  for (const c of courses) {
+    if (!c || !c.name) continue;
+    const nameKey = c.name.trim().toLowerCase();
     const rawCode = c.code ? String(c.code).trim() : "";
     const cleanCode = rawCode.toUpperCase() === "CUSTOM" ? "" : rawCode;
-    const item: Course = {
+    const cleanTopics = deduplicateTopics(c.topics || []);
+
+    const candidate: Course = {
       ...c,
       code: cleanCode,
+      topics: cleanTopics,
     };
 
+    if (!seenCourseNames.has(nameKey)) {
+      seenCourseNames.set(nameKey, candidate);
+    } else {
+      const existing = seenCourseNames.get(nameKey)!;
+      const existingCount = existing.topics?.length || 0;
+      const candidateCount = candidate.topics?.length || 0;
+      if (candidateCount > existingCount || (candidate.status === "ready" && existing.status !== "ready")) {
+        seenCourseNames.set(nameKey, candidate);
+      }
+    }
+  }
+
+  const uniqueCourses = Array.from(seenCourseNames.values());
+  const seenSignatures = new Map<string, string>(); // signature -> first course name
+
+  // 2. Ensure distinct chapter signatures across different courses
+  return uniqueCourses.map((item) => {
     if (!item.topics || item.topics.length === 0) return item;
 
     // Build a signature of chapter names
@@ -61,6 +114,13 @@ export function getUserCourses(): Course[] {
     const raw = localStorage.getItem(`sg-${prefix}-courses`);
     if (raw) {
       const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return sanitizeUserCourses(parsed);
+      }
+    }
+    const oldRaw = localStorage.getItem("sg-user-courses");
+    if (oldRaw) {
+      const parsed = JSON.parse(oldRaw);
       if (Array.isArray(parsed)) {
         return sanitizeUserCourses(parsed);
       }

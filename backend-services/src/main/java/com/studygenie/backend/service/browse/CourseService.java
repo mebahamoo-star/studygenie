@@ -207,10 +207,22 @@ public class CourseService {
         if (c.getStatus() != CourseStatus.READY) {
             throw new ResourceNotReadyException("Course syllabus is not ready yet.", "SYLLABUS_NOT_READY");
         }
-        return topicRepository.findBySyllabusId(c.getSyllabus().getId()).stream()
+        List<Topic> allTopics = topicRepository.findBySyllabusId(c.getSyllabus().getId());
+        java.util.Map<String, Topic> uniqueMap = new java.util.LinkedHashMap<>();
+        for (Topic t : allTopics) {
+            String norm = t.getChapterTitle() == null ? "" : t.getChapterTitle()
+                    .replaceAll("(?i)\\s*\\(part\\s*\\d+\\)$", "")
+                    .replaceAll("(?i)^chapter\\s*\\d+[:\\s.-]*", "")
+                    .trim()
+                    .toLowerCase();
+            if (!uniqueMap.containsKey(norm)) {
+                uniqueMap.put(norm, t);
+            }
+        }
+        return uniqueMap.values().stream()
                 .map(t -> new TopicDto(
                         t.getId(),
-                        t.getChapterTitle(),
+                        t.getChapterTitle().replaceAll("(?i)\\s*\\(part\\s*\\d+\\)$", "").trim(),
                         t.getOrderIndex(),
                         t.getEstimatedHours(),
                         t.getContentExcerpt()))
@@ -236,6 +248,19 @@ public class CourseService {
         }
 
         List<Topic> existingTopics = topicRepository.findBySyllabusId(syllabus.getId());
+        String normIncoming = chapterTitle.trim()
+                .replaceAll("(?i)\\s*\\(part\\s*\\d+\\)$", "")
+                .replaceAll("(?i)^chapter\\s*\\d+[:\\s.-]*", "")
+                .toLowerCase();
+        for (Topic et : existingTopics) {
+            String normEt = et.getChapterTitle() == null ? "" : et.getChapterTitle()
+                    .replaceAll("(?i)\\s*\\(part\\s*\\d+\\)$", "")
+                    .replaceAll("(?i)^chapter\\s*\\d+[:\\s.-]*", "")
+                    .toLowerCase();
+            if (normEt.equals(normIncoming)) {
+                return new TopicDto(et.getId(), et.getChapterTitle(), et.getOrderIndex(), et.getEstimatedHours(), et.getContentExcerpt());
+            }
+        }
         int nextOrder = existingTopics.stream()
                 .mapToInt(Topic::getOrderIndex)
                 .max()

@@ -33,7 +33,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useApp } from "@/lib/app-state";
 import { pageHead } from "@/lib/head";
-import { getUserCourses, getUserStoragePrefix, getUserTaskKits, saveUserCourses, saveUserTaskKits } from "@/lib/courses-util";
+import { deduplicateTopics, getUserCourses, getUserStoragePrefix, getUserTaskKits, saveUserCourses, saveUserTaskKits } from "@/lib/courses-util";
 import { browseService, examService, type CommunityChallenge } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
 import type { Course, Topic } from "@/lib/api/types";
@@ -526,6 +526,7 @@ function Dashboard() {
       if (topics.length === 0) {
         topics = getStructuredChaptersForCourse(ch.courseName, campusInfo.major);
       }
+      topics = deduplicateTopics(topics);
 
       // 2. Ensure course in local list and enrolled in backend
       const enrolled = getUserCourses();
@@ -539,10 +540,11 @@ function Dashboard() {
           topics,
         };
       } else {
+        const mergedTopics = deduplicateTopics([...(courseObj.topics || []), ...topics]);
         courseObj = {
           ...courseObj,
           status: "ready",
-          topics: topics.length > 0 ? topics : courseObj.topics || [],
+          topics: mergedTopics.length > 0 ? mergedTopics : courseObj.topics || [],
         };
       }
 
