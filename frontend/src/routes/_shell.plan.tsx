@@ -504,7 +504,7 @@ function Plan() {
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        {c.code || "SUBJECT"}
+                        {c.code && c.code.toUpperCase() !== "CUSTOM" ? c.code : ""}
                       </span>
                       <StatusBadge status={c.status} />
                     </div>
@@ -561,7 +561,7 @@ function Plan() {
       <PageTitle
         title={selectedCourse.name}
         sub={
-          selectedCourse.code
+          selectedCourse.code && selectedCourse.code.toUpperCase() !== "CUSTOM"
             ? `${selectedCourse.code} · Day-by-day study and review timeline`
             : "Day-by-day study and review timeline"
         }

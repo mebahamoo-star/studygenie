@@ -43,7 +43,7 @@ function ExamCheckin() {
     let enrolled = getUserCourses();
     if (enrolled.length > 0) {
       setUserCourses(
-        enrolled.map((c) => (c.code ? `${c.code} — ${c.name}` : c.name))
+        enrolled.map((c) => (c.code && c.code.toUpperCase() !== "CUSTOM" ? `${c.code} — ${c.name}` : c.name))
       );
     }
 
@@ -60,7 +60,7 @@ function ExamCheckin() {
           const merged = Array.from(map.values());
           saveUserCourses(merged);
           setUserCourses(
-            merged.map((c) => (c.code ? `${c.code} — ${c.name}` : c.name))
+            merged.map((c) => (c.code && c.code.toUpperCase() !== "CUSTOM" ? `${c.code} — ${c.name}` : c.name))
           );
         }
       })

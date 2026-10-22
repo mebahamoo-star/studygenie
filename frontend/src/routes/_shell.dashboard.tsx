@@ -144,7 +144,7 @@ function Dashboard() {
         activeCourse = enrolled[0];
       }
 
-      const displayName = activeCourse.code
+      const displayName = activeCourse.code && activeCourse.code.toUpperCase() !== "CUSTOM"
         ? `${activeCourse.code} · ${activeCourse.name}`
         : activeCourse.name;
       setCourseName(displayName);
@@ -186,7 +186,7 @@ function Dashboard() {
         if (planData?.tasks && planData.tasks.length > 0) {
           allPlans.push({
             courseName: c.name,
-            courseCode: c.code,
+            courseCode: c.code && c.code.toUpperCase() !== "CUSTOM" ? c.code : undefined,
             courseId: c.id,
             topics: c.topics,
             tasks: planData.tasks,
@@ -206,7 +206,7 @@ function Dashboard() {
             if (!alreadyIn) {
               allPlans.push({
                 courseName: activeCourse?.name || "General Course",
-                courseCode: activeCourse?.code,
+                courseCode: activeCourse?.code && activeCourse.code.toUpperCase() !== "CUSTOM" ? activeCourse.code : undefined,
                 courseId: activeCourse?.id,
                 topics: activeCourse?.topics,
                 tasks: parsed.tasks,

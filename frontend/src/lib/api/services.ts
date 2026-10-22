@@ -528,7 +528,7 @@ export const browseService = {
 
       name: c.name,
 
-      code: c.code || "CUSTOM",
+      code: c.code && String(c.code).trim().toUpperCase() !== "CUSTOM" ? c.code : "",
 
       collegeId: c.collegeId,
 

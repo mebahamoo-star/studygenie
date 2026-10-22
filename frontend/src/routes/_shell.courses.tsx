@@ -140,7 +140,7 @@ function CoursesPage() {
 
     let newCourse: Course = {
       id: `course-${Date.now()}`,
-      code: courseCode?.trim() || "CUSTOM",
+      code: courseCode?.trim() && courseCode.trim().toUpperCase() !== "CUSTOM" ? courseCode.trim() : "",
       name: trimmed,
       status: "none" as CourseStatus,
     };
@@ -156,7 +156,12 @@ function CoursesPage() {
       }
       const created = await browseService.createCourse(colId, trimmed);
       if (created) {
-        newCourse = created;
+        newCourse = {
+          ...created,
+          code: courseCode?.trim() && courseCode.trim().toUpperCase() !== "CUSTOM"
+            ? courseCode.trim()
+            : (created.code && created.code.toUpperCase() !== "CUSTOM" ? created.code : ""),
+        };
         // Enroll in newly created course on Neon cloud database
         await browseService.enrollCourse(created.id).catch(() => {});
       }
@@ -291,7 +296,7 @@ function CoursesPage() {
                               className="rounded-lg border border-primary/30 bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition hover:border-primary hover:bg-primary/10 flex items-center gap-1"
                             >
                               <Plus className="h-3 w-3 text-primary" />
-                              {cc.code || "COURSE"} · {cc.name}
+                              {cc.code && cc.code.toUpperCase() !== "CUSTOM" ? `${cc.code} · ` : ""}{cc.name}
                             </button>
                           ))}
                       </div>
@@ -351,7 +356,9 @@ function CoursesPage() {
               >
                 <div className="flex items-start justify-between gap-1">
                   <div>
-                    <div className="text-xs font-bold text-muted-foreground">{c.code}</div>
+                    {c.code && c.code.toUpperCase() !== "CUSTOM" && (
+                      <div className="text-xs font-bold text-muted-foreground">{c.code}</div>
+                    )}
                     <div className="font-semibold">{c.name}</div>
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
@@ -552,7 +559,9 @@ function EmptyUpload({
       {course && (
         <div className="mb-4 flex w-full items-center justify-between border-b pb-4">
           <div className="text-left">
-            <span className="text-xs font-bold uppercase text-muted-foreground">{course.code}</span>
+            {course.code && course.code.toUpperCase() !== "CUSTOM" && (
+              <span className="text-xs font-bold uppercase text-muted-foreground">{course.code}</span>
+            )}
             <h3 className="text-lg font-semibold">{course.name}</h3>
           </div>
           {onDeleteCourse && (

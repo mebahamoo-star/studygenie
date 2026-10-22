@@ -18,33 +18,40 @@ export function getUserStoragePrefix(): string {
  * its topics are reset so the user can upload its own material.
  */
 export function sanitizeUserCourses(courses: Course[]): Course[] {
-  if (!courses || courses.length <= 1) return courses || [];
+  if (!courses || !Array.isArray(courses)) return [];
 
   const seenSignatures = new Map<string, string>(); // signature -> first course name
 
   return courses.map((c) => {
-    if (!c.topics || c.topics.length === 0) return c;
+    const rawCode = c.code ? String(c.code).trim() : "";
+    const cleanCode = rawCode.toUpperCase() === "CUSTOM" ? "" : rawCode;
+    const item: Course = {
+      ...c,
+      code: cleanCode,
+    };
+
+    if (!item.topics || item.topics.length === 0) return item;
 
     // Build a signature of chapter names
-    const sig = c.topics
+    const sig = item.topics
       .map((t) => t.name.trim().toLowerCase())
       .filter(Boolean)
       .join("|||");
 
-    if (!sig) return c;
+    if (!sig) return item;
 
     if (seenSignatures.has(sig)) {
       const originalCourse = seenSignatures.get(sig);
-      console.warn(`Sanitizing course "${c.name}": topics were duplicated from "${originalCourse}"`);
+      console.warn(`Sanitizing course "${item.name}": topics were duplicated from "${originalCourse}"`);
       return {
-        ...c,
+        ...item,
         status: "none" as CourseStatus,
         topics: [],
       };
     }
 
-    seenSignatures.set(sig, c.name);
-    return c;
+    seenSignatures.set(sig, item.name);
+    return item;
   });
 }
 

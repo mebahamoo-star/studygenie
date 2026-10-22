@@ -304,9 +304,13 @@ function Flashcards() {
                 >
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between">
-                      <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary border border-primary/20">
-                        {course.code || "COURSE"}
-                      </span>
+                      {course.code && course.code.toUpperCase() !== "CUSTOM" ? (
+                        <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary border border-primary/20">
+                          {course.code}
+                        </span>
+                      ) : <span />}
+
+
                       <StatusBadge status={course.status} />
                     </div>
 

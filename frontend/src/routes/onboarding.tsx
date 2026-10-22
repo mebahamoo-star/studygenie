@@ -240,7 +240,7 @@ function Onboarding() {
 
     const fallbackCourse: Course = {
       id: `c-${Date.now()}`,
-      code: "CUSTOM",
+      code: "",
       name: trimmed,
       status: "none",
     };
@@ -646,7 +646,9 @@ function Onboarding() {
                         className={row(on)}
                       >
                         <span>
-                          <span className="mr-2 text-xs text-muted-foreground">{c.code}</span>
+                          {c.code && String(c.code).trim().toUpperCase() !== "CUSTOM" && (
+                            <span className="mr-2 text-xs text-muted-foreground">{c.code}</span>
+                          )}
                           {c.name}
                         </span>
                         <StatusBadge status={c.status} />
