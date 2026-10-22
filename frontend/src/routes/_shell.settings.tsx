@@ -6,7 +6,6 @@ import { Card, PageTitle } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { useApp } from "@/lib/app-state";
 import { pageHead } from "@/lib/head";
 import { cn } from "@/lib/utils";
@@ -21,7 +20,7 @@ export const Route = createFileRoute("/_shell/settings")({
 
 function Settings() {
   const nav = useNavigate();
-  const { dark, toggleDark, lang, setLang, user } = useApp();
+  const { lang, setLang, user } = useApp();
   const ar = lang === "ar";
   const [selectedSound, setSelectedSound] = useState<CelebrationSoundType>("magic");
   const [uniName, setUniName] = useState("");
@@ -102,16 +101,26 @@ function Settings() {
       </Card>
       <Card className="grid gap-5">
         <div className="flex items-center justify-between">
-          <Label>{ar ? "اللغة" : "Language"}</Label>
+          <div>
+            <Label className="text-base font-semibold">{ar ? "اللغة" : "Language"}</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {ar ? "اختر لغة واجهة التطبيق" : "Choose your preferred interface language"}
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
             {(["en", "ar"] as const).map((l) => (
-              <button key={l} onClick={() => setLang(l)} className={cn("rounded-lg px-4 py-1.5 text-sm font-bold", lang === l && "bg-card text-primary shadow-soft")}>{l === "en" ? "English" : "العربية"}</button>
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className={cn(
+                  "rounded-lg px-4 py-1.5 text-sm font-bold transition",
+                  lang === l && "bg-card text-primary shadow-soft"
+                )}
+              >
+                {l === "en" ? "English" : "العربية"}
+              </button>
             ))}
           </div>
-        </div>
-        <div className="flex items-center justify-between">
-          <Label>{ar ? "وضع التركيز (داكن)" : "Focus Mode (dark)"}</Label>
-          <Switch checked={dark} onCheckedChange={toggleDark} />
         </div>
       </Card>
       <Card className="grid gap-4">
