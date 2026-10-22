@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { browseService } from "@/lib/api/services";
 import type { College, Course, University } from "@/lib/api/types";
+import { saveUserCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/onboarding")({
@@ -165,16 +166,14 @@ function Onboarding() {
     setCustomCourse("");
   };
 
-  const handleFinish = () => {
-    if (picked.length === 0) {
-      toast.error("Please add or select at least one course to start your study plan!");
-      return;
-    }
-
+  const handleFinish = (skipCourses = false) => {
     try {
-      const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
-      if (selectedCoursesData.length > 0) {
-        localStorage.setItem("sg-user-courses", JSON.stringify(selectedCoursesData));
+      if (!skipCourses && picked.length > 0) {
+        const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
+        if (selectedCoursesData.length > 0) {
+          saveUserCourses(selectedCoursesData);
+          localStorage.setItem("sg-user-courses", JSON.stringify(selectedCoursesData));
+        }
       }
       if (selectedUni) {
         localStorage.setItem("sg-user-uni", JSON.stringify(selectedUni));
@@ -187,7 +186,11 @@ function Onboarding() {
       }
     } catch {}
 
-    toast.success("Profile setup complete! Welcome to StudyGenie ✨");
+    if (picked.length > 0 && !skipCourses) {
+      toast.success("Profile setup complete! Welcome to StudyGenie ✨");
+    } else {
+      toast.success("Welcome to StudyGenie! You can add courses anytime from the Courses tab ✨");
+    }
     nav({ to: "/dashboard" });
   };
 
@@ -201,7 +204,7 @@ function Onboarding() {
     if (step === 0) return !selectedUni;
     if (step === 1) return !selectedCol;
     if (step === 2) return !selectedMajor && !customMajor.trim();
-    if (step === 3) return picked.length === 0;
+    // Step 3 (Courses) is optional / skippable
     return false;
   };
 
@@ -211,7 +214,18 @@ function Onboarding() {
         <Link to="/">
           <GenieLogo />
         </Link>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            type="button"
+            onClick={() => handleFinish(true)}
+            className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Skip setup →
+          </Button>
+          <ThemeToggle />
+        </div>
       </header>
       <div className="mx-auto max-w-2xl px-6 pb-16">
         <div className="mb-8 flex items-center gap-3">
@@ -235,9 +249,23 @@ function Onboarding() {
           ))}
         </div>
 
-        <div className="rounded-3xl border bg-card p-8 shadow-soft">
-          <div className="mb-6 flex items-center gap-4">
-            <Genie pose="mid" className="h-16 w-16" />
+        <div className="relative rounded-3xl border bg-card p-8 shadow-soft">
+          {step === 3 && (
+            <div className="absolute right-6 top-6">
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                onClick={() => handleFinish(true)}
+                className="h-8 rounded-lg px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                Skip for now →
+              </Button>
+            </div>
+          )}
+
+          <div className="mb-6 flex items-center gap-4 pr-24">
+            <Genie pose="mid" className="h-16 w-16 shrink-0" />
             <h1 className="text-2xl font-semibold">
               {
                 [
@@ -454,38 +482,58 @@ function Onboarding() {
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed py-8 text-center text-sm text-muted-foreground">
-                  No courses added yet. Type course names above and click "Add Course".
+                  No courses added yet. Type course names above and click "Add Course", or skip for now.
                 </div>
               )}
 
-              {picked.length === 0 && (
-                <p className="text-xs text-amber-500 font-medium">
-                  * At least one course is required before proceeding to the study tools.
+              {picked.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Tip: You can add courses now or skip and add them anytime later from the Courses page.
+                </p>
+              ) : (
+                <p className="text-xs text-emerald-600 font-medium">
+                  ✓ {picked.length} course{picked.length > 1 ? "s" : ""} selected.
                 </p>
               )}
             </div>
           )}
 
-          <div className="mt-8 flex justify-between">
+          <div className="mt-8 flex items-center justify-between">
             <Button variant="ghost" disabled={step === 0} onClick={() => setStep(step - 1)}>
               <ChevronLeft /> Back
             </Button>
-            <Button
-              variant="magic"
-              disabled={isNextDisabled()}
-              onClick={() => {
-                if (step === 2 && !selectedMajor && customMajor.trim()) {
-                  setSelectedMajor(customMajor.trim());
-                }
-                if (step < steps.length - 1) {
-                  setStep(step + 1);
-                } else {
-                  handleFinish();
-                }
-              }}
-            >
-              {step < steps.length - 1 ? "Continue" : "Finish & Go to Dashboard"}
-            </Button>
+            <div className="flex items-center gap-2">
+              {step === 3 && (
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => handleFinish(true)}
+                  className="rounded-xl"
+                >
+                  Skip for now
+                </Button>
+              )}
+              <Button
+                variant="magic"
+                disabled={isNextDisabled()}
+                onClick={() => {
+                  if (step === 2 && !selectedMajor && customMajor.trim()) {
+                    setSelectedMajor(customMajor.trim());
+                  }
+                  if (step < steps.length - 1) {
+                    setStep(step + 1);
+                  } else {
+                    handleFinish(false);
+                  }
+                }}
+              >
+                {step < steps.length - 1
+                  ? "Continue"
+                  : picked.length > 0
+                    ? "Finish & Go to Dashboard"
+                    : "Skip & Go to Dashboard"}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
