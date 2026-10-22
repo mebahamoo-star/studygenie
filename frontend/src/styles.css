@@ -156,6 +156,21 @@
 @keyframes pulse-soft { 50% { box-shadow: 0 0 0 8px oklch(0.6 0.22 25 / 0.15); } }
 @keyframes float { 50% { transform: translateY(-10px); } }
 
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-ticker {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 32s linear infinite;
+}
+
+.animate-ticker:hover {
+  animation-play-state: paused;
+}
+
 @layer base {
   * { border-color: var(--color-border); }
   body {

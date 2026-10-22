@@ -6,7 +6,6 @@ import { Card, PageTitle } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { useApp } from "@/lib/app-state";
 import { pageHead } from "@/lib/head";
 import { cn } from "@/lib/utils";
@@ -21,7 +20,7 @@ export const Route = createFileRoute("/_shell/settings")({
 
 function Settings() {
   const nav = useNavigate();
-  const { dark, toggleDark, lang, setLang, user } = useApp();
+  const { lang, setLang, user } = useApp();
   const ar = lang === "ar";
   const [selectedSound, setSelectedSound] = useState<CelebrationSoundType>("magic");
   const [uniName, setUniName] = useState("");
@@ -109,10 +108,7 @@ function Settings() {
             ))}
           </div>
         </div>
-        <div className="flex items-center justify-between">
-          <Label>{ar ? "وضع التركيز (داكن)" : "Focus Mode (dark)"}</Label>
-          <Switch checked={dark} onCheckedChange={toggleDark} />
-        </div>
+
       </Card>
       <Card className="grid gap-4">
         <div>
