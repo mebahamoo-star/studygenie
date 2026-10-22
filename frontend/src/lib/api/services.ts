@@ -740,7 +740,48 @@ export interface RemoteExam {
   professor?: string;
 }
 
+export interface CommunityChallenge {
+  id?: number | null;
+  courseId?: number | null;
+  courseName: string;
+  examType: string;
+  examDate: string;
+  professor?: string;
+  uploaderName?: string;
+  universityName?: string;
+  collegeName?: string;
+  hasSyllabus?: boolean;
+  chaptersCount?: number;
+  peerCount?: number;
+  isJoined?: boolean;
+}
+
 export const examService = {
+  async getCommunityChallenges(collegeId?: number | string): Promise<CommunityChallenge[]> {
+    try {
+      const url = collegeId ? `/api/v1/exams/challenges?college_id=${collegeId}` : '/api/v1/exams/challenges';
+      const res = await fetchApi<any[]>(url);
+      if (!res.data) return [];
+      return res.data.map((item: any) => ({
+        id: item.id,
+        courseId: item.course_id || item.courseId,
+        courseName: item.course_name || item.courseName || item.course,
+        examType: item.exam_type || item.examType || item.type || "Midterm Exam",
+        examDate: item.exam_date || item.examDate || item.date,
+        professor: item.professor || "Faculty",
+        uploaderName: item.uploader_name || item.uploaderName || "Classmate",
+        universityName: item.university_name || item.universityName,
+        collegeName: item.college_name || item.collegeName,
+        hasSyllabus: item.has_syllabus ?? item.hasSyllabus ?? false,
+        chaptersCount: item.chapters_count || item.chaptersCount || 0,
+        peerCount: item.peer_count || item.peerCount || 1,
+        isJoined: item.is_joined ?? item.isJoined ?? false,
+      }));
+    } catch {
+      return [];
+    }
+  },
+
   async getExams(): Promise<RemoteExam[]> {
     const res = await fetchApi<RemoteExam[]>('/api/v1/exams');
     return res.data || [];

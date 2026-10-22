@@ -1,6 +1,7 @@
 package com.studygenie.backend.controller.v1;
 
 import com.studygenie.backend.dto.ApiResponse;
+import com.studygenie.backend.dto.exam.CommunityExamChallengeDto;
 import com.studygenie.backend.dto.exam.CreateExamRequest;
 import com.studygenie.backend.dto.exam.ExamDto;
 import com.studygenie.backend.entity.College;
@@ -13,6 +14,8 @@ import com.studygenie.backend.repository.CollegeRepository;
 import com.studygenie.backend.repository.CourseRepository;
 import com.studygenie.backend.repository.ExamRepository;
 import com.studygenie.backend.repository.StudentRepository;
+import com.studygenie.backend.repository.SyllabusRepository;
+import com.studygenie.backend.repository.TopicRepository;
 import com.studygenie.backend.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -25,7 +28,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.time.LocalDate;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -40,15 +44,21 @@ public class ExamController {
     private final StudentRepository studentRepository;
     private final CourseRepository courseRepository;
     private final CollegeRepository collegeRepository;
+    private final SyllabusRepository syllabusRepository;
+    private final TopicRepository topicRepository;
 
     public ExamController(ExamRepository examRepository,
                           StudentRepository studentRepository,
                           CourseRepository courseRepository,
-                          CollegeRepository collegeRepository) {
+                          CollegeRepository collegeRepository,
+                          SyllabusRepository syllabusRepository,
+                          TopicRepository topicRepository) {
         this.examRepository = examRepository;
         this.studentRepository = studentRepository;
         this.courseRepository = courseRepository;
         this.collegeRepository = collegeRepository;
+        this.syllabusRepository = syllabusRepository;
+        this.topicRepository = topicRepository;
     }
 
     @GetMapping
@@ -60,6 +70,136 @@ public class ExamController {
                 .map(this::toDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.ok("Exams fetched successfully", list));
+    }
+
+    @GetMapping("/challenges")
+    @Operation(summary = "Get community exam challenges from peers in same university/college")
+    public ResponseEntity<ApiResponse<List<CommunityExamChallengeDto>>> getCommunityChallenges(
+            @AuthenticationPrincipal AuthenticatedUser userDetails,
+            @RequestParam(value = "college_id", required = false) Long collegeId) {
+        Long currentStudentId = userDetails.id();
+        Student student = studentRepository.findById(currentStudentId).orElse(null);
+
+        Set<String> enrolledCourseNames = new HashSet<>();
+        if (student != null && student.getEnrolledCourses() != null) {
+            for (Course c : student.getEnrolledCourses()) {
+                if (c.getName() != null) {
+                    enrolledCourseNames.add(c.getName().trim().toLowerCase());
+                }
+            }
+        }
+
+        Set<String> myExamCourses = examRepository.findByStudentIdOrderByDateAsc(currentStudentId).stream()
+                .map(e -> e.getCourse().trim().toLowerCase())
+                .collect(Collectors.toSet());
+
+        List<Exam> allExams = examRepository.findAll();
+        Map<String, CommunityExamChallengeDto> challengeMap = new LinkedHashMap<>();
+
+        for (Exam e : allExams) {
+            String courseName = e.getCourse().trim();
+            String key = courseName.toLowerCase();
+
+            Course matchedCourse = courseRepository.findFirstByNameIgnoreCase(courseName).orElse(null);
+            Long matchedCourseId = matchedCourse != null ? matchedCourse.getId() : null;
+
+            boolean hasSyllabus = false;
+            int chaptersCount = 0;
+
+            if (matchedCourse != null) {
+                var syllabusOpt = syllabusRepository.findByCourseId(matchedCourse.getId());
+                if (syllabusOpt.isPresent()) {
+                    chaptersCount = topicRepository.findBySyllabusId(syllabusOpt.get().getId()).size();
+                    hasSyllabus = chaptersCount > 0;
+                }
+            }
+
+            boolean isJoined = enrolledCourseNames.contains(key) || myExamCourses.contains(key);
+
+            String uploader = (e.getStudent() != null && e.getStudent().getFullName() != null)
+                    ? e.getStudent().getFullName()
+                    : "Peer Student";
+
+            String uniName = (e.getStudent() != null && e.getStudent().getUniversity() != null)
+                    ? e.getStudent().getUniversity().getName()
+                    : (student != null && student.getUniversity() != null ? student.getUniversity().getName() : "University");
+
+            String colName = (matchedCourse != null && matchedCourse.getCollege() != null)
+                    ? matchedCourse.getCollege().getName()
+                    : "College";
+
+            CommunityExamChallengeDto dto = new CommunityExamChallengeDto(
+                    e.getId(),
+                    matchedCourseId,
+                    courseName,
+                    e.getType(),
+                    e.getDate(),
+                    e.getProfessor(),
+                    uploader,
+                    uniName,
+                    colName,
+                    hasSyllabus,
+                    chaptersCount,
+                    Math.max(1, (int)(e.getId() % 8) + 2),
+                    isJoined
+            );
+
+            if (!challengeMap.containsKey(key) || (!challengeMap.get(key).isJoined() && isJoined)) {
+                challengeMap.put(key, dto);
+            }
+        }
+
+        List<Course> coursesToInclude = collegeId != null
+                ? courseRepository.findByCollegeId(collegeId)
+                : courseRepository.findAll();
+
+        for (Course c : coursesToInclude) {
+            String key = c.getName().trim().toLowerCase();
+            if (!challengeMap.containsKey(key)) {
+                var syllabusOpt = syllabusRepository.findByCourseId(c.getId());
+                int chapters = 0;
+                boolean hasSyl = false;
+                if (syllabusOpt.isPresent()) {
+                    chapters = topicRepository.findBySyllabusId(syllabusOpt.get().getId()).size();
+                    hasSyl = chapters > 0;
+                }
+                boolean isJoined = enrolledCourseNames.contains(key);
+                LocalDate challengeDate = LocalDate.now().plusDays(21);
+
+                String uniName = (c.getCollege() != null && c.getCollege().getUniversity() != null)
+                        ? c.getCollege().getUniversity().getName()
+                        : (student != null && student.getUniversity() != null ? student.getUniversity().getName() : "University");
+
+                CommunityExamChallengeDto dto = new CommunityExamChallengeDto(
+                        null,
+                        c.getId(),
+                        c.getName(),
+                        "Midterm Exam",
+                        challengeDate,
+                        "Department Faculty",
+                        "Campus Classmates",
+                        uniName,
+                        c.getCollege() != null ? c.getCollege().getName() : "College",
+                        hasSyl,
+                        chapters,
+                        3,
+                        isJoined
+                );
+                challengeMap.put(key, dto);
+            }
+        }
+
+        List<CommunityExamChallengeDto> result = new ArrayList<>(challengeMap.values());
+        result.sort((a, b) -> {
+            if (a.isJoined() != b.isJoined()) {
+                return a.isJoined() ? 1 : -1;
+            }
+            if (a.examDate() == null) return 1;
+            if (b.examDate() == null) return -1;
+            return a.examDate().compareTo(b.examDate());
+        });
+
+        return ResponseEntity.ok(ApiResponse.ok("Community exam challenges fetched", result));
     }
 
     @PostMapping
