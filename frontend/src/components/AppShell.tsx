@@ -16,11 +16,30 @@ import {
   User,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { GenieLogo } from "./Genie";
+import { Genie } from "./Genie";
 import { useApp } from "@/lib/app-state";
-import { fetchAndSyncExams, loadExamsForUser, type Exam } from "@/lib/exam";
-import { getUserCourses, hasUserEnrolledCourses } from "@/lib/courses-util";
+import { fetchAndSyncExams, type Exam } from "@/lib/exam";
+import { hasUserEnrolledCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
 
 const nav = [
   { to: "/dashboard", label: "Home", ar: "الرئيسية", icon: Home, match: ["/dashboard"] },
@@ -125,12 +144,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         ? { ping: "bg-amber-400", dot: "bg-amber-500" }
         : { ping: "bg-emerald-400", dot: "bg-emerald-500" };
 
-  const todayDateStr = new Date().toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-
   const initials = (user?.fullName || "Scholar")
     .split(" ")
     .map((w) => w[0])
@@ -144,74 +157,134 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-4">
-        <Link to="/dashboard" className="mb-8 px-2 pt-1">
-          <GenieLogo />
-        </Link>
-        <nav className="flex flex-1 flex-col gap-1">
-          {nav.map((n) => {
-            const active = n.match.some((m) => path.startsWith(m));
-            return (
-              <div key={n.to}>
-                <Link
-                  to={n.to}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
-                    active
-                      ? "bg-gradient-magic text-primary-foreground shadow-glow"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
-                >
-                  <n.icon className="h-5 w-5" />
-                  {lang === "ar" ? n.ar : n.label}
-                </Link>
-                {n.to === "/plan" && inStudy && (
-                  <div className="ml-6 mt-1 flex flex-col gap-0.5 border-l border-sidebar-border pl-3">
-                    {studySub.map((s) => {
-                      const isLocked = !hasUserEnrolledCourses() && (s.to === "/flashcards" || s.to === "/quiz");
-                      return (
-                        <Link
-                          key={s.to}
-                          to={s.to}
-                          className={cn(
-                            "flex items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground",
-                            isLocked && "opacity-70"
-                          )}
-                          activeProps={{ className: "text-primary" }}
-                        >
-                          <span>{s.label}</span>
-                          {isLocked && <Lock className="h-3 w-3 text-muted-foreground/80" />}
-                        </Link>
-                      );
-                    })}
+    <SidebarProvider defaultOpen={true}>
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild className="hover:bg-transparent data-[state=open]:hover:bg-transparent">
+                <Link to="/dashboard" className="flex items-center gap-2.5">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent shadow-sm">
+                    <Genie className="h-8 w-8" />
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-        <div className="flex flex-col gap-1 border-t border-sidebar-border pt-3">
-          <Link
-            to="/settings"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-sidebar-foreground hover:bg-sidebar-accent"
-            activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-          >
-            <Settings className="h-5 w-5" /> {lang === "ar" ? "الإعدادات" : "Settings"}
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <LogOut className="h-5 w-5" /> Log out
-          </button>
-        </div>
-      </aside>
+                  <div className="flex flex-col truncate group-data-[collapsible=icon]:hidden">
+                    <span className="font-display text-base font-bold text-gradient-magic leading-none">
+                      StudyGenie
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-medium mt-1">
+                      AI Study Partner
+                    </span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-6 backdrop-blur">
+        <SidebarContent className="px-2 py-3">
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:hidden">
+              {lang === "ar" ? "التنقل" : "Navigation"}
+            </SidebarGroupLabel>
+            <SidebarMenu className="gap-1.5">
+              {nav.map((n) => {
+                const active = n.match.some((m) => path.startsWith(m));
+                return (
+                  <SidebarMenuItem key={n.to}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={active}
+                      tooltip={lang === "ar" ? n.ar : n.label}
+                      className={cn(
+                        "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                        active
+                          ? "bg-gradient-magic text-primary-foreground shadow-glow data-[active=true]:bg-gradient-magic data-[active=true]:text-primary-foreground hover:text-primary-foreground"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <Link to={n.to}>
+                        <n.icon className="h-5 w-5 shrink-0" />
+                        <span>{lang === "ar" ? n.ar : n.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                    {n.to === "/plan" && inStudy && (
+                      <SidebarMenuSub className="my-1.5 ml-5 border-l-2 border-sidebar-border pl-2.5">
+                        {studySub.map((s) => {
+                          const isLocked =
+                            !hasUserEnrolledCourses() && (s.to === "/flashcards" || s.to === "/quiz");
+                          const subActive = path === s.to;
+                          return (
+                            <SidebarMenuSubItem key={s.to}>
+                              <SidebarMenuSubButton asChild isActive={subActive}>
+                                <Link
+                                  to={s.to}
+                                  className={cn(
+                                    "flex items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors",
+                                    subActive
+                                      ? "text-primary font-bold"
+                                      : "text-muted-foreground hover:text-foreground",
+                                    isLocked && "opacity-70"
+                                  )}
+                                >
+                                  <span>{s.label}</span>
+                                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground/80 shrink-0" />}
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    )}
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+
+        <SidebarFooter className="border-t border-sidebar-border p-2">
+          <SidebarMenu className="gap-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={path.startsWith("/settings")}
+                tooltip={lang === "ar" ? "الإعدادات" : "Settings"}
+                className={cn(
+                  "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                  path.startsWith("/settings")
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+              >
+                <Link to="/settings">
+                  <Settings className="h-5 w-5 shrink-0" />
+                  <span>{lang === "ar" ? "الإعدادات" : "Settings"}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={handleLogout}
+                tooltip="Log out"
+                className="rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                <LogOut className="h-5 w-5 shrink-0" />
+                <span>Log out</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+
+        <SidebarRail />
+      </Sidebar>
+
+      <SidebarInset>
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-4 md:px-6 backdrop-blur">
           {/* Live Exam News Ticker */}
           <div className="flex min-w-0 flex-1 items-center gap-3 mr-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-1 h-5 hidden sm:block" />
+
             <div className={cn("flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold shadow-sm transition-colors", tickerBadgeStyle)}>
               <span className="relative flex h-2 w-2">
                 <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", tickerDotStyle.ping)}></span>
@@ -317,9 +390,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </header>
-        <main className="flex-1 p-8">{children}</main>
-      </div>
-    </div>
+
+        <main className="flex-1 p-6 sm:p-8">{children}</main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 
