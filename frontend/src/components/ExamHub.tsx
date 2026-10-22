@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { Bell, Calendar, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +14,28 @@ export function ExamHub({
   onRemove?: () => void;
 }) {
   const days = Math.max(0, daysUntil(exam.date));
+
+  const urgencyStatus =
+    days < 15
+      ? "red"
+      : days <= 30
+        ? "orange"
+        : "green";
+
+  const hubBadgeClass =
+    urgencyStatus === "red"
+      ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30"
+      : urgencyStatus === "orange"
+        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30";
+
+  const hubCountdownBg =
+    urgencyStatus === "red"
+      ? "bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/25"
+      : urgencyStatus === "orange"
+        ? "bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/25"
+        : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/25";
+
 
   const handleRemoveExam = () => {
     if (exam.id) {
@@ -43,7 +66,7 @@ export function ExamHub({
             : "Plenty of time ahead — pace yourself and stay consistent. 📚";
 
   return (
-    <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5 p-6 shadow-soft lg:col-span-3">
+    <Card className={cn("relative overflow-hidden bg-gradient-to-br from-card via-card p-6 shadow-soft lg:col-span-3 transition-colors border", urgencyStatus === "red" ? "border-red-500/30 to-red-500/5" : urgencyStatus === "orange" ? "border-amber-500/30 to-amber-500/5" : "border-emerald-500/30 to-emerald-500/5")}>
       {/* Subtle background ambient blur */}
       <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
 
@@ -55,7 +78,7 @@ export function ExamHub({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-primary">
+              <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider", hubBadgeClass)}>
                 <Bell className="h-3 w-3" /> Upcoming Exam Reminder
               </span>
               <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
@@ -89,7 +112,7 @@ export function ExamHub({
 
         {/* Right: Prominent Days-Left Countdown & Quiet Controls */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-t pt-3 sm:border-0 sm:pt-0 sm:flex-col sm:items-end">
-          <div className="rounded-2xl bg-gradient-magic px-5 py-3 text-center text-primary-foreground shadow-glow">
+          <div className={cn("rounded-2xl px-5 py-3 text-center text-white shadow-glow", hubCountdownBg)}>
             <div className="font-display text-3xl font-extrabold leading-none">{days}</div>
             <div className="mt-0.5 text-[10px] font-bold tracking-wider opacity-90 uppercase">
               {days === 1 ? "Day Left" : "Days Left"}

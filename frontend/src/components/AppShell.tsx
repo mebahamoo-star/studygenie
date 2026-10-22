@@ -89,6 +89,42 @@ export function AppShell({ children }: { children: ReactNode }) {
     });
   }, [path]);
 
+  // Determine overall exam ticker urgency:
+  // - green: no exams within 30 days (all > 30 days or no exams)
+  // - orange: any exam within 15 to 30 days
+  // - red: any exam less than 15 days away
+  const upcomingExamDays = exams
+    .map((ex) =>
+      Math.ceil(
+        (new Date(ex.date + "T00:00:00").getTime() - new Date().setHours(0, 0, 0, 0)) /
+          (1000 * 60 * 60 * 24)
+      )
+    )
+    .filter((d) => d >= 0);
+
+  const minDays = upcomingExamDays.length > 0 ? Math.min(...upcomingExamDays) : null;
+
+  const tickerStatus: "green" | "orange" | "red" =
+    minDays === null || minDays > 30
+      ? "green"
+      : minDays >= 15
+        ? "orange"
+        : "red";
+
+  const tickerBadgeStyle =
+    tickerStatus === "red"
+      ? "border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400 animate-pulse-soft"
+      : tickerStatus === "orange"
+        ? "border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+        : "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+
+  const tickerDotStyle =
+    tickerStatus === "red"
+      ? { ping: "bg-red-400", dot: "bg-red-500" }
+      : tickerStatus === "orange"
+        ? { ping: "bg-amber-400", dot: "bg-amber-500" }
+        : { ping: "bg-emerald-400", dot: "bg-emerald-500" };
+
   const todayDateStr = new Date().toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
@@ -176,12 +212,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-6 backdrop-blur">
           {/* Live Exam News Ticker */}
           <div className="flex min-w-0 flex-1 items-center gap-3 mr-4">
-            <div className="flex shrink-0 items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary shadow-sm">
+            <div className={cn("flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold shadow-sm transition-colors", tickerBadgeStyle)}>
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+                <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", tickerDotStyle.ping)}></span>
+                <span className={cn("relative inline-flex h-2 w-2 rounded-full", tickerDotStyle.dot)}></span>
               </span>
-              <span className="hidden sm:inline tracking-wider uppercase text-[10px]">EXAM TICKER</span>
+              <span className="hidden sm:inline tracking-wider uppercase text-[10px]">
+                {tickerStatus === "red" ? "EXAM TICKER · < 15D" : tickerStatus === "orange" ? "EXAM TICKER · 15-30D" : "EXAM TICKER · SAFE"}
+              </span>
               <span className="sm:hidden text-[10px]">LIVE</span>
             </div>
 
@@ -213,14 +251,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                         </span>
                         <span
                           className={cn(
-                            "rounded-full px-2 py-0.5 text-[10px] font-bold",
-                            days === 0
-                              ? "bg-destructive/15 text-destructive animate-pulse"
-                              : days === 1
-                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                                : days <= 3
-                                  ? "bg-gold/20 text-gold-foreground dark:text-gold"
-                                  : "bg-primary/10 text-primary"
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold border",
+                            days < 15
+                              ? "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30 animate-pulse-soft"
+                              : days <= 30
+                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                           )}
                         >
                           {days === 0
@@ -243,11 +279,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             ) : (
               <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
-                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span className="font-semibold text-foreground/80">{todayDateStr}</span>
+                <span className="flex h-2 w-2 rounded-full bg-emerald-500 shadow-sm" />
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">All clear</span>
                 <span className="hidden md:inline text-muted-foreground/50">•</span>
                 <span className="hidden md:inline truncate">
-                  No upcoming exams scheduled. Add exams from Dashboard to show your live ticker!
+                  No exams within 30 days. Add exams from Dashboard to show your live ticker!
                 </span>
               </div>
             )}
