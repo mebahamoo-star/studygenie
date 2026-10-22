@@ -56,6 +56,31 @@ export const authService = {
     const res = await fetchApi<UserSummary>("/api/auth/me");
     return res.data!;
   },
+
+  async getOAuthInfo(redirectUri?: string): Promise<{
+    googleConfigured: boolean;
+    microsoftConfigured: boolean;
+    googleAuthUrl: string;
+    microsoftAuthUrl: string;
+  }> {
+    const url = redirectUri ? `/api/auth/oauth/info?redirectUri=${encodeURIComponent(redirectUri)}` : "/api/auth/oauth/info";
+    const res = await fetchApi<{
+      googleConfigured: boolean;
+      microsoftConfigured: boolean;
+      googleAuthUrl: string;
+      microsoftAuthUrl: string;
+    }>(url);
+    return res.data || { googleConfigured: false, microsoftConfigured: false, googleAuthUrl: "", microsoftAuthUrl: "" };
+  },
+
+  async oauthLogin(provider: "google" | "microsoft", code?: string, idToken?: string, redirectUri?: string): Promise<AuthResponse> {
+    const res = await fetchApi<AuthResponse>("/api/auth/oauth/login", {
+      method: "POST",
+      body: JSON.stringify({ provider, code, idToken, redirectUri }),
+    });
+    if (res.data) saveAuthSession(res.data);
+    return res.data!;
+  },
 };
 
 function mapBackendCourseStatus(raw: string): CourseStatus {

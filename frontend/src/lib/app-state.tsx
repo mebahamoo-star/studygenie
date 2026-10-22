@@ -18,6 +18,7 @@ type Ctx = {
   isBackendOnline: boolean | null;
   login: (email: string, password: string) => Promise<void>;
   register: (fullName: string, email: string, password: string) => Promise<void>;
+  loginWithOAuth: (provider: "google" | "microsoft", code?: string, idToken?: string, redirectUri?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshGamification: () => Promise<void>;
 };
@@ -130,6 +131,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginWithOAuth = async (provider: "google" | "microsoft", code?: string, idToken?: string, redirectUri?: string) => {
+    try {
+      const res = await authService.oauthLogin(provider, code, idToken, redirectUri);
+      setUser(res.user);
+      setIsAuthenticated(true);
+      await refreshGamification();
+    } catch (err) {
+      if (!isBackendOnline) {
+        const mockUser: UserSummary = {
+          id: 1,
+          fullName: provider === "google" ? "Google Student" : "Windows Student",
+          email: provider === "google" ? "google.student@gmail.com" : "windows.student@outlook.com",
+        };
+        setUser(mockUser);
+        setIsAuthenticated(true);
+        return;
+      }
+      throw err;
+    }
+  };
+
   const logout = async () => {
     await authService.logout();
     setUser(null);
@@ -151,6 +173,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isBackendOnline,
         login,
         register,
+        loginWithOAuth,
         logout,
         refreshGamification,
       }}

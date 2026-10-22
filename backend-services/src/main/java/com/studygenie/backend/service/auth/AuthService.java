@@ -108,7 +108,7 @@ public class AuthService {
         return new UserSummary(user.id(), user.fullName(), user.email());
     }
 
-    private AuthResponse issueTokens(UserAccount user, boolean rememberMe) {
+    public AuthResponse issueTokens(UserAccount user, boolean rememberMe) {
         String accessToken = jwtService.generateAccessToken(user.id(), user.email());
         String refreshToken = refreshTokenGenerator.generateToken();
         String refreshTokenHash = refreshTokenGenerator.hashToken(refreshToken);
