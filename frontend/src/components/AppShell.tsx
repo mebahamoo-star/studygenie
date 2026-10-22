@@ -81,16 +81,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { points, streak, lang, user, isBackendOnline, logout } = useApp();
   const inStudy = studySub.some((s) => path.startsWith(s.to));
-  const [exam, setExam] = useState<Exam | null>(null);
+  const [exams, setExams] = useState<Exam[]>([]);
 
   useEffect(() => {
     const enrolled = getUserCourses();
     if (enrolled.length === 0) {
-      setExam(null);
+      setExams([]);
       return;
     }
     const userExams = loadExamsForUser(enrolled);
-    setExam(userExams.length > 0 ? userExams[0] : null);
+    setExams(userExams);
   }, [path]);
 
   const todayDateStr = new Date().toLocaleDateString(undefined, {
@@ -98,10 +98,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     month: "short",
     day: "numeric",
   });
-
-  const daysLeft = exam?.date
-    ? Math.ceil((new Date(exam.date).getTime() - new Date().setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24))
-    : null;
 
   const initials = (user?.fullName || "Scholar")
     .split(" ")
@@ -181,39 +177,113 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-end gap-3 border-b bg-background/80 px-8 backdrop-blur">
-          <div className="mr-auto flex items-center gap-2 text-sm text-muted-foreground">
-            <Sparkles className="h-4 w-4 text-primary" /> {todayDateStr}
-            {hasUserEnrolledCourses() && exam && daysLeft !== null && daysLeft >= 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                {exam.course} · {exam.type} in {daysLeft} {daysLeft === 1 ? "day" : "days"}
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-6 backdrop-blur">
+          {/* Live Exam News Ticker */}
+          <div className="flex min-w-0 flex-1 items-center gap-3 mr-4">
+            <div className="flex shrink-0 items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary shadow-sm">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
               </span>
+              <span className="hidden sm:inline tracking-wider uppercase text-[10px]">EXAM TICKER</span>
+              <span className="sm:hidden text-[10px]">LIVE</span>
+            </div>
+
+            {exams.length > 0 ? (
+              <div className="relative flex-1 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)]">
+                <div className="animate-ticker flex items-center gap-6 py-1 whitespace-nowrap">
+                  {(exams.length === 1
+                    ? [...exams, ...exams, ...exams, ...exams]
+                    : exams.length === 2
+                      ? [...exams, ...exams, ...exams]
+                      : [...exams, ...exams]
+                  ).map((ex, idx) => {
+                    const days = Math.ceil(
+                      (new Date(ex.date + "T00:00:00").getTime() - new Date().setHours(0, 0, 0, 0)) /
+                        (1000 * 60 * 60 * 24)
+                    );
+                    return (
+                      <Link
+                        key={`${ex.id || ex.course}-${idx}`}
+                        to="/dashboard"
+                        className="group inline-flex items-center gap-2 text-xs font-medium text-foreground/90 transition hover:text-primary cursor-pointer"
+                        title={`${ex.course} · ${ex.type} on ${ex.date}`}
+                      >
+                        <span className="font-bold text-foreground group-hover:text-primary transition">
+                          {ex.course}
+                        </span>
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          {ex.type}
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold",
+                            days === 0
+                              ? "bg-destructive/15 text-destructive animate-pulse"
+                              : days === 1
+                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                : days <= 3
+                                  ? "bg-gold/20 text-gold-foreground dark:text-gold"
+                                  : "bg-primary/10 text-primary"
+                          )}
+                        >
+                          {days === 0
+                            ? "TODAY! 🚨"
+                            : days === 1
+                              ? "Tomorrow! ⚠️"
+                              : days < 0
+                                ? "Passed"
+                                : `${days}d left`}
+                        </span>
+                        <span className="ml-3 text-muted-foreground/30 font-bold">✦</span>
+                      </Link>
+                    );
+                  })}
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary/80">
+                    <Sparkles className="h-3 w-3 text-gold" /> Study Tip: Consistent 25-minute sprints beat all-night cramming!
+                    <span className="ml-3 text-muted-foreground/30 font-bold">✦</span>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
+                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span className="font-semibold text-foreground/80">{todayDateStr}</span>
+                <span className="hidden md:inline text-muted-foreground/50">•</span>
+                <span className="hidden md:inline truncate">
+                  No upcoming exams scheduled. Add exams from Dashboard to show your live ticker!
+                </span>
+              </div>
             )}
           </div>
-          {isBackendOnline !== null && (
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                isBackendOnline ? "bg-emerald-500/15 text-emerald-600" : "bg-amber-500/15 text-amber-600"
-              }`}
+
+          {/* Right Controls */}
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {isBackendOnline !== null && (
+              <span
+                className={`hidden md:inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  isBackendOnline ? "bg-emerald-500/15 text-emerald-600" : "bg-amber-500/15 text-amber-600"
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${isBackendOnline ? "bg-emerald-500" : "bg-amber-500"}`} />
+                {isBackendOnline ? "API Online" : "Offline Demo"}
+              </span>
+            )}
+            <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
+              <Flame className="h-4 w-4 text-gold" /> {streak}
+              <span className="hidden sm:inline font-normal text-muted-foreground">day streak</span>
+            </div>
+            <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
+              <Star className="h-4 w-4 fill-gold text-gold" /> {points.toLocaleString()}
+            </div>
+            <ThemeToggle />
+            <Link
+              to="/profile"
+              className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-magic font-bold text-primary-foreground shadow-soft"
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${isBackendOnline ? "bg-emerald-500" : "bg-amber-500"}`} />
-              {isBackendOnline ? "API Online" : "Offline Demo"}
-            </span>
-          )}
-          <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
-            <Flame className="h-4 w-4 text-gold" /> {streak}
-            <span className="font-normal text-muted-foreground">day streak</span>
+              {initials}
+            </Link>
           </div>
-          <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
-            <Star className="h-4 w-4 fill-gold text-gold" /> {points.toLocaleString()}
-          </div>
-          <ThemeToggle />
-          <Link
-            to="/profile"
-            className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-magic font-bold text-primary-foreground shadow-soft"
-          >
-            {initials}
-          </Link>
         </header>
         <main className="flex-1 p-8">{children}</main>
       </div>
