@@ -39,7 +39,7 @@ public class Topic {
     @Column(name = "estimated_hours", nullable = false)
     private Double estimatedHours;
 
-    @Column(name = "content_excerpt", columnDefinition = "LONGTEXT")
+    @Column(name = "content_excerpt", columnDefinition = "TEXT")
     private String contentExcerpt;
 
     @Override
