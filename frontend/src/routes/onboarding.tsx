@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Check, ChevronLeft, GraduationCap, Plus, Search } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, GraduationCap, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Genie, GenieLogo } from "@/components/Genie";
 import { ThemeToggle } from "@/components/AppShell";
@@ -165,12 +165,30 @@ function Onboarding() {
     setCustomCourse("");
   };
 
-  const handleFinish = () => {
-    if (picked.length === 0) {
-      toast.error("Please add or select at least one course to start your study plan!");
-      return;
-    }
+  const handleSkip = () => {
+    try {
+      if (picked.length > 0) {
+        const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
+        if (selectedCoursesData.length > 0) {
+          localStorage.setItem("sg-user-courses", JSON.stringify(selectedCoursesData));
+        }
+      }
+      if (selectedUni) {
+        localStorage.setItem("sg-user-uni", JSON.stringify(selectedUni));
+      }
+      if (selectedCol) {
+        localStorage.setItem("sg-user-col", JSON.stringify(selectedCol));
+      }
+      if (selectedMajor) {
+        localStorage.setItem("sg-user-major", JSON.stringify({ name: selectedMajor }));
+      }
+    } catch {}
 
+    toast.info("Setup skipped. You can add courses anytime from the Courses page! ✨");
+    nav({ to: "/dashboard" });
+  };
+
+  const handleFinish = () => {
     try {
       const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
       if (selectedCoursesData.length > 0) {
@@ -187,7 +205,11 @@ function Onboarding() {
       }
     } catch {}
 
-    toast.success("Profile setup complete! Welcome to StudyGenie ✨");
+    if (picked.length > 0) {
+      toast.success("Profile setup complete! Welcome to StudyGenie ✨");
+    } else {
+      toast.info("Welcome to StudyGenie! You can add courses anytime ✨");
+    }
     nav({ to: "/dashboard" });
   };
 
@@ -201,7 +223,7 @@ function Onboarding() {
     if (step === 0) return !selectedUni;
     if (step === 1) return !selectedCol;
     if (step === 2) return !selectedMajor && !customMajor.trim();
-    if (step === 3) return picked.length === 0;
+    if (step === 3) return false;
     return false;
   };
 
@@ -211,7 +233,18 @@ function Onboarding() {
         <Link to="/">
           <GenieLogo />
         </Link>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSkip}
+            className="text-xs font-semibold text-muted-foreground hover:text-foreground border border-border/60 hover:border-border rounded-xl px-3 h-8.5"
+          >
+            Skip for now
+            <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+          </Button>
+          <ThemeToggle />
+        </div>
       </header>
       <div className="mx-auto max-w-2xl px-6 pb-16">
         <div className="mb-8 flex items-center gap-3">
@@ -236,18 +269,29 @@ function Onboarding() {
         </div>
 
         <div className="rounded-3xl border bg-card p-8 shadow-soft">
-          <div className="mb-6 flex items-center gap-4">
-            <Genie pose="mid" className="h-16 w-16" />
-            <h1 className="text-2xl font-semibold">
-              {
-                [
-                  "Where do you study?",
-                  "Which college or faculty?",
-                  "What is your major?",
-                  "Pick or add your courses",
-                ][step]
-              }
-            </h1>
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Genie pose="mid" className="h-16 w-16 shrink-0" />
+              <h1 className="text-2xl font-semibold">
+                {
+                  [
+                    "Where do you study?",
+                    "Which college or faculty?",
+                    "What is your major?",
+                    "Pick or add your courses",
+                  ][step]
+                }
+              </h1>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSkip}
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground rounded-xl shrink-0 h-8 px-3"
+            >
+              Skip
+              <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
           </div>
 
           {step === 0 && (
@@ -458,9 +502,13 @@ function Onboarding() {
                 </div>
               )}
 
-              {picked.length === 0 && (
-                <p className="text-xs text-amber-500 font-medium">
-                  * At least one course is required before proceeding to the study tools.
+              {picked.length === 0 ? (
+                <p className="text-xs text-muted-foreground font-medium">
+                  💡 Course addition is optional. You can add courses now or skip and add them anytime from the Courses page.
+                </p>
+              ) : (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  ✓ {picked.length} course{picked.length > 1 ? "s" : ""} selected for your profile.
                 </p>
               )}
             </div>
@@ -484,7 +532,11 @@ function Onboarding() {
                 }
               }}
             >
-              {step < steps.length - 1 ? "Continue" : "Finish & Go to Dashboard"}
+              {step < steps.length - 1
+                ? "Continue"
+                : picked.length > 0
+                ? "Finish & Go to Dashboard"
+                : "Skip Courses & Finish"}
             </Button>
           </div>
         </div>
