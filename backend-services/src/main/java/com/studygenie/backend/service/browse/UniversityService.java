@@ -32,4 +32,20 @@ public class UniversityService {
                 .orElseThrow(() -> new ResourceNotFoundException("University not found"));
         return new UniversityDto(u.getId(), u.getName());
     }
+
+    @Transactional
+    public UniversityDto createUniversity(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("University name cannot be empty");
+        }
+        String trimmed = name.trim();
+        List<University> existing = universityRepository.findAll();
+        for (University u : existing) {
+            if (u.getName().equalsIgnoreCase(trimmed)) {
+                return new UniversityDto(u.getId(), u.getName());
+            }
+        }
+        University created = universityRepository.save(University.builder().name(trimmed).build());
+        return new UniversityDto(created.getId(), created.getName());
+    }
 }
