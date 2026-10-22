@@ -206,7 +206,7 @@ function Flashcards() {
         });
 
         if (res?.data?.topics?.[0]?.flashcards?.length) {
-          newFlashcards = res.data.topics[0].flashcards.map((f: any, idx: number) => ({
+          newFlashcards = res.data.topics[0].flashcards.slice(0, sanitizedCount).map((f: any, idx: number) => ({
             id: f.cardId || f.id || `gen-${Date.now()}-${idx}`,
             q: f.front || f.q || f.question,
             a: f.back || f.a || f.answer,
@@ -249,7 +249,8 @@ function Flashcards() {
       saveUserTaskKits(allKits);
       localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(newFlashcards));
 
-      setCards((prev) => [...newFlashcards, ...prev]);
+      newFlashcards = newFlashcards.slice(0, sanitizedCount);
+      setCards(newFlashcards);
       setCardIndex(0);
       setGenModalOpen(false);
       toast.success(`Generated ${newFlashcards.length} active-recall flashcards! ✨`);

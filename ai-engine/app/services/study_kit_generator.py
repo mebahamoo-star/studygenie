@@ -19,7 +19,7 @@ from app.schemas.study_kit import (
 )
 
 
-def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand: random.Random) -> TopicKit:
+def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand: random.Random, max_flashcards: int = 10, max_quiz: int = 5) -> TopicKit:
     valid_flashcards = []
     seen_fronts = set()
     for fc in result.flashcards:
@@ -86,6 +86,11 @@ def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand:
                 explanation=q.explanation
             ))
 
+    if max_flashcards > 0:
+        valid_flashcards = valid_flashcards[:max_flashcards]
+    if max_quiz > 0:
+        valid_quiz = valid_quiz[:max_quiz]
+
     if not valid_flashcards and not valid_quiz:
         raise ValueError("No valid items found after normalization")
         
@@ -114,9 +119,10 @@ async def _generate_topic_kit(req: GenerateStudyKitRequest, topic: TopicInput, r
             schema=StudyKitResult
         )
         
-        topic_kit = _validate_and_normalize_kit(topic, parsed_result, rand)
+        topic_kit = _validate_and_normalize_kit(topic, parsed_result, rand, max_flashcards=req.flashcards_per_topic, max_quiz=req.questions_per_topic)
         return topic_kit, None, usage, model
     except Exception as e:
+        import traceback; traceback.print_exc()
         # Returning failure
         err_code = getattr(e, "error_code", "TOPIC_GENERATION_FAILED")
         return None, FailedTopic(ref=topic.ref, error_code=err_code), {"prompt_tokens": 0, "output_tokens": 0}, settings.llm_model_study_kit

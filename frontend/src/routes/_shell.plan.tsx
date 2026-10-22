@@ -319,7 +319,7 @@ function Plan() {
           kitId = res.data.kitId || kitId;
           const topicKit = res.data.topics?.[0];
           if (topicKit?.flashcards?.length) {
-            flashcards = topicKit.flashcards.map((f: any, idx: number) => ({
+            flashcards = topicKit.flashcards.slice(0, sanitizedCardCount).map((f: any, idx: number) => ({
               id: f.cardId || f.id || String(idx + 1),
               q: f.front || f.question || f.q,
               a: f.back || f.answer || f.a,
@@ -405,6 +405,7 @@ function Plan() {
         ];
       }
 
+      flashcards = flashcards.slice(0, sanitizedCardCount);
       const kitObj: StoredTaskKit = { kitId, flashcards, quiz };
       const nextMap = {
         ...kitsMap,
