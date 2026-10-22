@@ -15,7 +15,7 @@ import {
   Sparkles,
   Timer,
 } from "lucide-react";
-import { daysUntil, loadExamsForUser, type Exam } from "@/lib/exam";
+import { daysUntil, fetchAndSyncExams, loadExamsForUser, type Exam } from "@/lib/exam";
 import { ExamHub } from "@/components/ExamHub";
 import { Card } from "@/components/AppShell";
 import { Genie, type GeniePose } from "@/components/Genie";
@@ -111,21 +111,20 @@ function Dashboard() {
       if (!isMounted) return;
       setEnrolledCount(enrolled.length);
 
-      // 2. If user has no courses enrolled, clear active exam, course name, tasks
+      // 2. Load and sync user exams
+      const validExams = await fetchAndSyncExams();
+      if (!isMounted) return;
+      setExams(validExams);
+      setCurrentExamIndex(0);
+
+      // 3. If user has no courses enrolled, set course display and exit tasks setup
       if (enrolled.length === 0) {
-        setExams([]);
-        setCurrentExamIndex(0);
-        setCourseName("No active course");
+        setCourseName(validExams.length > 0 ? validExams[0].course : "No active course");
         setHasPlans(false);
         setTasks([]);
         setProgress(0);
         return;
       }
-
-      // 3. Load exams ONLY if course is enrolled
-      const validExams = loadExamsForUser(enrolled);
-      setExams(validExams);
-      setCurrentExamIndex(0);
 
       // 4. Determine active course
       const activeCourseRaw =

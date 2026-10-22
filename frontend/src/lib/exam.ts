@@ -1,4 +1,6 @@
 import { getUserCourses, getUserStoragePrefix } from "./courses-util";
+import { getStoredAccessToken } from "./api/client";
+import { examService } from "./api/services";
 
 export interface Exam {
   id?: string;
@@ -121,16 +123,72 @@ export function saveExam(e: Exam): Exam {
   }
 
   saveExams(updated);
+
+  // Background sync to backend if user is authenticated
+  if (getStoredAccessToken() && (!item.id || item.id.startsWith("exam-"))) {
+    examService
+      .createExam({
+        course: item.course,
+        type: item.type,
+        date: item.date,
+        professor: item.professor,
+      })
+      .then((remote) => {
+        if (remote && remote.id) {
+          item.id = String(remote.id);
+          const fresh = loadExams().map((ex) =>
+            ex.course.toLowerCase() === item.course.toLowerCase() &&
+            ex.type.toLowerCase() === item.type.toLowerCase() &&
+            ex.date === item.date
+              ? { ...ex, id: String(remote.id) }
+              : ex
+          );
+          saveExams(fresh);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not sync exam to backend:", err);
+      });
+  }
+
   return item;
 }
 
 export function deleteExam(examIdOrCourse: string): void {
   const current = loadExams();
   const target = examIdOrCourse.trim().toLowerCase();
+  const match = current.find(
+    (x) => x.id === examIdOrCourse || x.course.trim().toLowerCase() === target
+  );
+
   const updated = current.filter(
     (x) => x.id !== examIdOrCourse && x.course.trim().toLowerCase() !== target
   );
   saveExams(updated);
+
+  if (match && match.id && !isNaN(Number(match.id)) && getStoredAccessToken()) {
+    examService.deleteExam(Number(match.id)).catch(() => {});
+  }
+}
+
+export async function fetchAndSyncExams(): Promise<Exam[]> {
+  try {
+    if (getStoredAccessToken()) {
+      const remote = await examService.getExams();
+      if (remote) {
+        const mapped: Exam[] = remote.map((re) => ({
+          id: String(re.id),
+          course: re.course,
+          type: re.type,
+          date: re.date,
+          professor: re.professor || "",
+        }));
+        saveExams(mapped);
+        return mapped;
+      }
+    }
+  } catch {}
+  return loadExams();
 }
 
 export function clearExams(): void {
@@ -167,16 +225,13 @@ export function isCourseEnrolled(
 }
 
 export function loadExamsForUser(
-  enrolledCourses?: { name: string; code?: string }[]
+  _enrolledCourses?: { name: string; code?: string }[]
 ): Exam[] {
-  const list = enrolledCourses ?? getUserCourses();
-  if (!list || list.length === 0) return [];
-
   const all = loadExams();
-  const userExams = all.filter((exam) => isCourseEnrolled(exam.course, list));
+  if (all.length === 0) return [];
 
   // Sort by date ascending (closest upcoming exam first)
-  return userExams.sort((a, b) => {
+  return all.sort((a, b) => {
     const timeA = new Date(a.date + "T00:00:00").getTime();
     const timeB = new Date(b.date + "T00:00:00").getTime();
     return timeA - timeB;

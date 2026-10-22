@@ -18,7 +18,7 @@ import {
 import type { ReactNode } from "react";
 import { GenieLogo } from "./Genie";
 import { useApp } from "@/lib/app-state";
-import { loadExamsForUser, type Exam } from "@/lib/exam";
+import { fetchAndSyncExams, loadExamsForUser, type Exam } from "@/lib/exam";
 import { getUserCourses, hasUserEnrolledCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
 
@@ -84,13 +84,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [exams, setExams] = useState<Exam[]>([]);
 
   useEffect(() => {
-    const enrolled = getUserCourses();
-    if (enrolled.length === 0) {
-      setExams([]);
-      return;
-    }
-    const userExams = loadExamsForUser(enrolled);
-    setExams(userExams);
+    fetchAndSyncExams().then((userExams) => {
+      setExams(userExams);
+    });
   }, [path]);
 
   const todayDateStr = new Date().toLocaleDateString(undefined, {

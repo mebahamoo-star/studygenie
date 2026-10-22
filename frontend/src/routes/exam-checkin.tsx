@@ -9,7 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { pageHead } from "@/lib/head";
-import { deleteExam, isCourseEnrolled, loadExams, saveExam, type Exam } from "@/lib/exam";
+import { deleteExam, fetchAndSyncExams, isCourseEnrolled, loadExams, saveExam, type Exam } from "@/lib/exam";
+import { getStoredAccessToken } from "@/lib/api/client";
+import { examService } from "@/lib/api/services";
 import { getUserCourses, saveUserCourses } from "@/lib/courses-util";
 import { browseService } from "@/lib/api/services";
 import type { Course } from "@/lib/api/types";
@@ -64,19 +66,43 @@ function ExamCheckin() {
       })
       .catch(() => {});
 
-    setExistingExams(loadExams());
+    fetchAndSyncExams().then((exams) => {
+      setExistingExams(exams);
+    });
   }, []);
 
   const handleSkip = () => {
     navigate({ to: "/dashboard" });
   };
 
-  const handleAddAnother = (ev: React.MouseEvent) => {
+  const handleAddAnother = async (ev: React.MouseEvent) => {
     ev.preventDefault();
     const r = schema.safeParse(form);
     if (!r.success) return setError(r.error.issues[0]?.message ?? "Check the form");
 
-    saveExam(r.data);
+    const localItem = saveExam(r.data);
+
+    if (getStoredAccessToken()) {
+      try {
+        const created = await examService.createExam({
+          course: r.data.course.trim(),
+          type: r.data.type.trim(),
+          date: r.data.date,
+          professor: r.data.professor?.trim() || "",
+        });
+        if (created) {
+          saveExam({
+            id: String(created.id),
+            course: created.course,
+            type: created.type,
+            date: created.date,
+            professor: created.professor || "",
+          });
+        }
+      } catch (err) {
+        console.warn("Backend exam creation sync failed:", err);
+      }
+    }
 
     // Ensure this course is enrolled
     const enrolled = getUserCourses();
@@ -99,7 +125,7 @@ function ExamCheckin() {
     setError("");
   };
 
-  const submit = (ev: React.FormEvent) => {
+  const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
     // If the form is completely empty but the user already has saved exams, proceed to dashboard
     if (!form.course && !form.type && !form.date && !form.professor && existingExams.length > 0) {
@@ -109,7 +135,29 @@ function ExamCheckin() {
     const r = schema.safeParse(form);
     if (!r.success) return setError(r.error.issues[0]?.message ?? "Check the form");
 
-    saveExam(r.data);
+    const localItem = saveExam(r.data);
+
+    if (getStoredAccessToken()) {
+      try {
+        const created = await examService.createExam({
+          course: r.data.course.trim(),
+          type: r.data.type.trim(),
+          date: r.data.date,
+          professor: r.data.professor?.trim() || "",
+        });
+        if (created) {
+          saveExam({
+            id: String(created.id),
+            course: created.course,
+            type: created.type,
+            date: created.date,
+            professor: created.professor || "",
+          });
+        }
+      } catch (err) {
+        console.warn("Backend exam creation sync failed:", err);
+      }
+    }
 
     // Ensure this course is in the user's enrolled courses list
     const enrolled = getUserCourses();
