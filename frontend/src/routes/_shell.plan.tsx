@@ -6,6 +6,7 @@ import {
   BookOpen,
   Check,
   Clock,
+  Flame,
   HelpCircle,
   Loader2,
   Siren,
@@ -66,6 +67,7 @@ function Plan() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [survival, setSurvival] = useState(false);
   const [planDays, setPlanDays] = useState<DayPlan[]>([]);
+  const [fullPlanDays, setFullPlanDays] = useState<DayPlan[]>([]);
   const [courseInfo, setCourseInfo] = useState<{ name: string; code?: string }>({
     name: "Study Plan",
     code: "",
@@ -103,6 +105,8 @@ function Plan() {
     setSelectedCourse(c);
     setCourseInfo({ name: c.name, code: c.code });
     setPlanDays([]);
+    setFullPlanDays([]);
+    setSurvival(false);
 
     let planData: any = null;
     if (c.id && !String(c.id).startsWith("course-") && !String(c.id).startsWith("c-")) {
@@ -207,18 +211,42 @@ function Plan() {
       date,
       tasks: dayTasks,
     }));
-    if (formatted.length > 0) setPlanDays(formatted);
+    if (formatted.length > 0) {
+      setFullPlanDays(formatted);
+      if (survival) {
+        setPlanDays(computeSurvivalPlan(formatted));
+      } else {
+        setPlanDays(formatted);
+      }
+    }
+  };
+
+  const computeSurvivalPlan = (days: DayPlan[]): DayPlan[] => {
+    const sliceCount = Math.max(1, Math.ceil(days.length * 0.7));
+    return days.slice(0, sliceCount).map((d) => ({
+      ...d,
+      tasks: d.tasks.filter((t, idx) => {
+        if (d.tasks.length <= 1) return true;
+        return t.tag === "STUDY" || idx % 2 === 0;
+      }),
+    })).filter((d) => d.tasks.length > 0);
   };
 
   const handleToggleSurvival = () => {
-    setSurvival(true);
-    toast.error("Survival Mode on — plan compressed to high-yield topics.");
-    setPlanDays((prev) =>
-      prev.slice(0, Math.ceil(prev.length * 0.7)).map((d) => ({
-        ...d,
-        tasks: d.tasks.filter((_, idx) => idx % 2 === 0),
-      }))
-    );
+    if (survival) {
+      setSurvival(false);
+      const restored = fullPlanDays.length > 0 ? fullPlanDays : planDays;
+      setPlanDays(restored);
+      toast.success("Survival Mode deactivated ✨ — full study schedule restored.");
+    } else {
+      setSurvival(true);
+      const base = fullPlanDays.length > 0 ? fullPlanDays : planDays;
+      if (fullPlanDays.length === 0 && planDays.length > 0) {
+        setFullPlanDays(planDays);
+      }
+      setPlanDays(computeSurvivalPlan(base));
+      toast.error("Survival Mode activated ⚡ — plan compressed to high-yield topics.");
+    }
   };
 
   // Open modal asking how many cards the user wants (max 25)
@@ -537,17 +565,53 @@ function Plan() {
             : "Day-by-day study and review timeline"
         }
         right={
-          planDays.length > 0 ? (
-            <Button variant="survival" size="lg" onClick={handleToggleSurvival}>
-              <Siren /> Survival Mode
+          planDays.length > 0 || fullPlanDays.length > 0 ? (
+            <Button
+              variant={survival ? "survival" : "outline"}
+              size="lg"
+              onClick={handleToggleSurvival}
+              className={cn(
+                "gap-2 font-bold transition-all shadow-sm",
+                survival
+                  ? "bg-destructive text-destructive-foreground hover:brightness-110 shadow-survival animate-pulse-soft"
+                  : "border-destructive/40 text-destructive hover:bg-destructive/10"
+              )}
+            >
+              {survival ? (
+                <>
+                  <Siren className="h-4 w-4" />
+                  <span>Survival Mode: ON</span>
+                  <span className="ml-1 rounded-full bg-destructive-foreground/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                    Click to disable
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Flame className="h-4 w-4" />
+                  <span>Survival Mode: OFF</span>
+                </>
+              )}
             </Button>
           ) : undefined
         }
       />
 
       {survival && (
-        <div className="mb-6 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 font-bold text-destructive">
-          Survival Mode active: focusing on high-yield chapters only.
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 font-semibold text-destructive shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <Flame className="h-5 w-5 animate-pulse shrink-0" />
+            <div>
+              <span className="font-bold">Survival Mode Active:</span> plan compressed to essential, high-yield chapters only.
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToggleSurvival}
+            className="border-destructive/30 bg-background/90 text-destructive hover:bg-destructive hover:text-destructive-foreground text-xs font-bold shadow-xs"
+          >
+            Turn Off Survival Mode
+          </Button>
         </div>
       )}
 

@@ -1102,7 +1102,7 @@ function JoinChallenge({
             {(["normal", "survival"] as const).map((m) => (
               <button
                 key={m}
-                onClick={() => setMode(m)}
+                onClick={() => setMode((prev) => (prev === m && m === "survival" ? "normal" : m))}
                 className={cn(
                   "flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-bold capitalize transition",
                   mode === m &&
