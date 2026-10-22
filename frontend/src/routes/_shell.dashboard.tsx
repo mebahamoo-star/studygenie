@@ -1241,35 +1241,69 @@ function Dashboard() {
                 Welcome back, {firstName}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">{line}</p>
+              <div className="mt-2.5 flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">Current Progress:</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary border border-primary/20">
+                  {displayProgress}% Complete
+                </span>
+                {courseName && (
+                  <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                    • {courseName}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <ProgressRing value={progress} size={84} strokeWidth={8} />
+            <ProgressRing value={displayProgress} size={84} stroke={8}>
+              <div className="flex flex-col items-center justify-center leading-none">
+                <span className="font-display text-base font-bold text-foreground">{displayProgress}%</span>
+                <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-tight">Today</span>
+              </div>
+            </ProgressRing>
           </div>
         </div>
       </Card>
 
-      <Card className="flex flex-col justify-between">
-        <div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Daily Streak
-            </span>
-            <span className="text-2xl">🔥</span>
-          </div>
-          <div className="mt-2 font-display text-4xl font-bold text-foreground">
-            {user?.streakCount ?? 3}{" "}
-            <span className="text-base font-normal text-muted-foreground">days</span>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Complete today&apos;s active recall quest to keep the genie powerful!
+      <Card className="flex flex-col items-center justify-between p-5 text-center">
+        <div className="flex w-full items-center justify-between text-xs">
+          <span className="font-bold uppercase tracking-wider text-muted-foreground">
+            {selectedDayInfo.today ? "Daily Progress" : `${selectedDayInfo.d} Progress`}
+          </span>
+          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary border border-primary/20">
+            {displayProgress}%
+          </span>
+        </div>
+
+        <div className="my-2 flex flex-col items-center justify-center">
+          <ProgressRing value={displayProgress} size={130} stroke={10}>
+            <div className="flex flex-col items-center justify-center">
+              <span className="font-display text-3xl font-bold tracking-tight text-foreground">
+                {displayProgress}%
+              </span>
+              <span className="text-[11px] font-semibold text-muted-foreground truncate max-w-[110px] mt-0.5">
+                {courseName || "Daily Goal"}
+              </span>
+            </div>
+          </ProgressRing>
+          <p className="mt-2 text-xs font-medium text-muted-foreground">
+            {displayProgress === 100 && selectedDayStats.total > 0
+              ? "🎉 Daily goals achieved!"
+              : displayProgress > 0
+                ? `${selectedDayStats.completed} of ${selectedDayStats.total} tasks completed`
+                : "No tasks completed yet"}
           </p>
         </div>
-        <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs">
-          <span className="text-muted-foreground">Genie Points</span>
-          <span className="font-display font-semibold text-gold">
-            ⭐ {user?.geniePoints ?? 340} pts
-          </span>
+
+        <div className="flex w-full items-center justify-between border-t pt-2.5 text-xs">
+          <div className="flex items-center gap-1 font-semibold text-foreground">
+            <span>🔥</span>
+            <span>{user?.streakCount ?? 3}d streak</span>
+          </div>
+          <div className="flex items-center gap-1 font-display font-semibold text-gold">
+            <span>⭐</span>
+            <span>{user?.geniePoints ?? 340} pts</span>
+          </div>
         </div>
       </Card>
 
