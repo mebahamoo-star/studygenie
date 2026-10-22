@@ -57,22 +57,59 @@ interface TaskItem {
   courseId?: string | number;
 }
 
-function getWeekDays() {
+interface WeekDayInfo {
+  d: string;
+  n: number;
+  dateStr: string;
+  today: boolean;
+  isPast: boolean;
+  isFuture: boolean;
+  formattedLabel: string;
+}
+
+interface DiscoveredPlan {
+  courseName: string;
+  courseCode?: string;
+  courseId?: string | number;
+  topics?: any[];
+  tasks: any[];
+}
+
+function toLocalDateStr(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getWeekDays(): WeekDayInfo[] {
   const now = new Date();
+  const todayDateStr = toLocalDateStr(now);
   const currentDay = now.getDay(); // 0 is Sunday
   const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
 
-  const days = [];
+  const days: WeekDayInfo[] = [];
   const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   for (let i = 0; i < 7; i++) {
-    const d = new Date(now);
-    d.setDate(now.getDate() + mondayOffset + i);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset + i);
+    const dateStr = toLocalDateStr(d);
+    const isToday = dateStr === todayDateStr;
+    const isPast = dateStr < todayDateStr;
+    const isFuture = dateStr > todayDateStr;
+
     days.push({
       d: dayLabels[i],
       n: d.getDate(),
-      today: d.toDateString() === now.toDateString(),
-      done: d < now && d.toDateString() !== now.toDateString(),
+      dateStr,
+      today: isToday,
+      isPast,
+      isFuture,
+      formattedLabel: d.toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }),
     });
   }
   return days;
@@ -360,6 +397,11 @@ function generateExamQuizzes(courseName: string, topics: Topic[]) {
 function Dashboard() {
   const nav = useNavigate();
   const { user } = useApp();
+  const todayStr = toLocalDateStr(new Date());
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
+  const [discoveredPlans, setDiscoveredPlans] = useState<DiscoveredPlan[]>([]);
+  const [fallbackTasks, setFallbackTasks] = useState<TaskItem[]>([]);
+  const [doneMap, setDoneMap] = useState<Record<string, string[]>>({});
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [done, setDone] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
@@ -782,13 +824,6 @@ function Dashboard() {
       setCourseName(displayName);
 
       // 5. Discover plans across all enrolled courses and local storage
-      interface DiscoveredPlan {
-        courseName: string;
-        courseCode?: string;
-        courseId?: string | number;
-        topics?: any[];
-        tasks: any[];
-      }
       const allPlans: DiscoveredPlan[] = [];
 
       for (const c of enrolled) {
@@ -837,6 +872,28 @@ function Dashboard() {
           }
         }
       } catch {}
+
+      setDiscoveredPlans(allPlans);
+
+      // Load done IDs for all 7 days of this week
+      const currentWeekDays = getWeekDays();
+      const loadedDoneMap: Record<string, string[]> = {};
+      currentWeekDays.forEach((w) => {
+        const raw = localStorage.getItem(`sg-${prefix}-checklist-done-${w.dateStr}`);
+        if (raw) {
+          try {
+            loadedDoneMap[w.dateStr] = JSON.parse(raw);
+          } catch {}
+        } else if (w.today) {
+          const legacy = localStorage.getItem(`sg-${prefix}-checklist-done`);
+          if (legacy) {
+            try {
+              loadedDoneMap[w.dateStr] = JSON.parse(legacy);
+            } catch {}
+          }
+        }
+      });
+      setDoneMap(loadedDoneMap);
 
       if (allPlans.length === 0) {
         setHasPlans(false);
@@ -936,30 +993,104 @@ function Dashboard() {
     };
   }, []);
 
-  const toggleTask = (taskId: string) => {
-    const prefix = getUserStoragePrefix();
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const doneKey = `sg-${prefix}-checklist-done-${todayStr}`;
-
-    setDone((prev) => {
-      const isDone = prev.includes(taskId);
-      const next = isDone ? prev.filter((id) => id !== taskId) : [...prev, taskId];
-      try {
-        localStorage.setItem(doneKey, JSON.stringify(next));
-      } catch {}
-
-      if (tasks.length > 0) {
-        const completedCount = tasks.filter((t) => next.includes(t.id)).length;
-        setProgress(Math.round((completedCount / tasks.length) * 100));
-      }
-      return next;
+  const getTasksForDate = (targetDateStr: string, plans: DiscoveredPlan[] = discoveredPlans): TaskItem[] => {
+    const list: TaskItem[] = [];
+    plans.forEach((plan) => {
+      const matching = (plan.tasks || []).filter((t: any) => t.date === targetDateStr);
+      matching.forEach((t: any) => {
+        list.push({
+          id: String(t.id),
+          label: t.title || t.name || "Study Task",
+          course: plan.courseName,
+          min: t.estimated_minutes || t.durationMinutes || 45,
+          tag: t.is_review ? "Review" : "Core Topic",
+          description: t.description || "",
+          date: t.date || targetDateStr,
+          courseId: plan.courseId,
+        });
+      });
     });
+
+    if (list.length === 0 && targetDateStr === todayStr && tasks.length > 0) {
+      return tasks;
+    }
+
+    return list;
+  };
+
+  const getDayStats = (dateStr: string, isPast: boolean) => {
+    const dayTasks = getTasksForDate(dateStr);
+    const dayDone = doneMap[dateStr] || (dateStr === todayStr ? done : []);
+    const completed = dayTasks.filter((t) => dayDone.includes(t.id)).length;
+    const total = dayTasks.length;
+    let percent = 0;
+    if (total > 0) {
+      percent = Math.round((completed / total) * 100);
+    } else if (isPast) {
+      percent = 100;
+    }
+    const completedMinutes = dayTasks.filter((t) => dayDone.includes(t.id)).reduce((acc, t) => acc + t.min, 0);
+    const totalMinutes = dayTasks.reduce((acc, t) => acc + t.min, 0);
+
+    return {
+      tasks: dayTasks,
+      done: dayDone,
+      completed,
+      total,
+      percent,
+      completedMinutes,
+      totalMinutes,
+      studiedHours: completedMinutes > 0 ? `${(completedMinutes / 60).toFixed(1)}h` : totalMinutes > 0 ? `${(totalMinutes / 60).toFixed(1)}h` : "0h",
+    };
+  };
+
+  const toggleTask = (taskId: string, targetDateStr?: string) => {
+    const prefix = getUserStoragePrefix();
+    const dateToUse = targetDateStr || selectedDateStr;
+    const doneKey = `sg-${prefix}-checklist-done-${dateToUse}`;
+
+    const currentList = doneMap[dateToUse] || (dateToUse === todayStr ? done : []);
+    const isDone = currentList.includes(taskId);
+    const nextList = isDone ? currentList.filter((id) => id !== taskId) : [...currentList, taskId];
+
+    setDoneMap((prev) => ({
+      ...prev,
+      [dateToUse]: nextList,
+    }));
+
+    if (dateToUse === todayStr) {
+      setDone(nextList);
+    }
+
+    try {
+      localStorage.setItem(doneKey, JSON.stringify(nextList));
+      if (dateToUse === todayStr) {
+        localStorage.setItem(`sg-${prefix}-checklist-done`, JSON.stringify(nextList));
+      }
+    } catch {}
   };
 
   const week = getWeekDays();
-  const pose: GeniePose = progress < 34 ? "low" : progress < 67 ? "mid" : "high";
+  const selectedDayInfo = week.find((w) => w.dateStr === selectedDateStr) || {
+    d: "Day",
+    n: new Date().getDate(),
+    dateStr: selectedDateStr,
+    today: selectedDateStr === todayStr,
+    isPast: selectedDateStr < todayStr,
+    isFuture: selectedDateStr > todayStr,
+    formattedLabel: selectedDateStr,
+  };
+
+  const selectedDayStats = getDayStats(selectedDateStr, selectedDayInfo.isPast);
+  const activeChecklistTasks = selectedDayStats.tasks;
+  const activeChecklistDone = selectedDayStats.done;
+
+  const todayStats = getDayStats(todayStr, false);
+  const displayProgress = selectedDayInfo.today ? todayStats.percent : selectedDayStats.percent;
+
+  const pose: GeniePose = displayProgress < 34 ? "low" : displayProgress < 67 ? "mid" : "high";
   const line =
-    progress === 0
+    displayProgress === 0
       ? "Welcome! Add your courses or exams to start your learning journey."
       : {
           low: "Let's get going — one step at a time!",
@@ -1146,20 +1277,37 @@ function Dashboard() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold">Today&apos;s Checklist</h2>
-              {checklistDateLabel !== "Today" && (
+              <h2 className="text-xl font-semibold">
+                {selectedDayInfo.today ? "Today's Checklist" : `${selectedDayInfo.formattedLabel} Checklist`}
+              </h2>
+              {selectedDayInfo.today && checklistDateLabel !== "Today" && (
                 <span className="rounded-md bg-accent px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                   Scheduled for {checklistDateLabel}
                 </span>
               )}
+              {!selectedDayInfo.today && (
+                <span className="rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-[11px] font-bold border border-primary/20">
+                  {selectedDayInfo.d} Schedule
+                </span>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
-              {hasPlans && tasks.length > 0
+              {hasPlans && activeChecklistTasks.length > 0
                 ? `Active courses: ${courseName}`
                 : "Personalized tasks appear here once you generate a study plan."}
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {!selectedDayInfo.today && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedDateStr(todayStr)}
+                className="gap-1 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10"
+              >
+                Today ↩
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -1176,14 +1324,14 @@ function Dashboard() {
           </div>
         </div>
 
-        {tasks.length > 0 ? (
+        {activeChecklistTasks.length > 0 ? (
           <div className="space-y-2">
-            {tasks.map((task) => {
-              const isDone = done.includes(task.id);
+            {activeChecklistTasks.map((task) => {
+              const isDone = activeChecklistDone.includes(task.id);
               return (
                 <div
                   key={task.id}
-                  onClick={() => toggleTask(task.id)}
+                  onClick={() => toggleTask(task.id, selectedDateStr)}
                   className={cn(
                     "group flex cursor-pointer items-start justify-between rounded-xl border p-3.5 transition",
                     isDone
@@ -1247,30 +1395,57 @@ function Dashboard() {
         ) : (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-12 text-center text-muted-foreground">
             <BookOpen className="mb-2 h-8 w-8 text-muted-foreground/50" />
-            <div className="text-sm font-semibold text-foreground">No tasks scheduled for today</div>
+            <div className="text-sm font-semibold text-foreground">
+              {selectedDayInfo.today ? "No tasks scheduled for today" : `No tasks scheduled for ${selectedDayInfo.formattedLabel}`}
+            </div>
             <p className="mt-1 max-w-xs text-xs">
               {enrolledCount === 0
                 ? "Add a college course to upload syllabus and generate your personalized daily plan."
-                : "Choose a course and generate your customized active study plan."}
+                : selectedDayInfo.isPast
+                  ? "This was a rest day with no active study tasks recorded."
+                  : "Enjoy your rest day or jump into active recall with your flashcards and quizzes."}
             </p>
-            <Button
-              variant="magic"
-              size="sm"
-              asChild
-              className="mt-4 gap-1.5 rounded-xl font-semibold"
-            >
-              <Link to="/courses">
-                {enrolledCount === 0 ? "Add First Course" : "Generate Study Plan"}
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              {enrolledCount === 0 ? (
+                <Button
+                  variant="magic"
+                  size="sm"
+                  asChild
+                  className="gap-1.5 rounded-xl font-semibold"
+                >
+                  <Link to="/courses">
+                    Add First Course
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" asChild className="text-xs font-semibold">
+                    <Link to="/flashcards">⚡ Review Flashcards</Link>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild className="text-xs font-semibold">
+                    <Link to="/quiz">🎯 Practice Quiz</Link>
+                  </Button>
+                  {!selectedDayInfo.today && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedDateStr(todayStr)}
+                      className="text-xs font-semibold text-primary"
+                    >
+                      Jump to Today
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         )}
 
-        {hasPlans && tasks.length > 0 && (
+        {hasPlans && activeChecklistTasks.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
             <span className="text-xs text-muted-foreground">
-              Total: {tasks.reduce((acc, t) => acc + t.min, 0)} minutes of scheduled study
+              Total: {activeChecklistTasks.reduce((acc, t) => acc + t.min, 0)} minutes of scheduled study
             </span>
             <Button variant="magic" size="sm" asChild>
               <Link to="/pomodoro">
@@ -1281,43 +1456,127 @@ function Dashboard() {
         )}
       </Card>
 
-      <Card>
-        <h2 className="mb-4 text-xl font-semibold">This week</h2>
-        <div className="grid grid-cols-7 gap-1.5">
-          {week.map((w) => (
-            <div
-              key={w.d}
-              className={cn(
-                "flex flex-col items-center gap-1 rounded-xl py-2",
-                w.today
-                  ? "bg-gradient-magic text-primary-foreground shadow-glow"
-                  : "bg-muted"
-              )}
-            >
-              <span className="text-[10px] font-bold opacity-70">{w.d}</span>
-              <span className="font-display font-semibold">{w.n}</span>
-              <span
-                className={cn("h-1.5 w-1.5 rounded-full", w.done ? "bg-gold" : "bg-transparent")}
+      <Card className="flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-xl font-semibold">This week</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Click any day to view your progress</p>
+            </div>
+            {selectedDateStr !== todayStr && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedDateStr(todayStr)}
+                className="h-7 px-2 text-xs font-semibold text-primary hover:bg-primary/10 gap-1"
+                title="Return to today"
+              >
+                Today ↩
+              </Button>
+            )}
+          </div>
+
+          {/* 7 Days Interactive Strip */}
+          <div className="grid grid-cols-7 gap-1.5">
+            {week.map((w) => {
+              const isSelected = w.dateStr === selectedDateStr;
+              const stats = getDayStats(w.dateStr, w.isPast);
+              const isDone = stats.total > 0 && stats.completed === stats.total;
+              const hasProgress = stats.completed > 0 && stats.completed < stats.total;
+
+              return (
+                <button
+                  key={w.dateStr}
+                  type="button"
+                  onClick={() => setSelectedDateStr(w.dateStr)}
+                  className={cn(
+                    "group relative flex flex-col items-center gap-1 rounded-xl py-2 px-1 transition-all cursor-pointer border text-center select-none",
+                    isSelected
+                      ? "border-primary bg-primary/15 text-primary shadow-soft ring-2 ring-primary/40 font-bold scale-[1.03] z-10"
+                      : w.today
+                        ? "border-primary/40 bg-gradient-magic text-primary-foreground shadow-glow font-semibold"
+                        : "border-transparent bg-muted/60 text-muted-foreground hover:bg-accent hover:text-foreground hover:border-border"
+                  )}
+                  title={`${w.formattedLabel}: ${stats.completed}/${stats.total} tasks completed`}
+                >
+                  <span className={cn("text-[10px] font-bold uppercase tracking-wider", isSelected ? "text-primary" : w.today ? "opacity-90" : "opacity-60")}>
+                    {w.d}
+                  </span>
+                  <span className="font-display text-base font-bold leading-none">
+                    {w.n}
+                  </span>
+                  <div className="mt-0.5 flex items-center justify-center h-2">
+                    {isDone ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+                    ) : hasProgress ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shadow-sm shadow-amber-500/50" />
+                    ) : stats.total > 0 ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary/40" />
+                    ) : (
+                      <span className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Selected Day Progress Details */}
+          <div className="mt-4 rounded-xl border border-border/70 bg-card p-3 shadow-sm">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold flex items-center gap-1.5 text-foreground">
+                <Calendar className="h-3.5 w-3.5 text-primary" />
+                {selectedDayInfo.formattedLabel}
+                {selectedDayInfo.today && (
+                  <span className="rounded-full bg-primary/10 text-primary px-1.5 py-0.2 text-[9px] font-bold uppercase">
+                    Today
+                  </span>
+                )}
+              </span>
+              <span className={cn("font-bold", selectedDayStats.percent === 100 && selectedDayStats.total > 0 ? "text-emerald-500" : "text-primary")}>
+                {selectedDayStats.percent}% complete
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-500",
+                  selectedDayStats.percent === 100 && selectedDayStats.total > 0
+                    ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
+                    : "bg-gradient-magic"
+                )}
+                style={{ width: `${selectedDayStats.percent}%` }}
               />
             </div>
-          ))}
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 text-center">
-          <div className="rounded-xl bg-accent p-3">
-            <div className="font-display text-2xl font-semibold">
-              {done.filter((id) => tasks.some((t) => t.id === id)).length}
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
+              <div className="rounded-lg bg-accent/60 p-2">
+                <div className="font-display text-lg font-bold text-foreground">
+                  {selectedDayStats.completed} <span className="text-xs font-normal text-muted-foreground">/ {selectedDayStats.total}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground uppercase font-semibold">tasks completed</div>
+              </div>
+              <div className="rounded-lg bg-accent/60 p-2">
+                <div className="font-display text-lg font-bold text-foreground">
+                  {selectedDayStats.studiedHours}
+                </div>
+                <div className="text-[10px] text-muted-foreground uppercase font-semibold">
+                  {selectedDayInfo.today ? "studied today" : "study time"}
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">tasks completed</div>
-          </div>
-          <div className="rounded-xl bg-accent p-3">
-            <div className="font-display text-2xl font-semibold">
-              {(() => {
-                const completedTasks = tasks.filter((t) => done.includes(t.id));
-                const totalMinutes = completedTasks.reduce((sum, t) => sum + t.min, 0);
-                return totalMinutes > 0 ? `${(totalMinutes / 60).toFixed(1)}h` : "0h";
-              })()}
-            </div>
-            <div className="text-xs text-muted-foreground">studied today</div>
+
+            <p className="mt-2.5 text-[11px] text-muted-foreground text-center">
+              {selectedDayStats.total > 0
+                ? selectedDayStats.completed === selectedDayStats.total
+                  ? "🎉 All daily goals achieved! Fantastic job."
+                  : `${selectedDayStats.total - selectedDayStats.completed} tasks remaining for this day.`
+                : selectedDayInfo.isPast
+                  ? "Rest day • Past schedule"
+                  : "No tasks scheduled for this day • Rest or review flashcards ✨"}
+            </p>
           </div>
         </div>
       </Card>
