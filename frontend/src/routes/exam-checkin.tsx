@@ -139,25 +139,27 @@ function ExamCheckin() {
     <div className="min-h-screen bg-gradient-hero pb-12">
       <header className="mx-auto flex max-w-3xl items-center justify-between px-6 py-6">
         <GenieLogo />
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleSkip}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            {existingExams.length > 0 ? "Go to Dashboard →" : "Skip for now →"}
-          </Button>
-          <ThemeToggle />
-        </div>
+        <ThemeToggle />
       </header>
 
       <form
         onSubmit={submit}
-        className="mx-auto flex max-w-xl flex-col gap-6 rounded-2xl border bg-card p-8 shadow-soft"
+        className="relative mx-auto flex max-w-xl flex-col gap-6 rounded-2xl border bg-card p-6 sm:p-8 shadow-soft"
       >
-        <div className="flex items-center gap-4">
-          <Genie pose="mid" className="h-24 w-24 shrink-0 animate-float" />
+        <div className="absolute right-5 top-5">
+          <Button
+            variant="ghost"
+            size="sm"
+            type="button"
+            onClick={handleSkip}
+            className="h-7 rounded-lg px-2.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            Skip →
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-4 pr-16">
+          <Genie pose="mid" className="h-20 w-20 shrink-0 animate-float" />
           <div>
             <h1 className="text-2xl font-semibold">
               {existingExams.length > 0 ? "Add Another Exam" : "What's your next exam?"}
@@ -279,31 +281,19 @@ function ExamCheckin() {
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-2 flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end">
           <Button
-            variant="ghost"
-            size="lg"
+            variant="outline"
+            size="default"
             type="button"
-            onClick={handleSkip}
-            className="text-muted-foreground hover:text-foreground"
+            onClick={handleAddAnother}
+            className="w-full sm:w-auto gap-1.5"
           >
-            {existingExams.length > 0 ? "Done (Open Dashboard)" : "Skip for now"}
+            <Plus className="h-4 w-4" /> Add Another Exam
           </Button>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="lg"
-              type="button"
-              onClick={handleAddAnother}
-              className="gap-1.5"
-            >
-              <Plus className="h-4 w-4" /> Add Another Exam
-            </Button>
-            <Button variant="magic" size="lg" type="submit">
-              Save & Open Dashboard
-            </Button>
-          </div>
+          <Button variant="magic" size="default" type="submit" className="w-full sm:w-auto">
+            Save & Open Dashboard
+          </Button>
         </div>
       </form>
     </div>
