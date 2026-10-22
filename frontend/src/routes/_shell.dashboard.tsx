@@ -98,20 +98,15 @@ function Dashboard() {
       } catch {}
       if (isMounted) setDone(savedDone);
 
-      // 1. Fetch user enrolled courses
-      let enrolled = getUserCourses();
+      // 1. Fetch user enrolled courses from Neon cloud database
+      let enrolled: Course[] = [];
       try {
         const remote = await browseService.getEnrolledCourses();
-        if (remote && remote.length > 0) {
-          const map = new Map<string, Course>();
-          remote.forEach((c) => map.set(c.name.trim().toLowerCase(), c));
-          enrolled.forEach((c) => {
-            if (!map.has(c.name.trim().toLowerCase())) map.set(c.name.trim().toLowerCase(), c);
-          });
-          enrolled = Array.from(map.values());
-          saveUserCourses(enrolled);
-        }
-      } catch {}
+        enrolled = remote || [];
+        saveUserCourses(enrolled);
+      } catch {
+        enrolled = getUserCourses();
+      }
 
       if (!isMounted) return;
       setEnrolledCount(enrolled.length);

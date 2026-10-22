@@ -46,6 +46,23 @@ export function getStoredUser(): UserSummary | null {
 
 export function saveAuthSession(auth: AuthResponse) {
   try {
+    const prevUserRaw = localStorage.getItem(STORAGE_KEYS.USER);
+    if (prevUserRaw) {
+      try {
+        const prev = JSON.parse(prevUserRaw);
+        if (prev?.id && auth.user?.id && String(prev.id) !== String(auth.user.id)) {
+          // Different user logged in: purge old un-scoped and active caches to prevent data leaking
+          localStorage.removeItem("sg-user-courses");
+          localStorage.removeItem("sg-active-cards");
+          localStorage.removeItem("sg-active-plan");
+          localStorage.removeItem("sg-active-course");
+          localStorage.removeItem("sg-task-kits");
+          localStorage.removeItem("sg-exams");
+          localStorage.removeItem("sg-exam");
+        }
+      } catch {}
+    }
+
     localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, auth.accessToken);
     localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, auth.refreshToken);
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(auth.user));
@@ -71,11 +88,13 @@ export function clearAuthSession() {
     localStorage.removeItem(STORAGE_KEYS.USER);
 
     // Purge user-specific active session state
+    localStorage.removeItem(`sg-${prefix}-courses`);
     localStorage.removeItem(`sg-${prefix}-exams`);
     localStorage.removeItem(`sg-${prefix}-exam`);
     localStorage.removeItem(`sg-${prefix}-active-course`);
     localStorage.removeItem(`sg-${prefix}-active-plan`);
     localStorage.removeItem(`sg-${prefix}-active-cards`);
+    localStorage.removeItem(`sg-${prefix}-task-kits`);
 
     // Purge legacy un-scoped cache so new users start completely fresh
     localStorage.removeItem("sg-user-courses");

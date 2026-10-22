@@ -46,39 +46,39 @@ function CoursesPage() {
   const [code, setCode] = useState("");
 
   const refreshCourses = async () => {
-    // 1. Fetch courses specifically enrolled by THIS user
+    // 1. Fetch courses specifically enrolled by THIS user from the cloud database
     let enrolled: Course[] = [];
+    let isRemoteOnline = false;
     try {
       enrolled = await browseService.getEnrolledCourses();
+      isRemoteOnline = true;
     } catch {}
 
     const saved = getUserCourses();
+    const savedMap = new Map<string, Course>();
+    saved.forEach((c) => savedMap.set(c.name.trim().toLowerCase(), c));
 
-    const myMap = new Map<string, Course>();
-    // First, seed with user's saved local courses so their specific topics and status are preserved
-    saved.forEach((c) => myMap.set(c.name.trim().toLowerCase(), c));
-
-    // Merge enrolled courses from backend without overwriting existing local topics
-    enrolled.forEach((c) => {
-      const key = c.name.trim().toLowerCase();
-      const existing = myMap.get(key);
-      if (existing) {
-        myMap.set(key, {
+    let myCourses: Course[] = [];
+    if (isRemoteOnline) {
+      // Backend is online: cloud enrolled list is the single source of truth for THIS user!
+      // Attach locally cached topics/chapters if available
+      myCourses = enrolled.map((c) => {
+        const local = savedMap.get(c.name.trim().toLowerCase());
+        return {
           ...c,
-          id: existing.id || c.id,
-          topics: existing.topics && existing.topics.length > 0 ? existing.topics : c.topics || [],
-          status: existing.topics && existing.topics.length > 0 ? "ready" : c.status,
-        });
-      } else {
-        myMap.set(key, c);
-      }
-    });
+          topics: local?.topics && local.topics.length > 0 ? local.topics : c.topics || [],
+          status: local?.topics && local.topics.length > 0 ? "ready" : c.status,
+        };
+      });
+    } else {
+      // Offline demo fallback
+      myCourses = saved;
+    }
 
-    const myCourses = Array.from(myMap.values());
     setCourseList(myCourses);
+    saveUserCourses(myCourses);
     if (myCourses.length > 0) {
       setSel((prev) => (prev && myCourses.some((c) => String(c.id) === String(prev)) ? prev : String(myCourses[0].id)));
-      saveUserCourses(myCourses);
     } else {
       setSel("");
     }
@@ -102,7 +102,7 @@ function CoursesPage() {
     refreshCourses();
   }, []);
 
-  const handleEnrollFromCatalog = (catalogCourse: Course) => {
+  const handleEnrollFromCatalog = async (catalogCourse: Course) => {
     const existing = courseList.find((c) => c.name.toLowerCase() === catalogCourse.name.toLowerCase());
     if (existing) {
       setSel(String(existing.id));
@@ -115,6 +115,15 @@ function CoursesPage() {
     setSel(String(catalogCourse.id));
     setOpen(false);
     toast.success(`Enrolled in "${catalogCourse.name}"! ✨`);
+
+    // Persist to Neon PostgreSQL cloud database for this user!
+    try {
+      if (catalogCourse.id && !String(catalogCourse.id).startsWith("c-") && !String(catalogCourse.id).startsWith("course-")) {
+        await browseService.enrollCourse(catalogCourse.id);
+      } else {
+        await browseService.syncEnrolledCourses([catalogCourse.name]);
+      }
+    } catch {}
   };
 
   const handleAddCourse = async (courseName: string, courseCode?: string) => {
@@ -146,7 +155,11 @@ function CoursesPage() {
         } catch {}
       }
       const created = await browseService.createCourse(colId, trimmed);
-      if (created) newCourse = created;
+      if (created) {
+        newCourse = created;
+        // Enroll in newly created course on Neon cloud database
+        await browseService.enrollCourse(created.id).catch(() => {});
+      }
     } catch (err) {
       console.warn("Could not create course in backend:", err);
     }
@@ -171,7 +184,8 @@ function CoursesPage() {
 
     try {
       if (courseId && !String(courseId).startsWith("course-") && !String(courseId).startsWith("c-")) {
-        await browseService.deleteCourse(courseId);
+        await browseService.unenrollCourse(courseId).catch(() => {});
+        await browseService.deleteCourse(courseId).catch(() => {});
       }
       const deletedCourse = courseList.find((c) => String(c.id) === String(courseId));
       if (deletedCourse) {

@@ -78,25 +78,18 @@ function Flashcards() {
   const [selectedTopicRef, setSelectedTopicRef] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Load enrolled courses for the authenticated user
+  // Load enrolled courses for the authenticated user from cloud database
   useEffect(() => {
     const loadUserCourses = async () => {
       let enrolled: Course[] = [];
       try {
-        enrolled = await browseService.getEnrolledCourses();
-      } catch {}
-
-      const local = getUserCourses();
-      const map = new Map<string, Course>();
-
-      enrolled.forEach((c) => map.set(c.name.trim().toLowerCase(), c));
-      local.forEach((c) => {
-        if (!map.has(c.name.trim().toLowerCase())) {
-          map.set(c.name.trim().toLowerCase(), c);
-        }
-      });
-
-      setCourses(Array.from(map.values()));
+        const remote = await browseService.getEnrolledCourses();
+        enrolled = remote || [];
+        saveUserCourses(enrolled);
+      } catch {
+        enrolled = getUserCourses();
+      }
+      setCourses(enrolled);
     };
 
     loadUserCourses();

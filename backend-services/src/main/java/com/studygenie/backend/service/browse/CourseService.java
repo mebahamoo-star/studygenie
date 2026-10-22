@@ -9,22 +9,24 @@ import com.studygenie.backend.dto.browse.CourseDto;
 import com.studygenie.backend.dto.syllabus.TopicDto;
 import com.studygenie.backend.entity.College;
 import com.studygenie.backend.entity.Course;
+import com.studygenie.backend.entity.PlanTask;
 import com.studygenie.backend.entity.Student;
 import com.studygenie.backend.entity.StudyPlan;
-import com.studygenie.backend.entity.PlanTask;
 import com.studygenie.backend.entity.Syllabus;
 import com.studygenie.backend.entity.Topic;
+import com.studygenie.backend.entity.University;
 import com.studygenie.backend.entity.enums.CourseStatus;
 import com.studygenie.backend.exception.DuplicateResourceException;
 import com.studygenie.backend.exception.ResourceNotFoundException;
 import com.studygenie.backend.exception.ResourceNotReadyException;
 import com.studygenie.backend.repository.CollegeRepository;
 import com.studygenie.backend.repository.CourseRepository;
+import com.studygenie.backend.repository.PlanTaskRepository;
 import com.studygenie.backend.repository.StudentRepository;
 import com.studygenie.backend.repository.StudyPlanRepository;
-import com.studygenie.backend.repository.PlanTaskRepository;
 import com.studygenie.backend.repository.SyllabusRepository;
 import com.studygenie.backend.repository.TopicRepository;
+import com.studygenie.backend.repository.UniversityRepository;
 import com.studygenie.backend.service.ai.StudyPlanService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +37,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -45,6 +49,7 @@ public class CourseService {
 
     private final CourseRepository courseRepository;
     private final CollegeRepository collegeRepository;
+    private final UniversityRepository universityRepository;
     private final StudentRepository studentRepository;
     private final StudyPlanRepository studyPlanRepository;
     private final PlanTaskRepository planTaskRepository;
@@ -52,25 +57,30 @@ public class CourseService {
     private final TopicRepository topicRepository;
     private final SyllabusRepository syllabusRepository;
 
-    public CourseService(CourseRepository courseRepository, CollegeRepository collegeRepository, 
-                         StudentRepository studentRepository, StudyPlanRepository studyPlanRepository, 
+    public CourseService(CourseRepository courseRepository,
+                         CollegeRepository collegeRepository,
+                         UniversityRepository universityRepository,
+                         StudentRepository studentRepository,
+                         StudyPlanRepository studyPlanRepository,
                          PlanTaskRepository planTaskRepository,
-                         StudyPlanService studyPlanService, TopicRepository topicRepository,
+                         StudyPlanService studyPlanService,
+                         TopicRepository topicRepository,
                          SyllabusRepository syllabusRepository) {
-        this.topicRepository = topicRepository;
-        this.syllabusRepository = syllabusRepository;
         this.courseRepository = courseRepository;
         this.collegeRepository = collegeRepository;
+        this.universityRepository = universityRepository;
         this.studentRepository = studentRepository;
         this.studyPlanRepository = studyPlanRepository;
         this.planTaskRepository = planTaskRepository;
         this.studyPlanService = studyPlanService;
+        this.topicRepository = topicRepository;
+        this.syllabusRepository = syllabusRepository;
     }
 
     @Transactional(readOnly = true)
     public List<CourseDto> getAllCourses() {
         return courseRepository.findAll().stream()
-                .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege().getId(), c.getStatus()))
+                .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
     }
 
@@ -80,26 +90,111 @@ public class CourseService {
             return getAllCourses();
         }
         return courseRepository.findByCollegeId(collegeId).stream()
-                .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege().getId(), c.getStatus()))
+                .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<CourseDto> getMyCourses(Long studentId) {
+        Set<Course> courses = new HashSet<>();
+
+        studentRepository.findById(studentId).ifPresent(student -> {
+            if (student.getEnrolledCourses() != null) {
+                courses.addAll(student.getEnrolledCourses());
+            }
+        });
+
         List<StudyPlan> plans = studyPlanRepository.findByStudentId(studentId);
-        return plans.stream()
-                .map(StudyPlan::getCourse)
-                .filter(java.util.Objects::nonNull)
-                .distinct()
+        for (StudyPlan plan : plans) {
+            if (plan.getCourse() != null) {
+                courses.add(plan.getCourse());
+            }
+        }
+
+        return courses.stream()
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public CourseDto enrollCourse(Long studentId, Long courseId) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
+
+        if (student.getEnrolledCourses() == null) {
+            student.setEnrolledCourses(new HashSet<>());
+        }
+        student.getEnrolledCourses().add(course);
+        studentRepository.save(student);
+
+        return new CourseDto(course.getId(), course.getName(), course.getCollege() != null ? course.getCollege().getId() : null, course.getStatus());
+    }
+
+    @Transactional
+    public void unenrollCourse(Long studentId, Long courseId) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+        if (student.getEnrolledCourses() != null) {
+            student.getEnrolledCourses().removeIf(c -> c.getId().equals(courseId));
+            studentRepository.save(student);
+        }
+    }
+
+    @Transactional
+    public List<CourseDto> syncEnrolledCourses(Long studentId, List<String> courseIdentifiers) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+
+        if (student.getEnrolledCourses() == null) {
+            student.setEnrolledCourses(new HashSet<>());
+        }
+
+        if (courseIdentifiers != null && !courseIdentifiers.isEmpty()) {
+            List<Course> allCourses = courseRepository.findAll();
+            for (String idOrName : courseIdentifiers) {
+                if (idOrName == null || idOrName.trim().isEmpty()) continue;
+                String trimmed = idOrName.trim();
+                Course foundCourse = null;
+                try {
+                    Long cId = Long.parseLong(trimmed);
+                    foundCourse = courseRepository.findById(cId).orElse(null);
+                } catch (NumberFormatException ignored) {
+                }
+
+                if (foundCourse == null) {
+                    foundCourse = allCourses.stream()
+                            .filter(c -> c.getName() != null && c.getName().equalsIgnoreCase(trimmed))
+                            .findFirst()
+                            .orElse(null);
+                }
+
+                if (foundCourse == null) {
+                    try {
+                        CourseDto created = createCourse(null, trimmed);
+                        foundCourse = courseRepository.findById(created.id()).orElse(null);
+                        allCourses = courseRepository.findAll();
+                    } catch (Exception e) {
+                        log.warn("Could not auto-create course '{}': {}", trimmed, e.getMessage());
+                    }
+                }
+
+                if (foundCourse != null) {
+                    student.getEnrolledCourses().add(foundCourse);
+                }
+            }
+            studentRepository.save(student);
+        }
+
+        return getMyCourses(studentId);
     }
 
     @Transactional(readOnly = true)
     public CourseDto getCourse(Long courseId) {
         Course c = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
-        return new CourseDto(c.getId(), c.getName(), c.getCollege().getId(), c.getStatus());
+        return new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus());
     }
 
     @Transactional(readOnly = true)
@@ -110,7 +205,7 @@ public class CourseService {
             throw new ResourceNotFoundException("This course has no syllabus yet.", "NO_SYLLABUS");
         }
         if (c.getStatus() != CourseStatus.READY) {
-             throw new ResourceNotReadyException("Course syllabus is not ready yet.", "SYLLABUS_NOT_READY");
+            throw new ResourceNotReadyException("Course syllabus is not ready yet.", "SYLLABUS_NOT_READY");
         }
         return topicRepository.findBySyllabusId(c.getSyllabus().getId()).stream()
                 .map(t -> new TopicDto(
@@ -225,7 +320,10 @@ public class CourseService {
             });
         }
         if (college == null) {
-            throw new ResourceNotFoundException("College not found");
+            University uni = universityRepository.findAll().stream().findFirst().orElseGet(() ->
+                    universityRepository.save(University.builder().name("General University").build())
+            );
+            college = collegeRepository.save(College.builder().name("College of Computing").university(uni).build());
         }
 
         List<Course> existingCourses = courseRepository.findByCollegeId(college.getId());
@@ -240,10 +338,10 @@ public class CourseService {
                 .college(college)
                 .status(CourseStatus.NO_SYLLABUS)
                 .build();
-        
+
         try {
             course = courseRepository.save(course);
-            courseRepository.flush(); 
+            courseRepository.flush();
         } catch (DataIntegrityViolationException e) {
             for (Course ec : courseRepository.findByCollegeId(college.getId())) {
                 if (ec.getName().equalsIgnoreCase(name.trim())) {
@@ -260,12 +358,12 @@ public class CourseService {
     public PlanResponseData joinChallenge(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
-        
+
         if (course.getStatus() == CourseStatus.NO_SYLLABUS || course.getSyllabus() == null) {
             throw new ResourceNotFoundException("This course has no syllabus yet.", "NO_SYLLABUS");
         }
         if (course.getStatus() != CourseStatus.READY) {
-             throw new ResourceNotReadyException("Course syllabus is not ready yet.", "SYLLABUS_NOT_READY");
+            throw new ResourceNotReadyException("Course syllabus is not ready yet.", "SYLLABUS_NOT_READY");
         }
 
         if (studyPlanRepository.findByStudentIdAndCourseId(userId, courseId).isPresent()) {
@@ -362,4 +460,3 @@ public class CourseService {
         return new PlanResponseData(tasks, List.of(), summary);
     }
 }
-

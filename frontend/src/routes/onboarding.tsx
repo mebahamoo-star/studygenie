@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { browseService } from "@/lib/api/services";
+import { saveUserCourses } from "@/lib/courses-util";
 import type { College, Course, University } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -165,13 +166,13 @@ function Onboarding() {
     setCustomCourse("");
   };
 
-  const handleSkip = () => {
+  const persistSelections = async () => {
     try {
-      if (picked.length > 0) {
-        const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
-        if (selectedCoursesData.length > 0) {
-          localStorage.setItem("sg-user-courses", JSON.stringify(selectedCoursesData));
-        }
+      const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
+      if (selectedCoursesData.length > 0) {
+        saveUserCourses(selectedCoursesData);
+        // Persist to Neon PostgreSQL cloud database for this authenticated student
+        await browseService.syncEnrolledCourses(selectedCoursesData.map((c) => c.id || c.name)).catch(() => {});
       }
       if (selectedUni) {
         localStorage.setItem("sg-user-uni", JSON.stringify(selectedUni));
@@ -183,28 +184,16 @@ function Onboarding() {
         localStorage.setItem("sg-user-major", JSON.stringify({ name: selectedMajor }));
       }
     } catch {}
+  };
 
+  const handleSkip = async () => {
+    await persistSelections();
     toast.info("Setup skipped. You can add courses anytime from the Courses page! ✨");
     nav({ to: "/dashboard" });
   };
 
-  const handleFinish = () => {
-    try {
-      const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
-      if (selectedCoursesData.length > 0) {
-        localStorage.setItem("sg-user-courses", JSON.stringify(selectedCoursesData));
-      }
-      if (selectedUni) {
-        localStorage.setItem("sg-user-uni", JSON.stringify(selectedUni));
-      }
-      if (selectedCol) {
-        localStorage.setItem("sg-user-col", JSON.stringify(selectedCol));
-      }
-      if (selectedMajor) {
-        localStorage.setItem("sg-user-major", JSON.stringify({ name: selectedMajor }));
-      }
-    } catch {}
-
+  const handleFinish = async () => {
+    await persistSelections();
     if (picked.length > 0) {
       toast.success("Profile setup complete! Welcome to StudyGenie ✨");
     } else {

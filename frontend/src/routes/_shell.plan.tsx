@@ -83,23 +83,17 @@ function Plan() {
     const kits = getUserTaskKits();
     setKitsMap(kits);
 
-    // 2. Load subjects specifically enrolled by this user
+    // 2. Load subjects specifically enrolled by this user from cloud database
     const loadSubjects = async () => {
       let enrolled: Course[] = [];
       try {
-        enrolled = await browseService.getEnrolledCourses();
-      } catch {}
-
-      const saved = getUserCourses();
-
-      const map = new Map<string, Course>();
-      enrolled.forEach((c) => map.set(c.name.trim().toLowerCase(), c));
-      saved.forEach((c) => {
-        if (!map.has(c.name.trim().toLowerCase())) map.set(c.name.trim().toLowerCase(), c);
-      });
-
-      const list = Array.from(map.values());
-      setCourses(list);
+        const remote = await browseService.getEnrolledCourses();
+        enrolled = remote || [];
+        saveUserCourses(enrolled);
+      } catch {
+        enrolled = getUserCourses();
+      }
+      setCourses(enrolled);
     };
 
     loadSubjects();

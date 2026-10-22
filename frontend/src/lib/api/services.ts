@@ -146,6 +146,40 @@ export const browseService = {
     });
   },
 
+  async enrollCourse(courseId: number | string): Promise<Course> {
+    const res = await fetchApi<any>(`/api/v1/courses/${courseId}/enroll`, {
+      method: "POST",
+    });
+    const c = res.data!;
+    return {
+      id: c.id,
+      name: c.name,
+      code: c.code || `CS ${c.id}`,
+      collegeId: c.collegeId,
+      status: mapBackendCourseStatus(c.status),
+    };
+  },
+
+  async unenrollCourse(courseId: number | string): Promise<void> {
+    await fetchApi<void>(`/api/v1/courses/${courseId}/enroll`, {
+      method: "DELETE",
+    });
+  },
+
+  async syncEnrolledCourses(courseIdentifiers: (number | string)[]): Promise<Course[]> {
+    const res = await fetchApi<any[]>("/api/v1/courses/sync-enrolled", {
+      method: "POST",
+      body: JSON.stringify(courseIdentifiers.map(String)),
+    });
+    return (res.data || []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code || `CS ${c.id}`,
+      collegeId: c.collegeId,
+      status: mapBackendCourseStatus(c.status),
+    }));
+  },
+
   async getCourses(collegeId: number | string): Promise<Course[]> {
     const isNum = collegeId && !isNaN(Number(collegeId));
     const url = isNum ? `/api/v1/colleges/${collegeId}/courses` : `/api/v1/courses`;

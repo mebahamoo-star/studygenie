@@ -72,7 +72,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/study-plans/**").permitAll()
                         .requestMatchers("/api/v1/study-kits/**").permitAll()
                         .requestMatchers("/api/v1/colleges/**", "/api/v1/universities/**").permitAll()
-                        .requestMatchers("/api/v1/courses/enrolled").authenticated()
+                        .requestMatchers("/api/v1/courses/enrolled", "/api/v1/courses/*/enroll", "/api/v1/courses/sync-enrolled").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/courses/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/courses/**").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/courses/**").permitAll()
