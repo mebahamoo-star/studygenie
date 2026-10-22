@@ -1,33 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import {
-  BookOpen,
-  ChevronDown,
-  FileText,
-  HelpCircle,
-  Pencil,
-  Play,
-  Trash2,
-  Upload as UploadIcon,
-} from "lucide-react";
+import { Bell, Calendar, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Card } from "@/components/AppShell";
-import { Genie } from "@/components/Genie";
-import { ProgressRing } from "@/components/ProgressRing";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { clearExam, daysUntil, deleteExam, type Exam } from "@/lib/exam";
-import { chapters, flashcards, quiz } from "@/lib/mock";
-import { addUploads, fmtSize, loadUploads, type Upload } from "@/lib/uploads";
-import { syllabusService } from "@/lib/api/services";
-import { getUserCourses, getUserStoragePrefix, saveUserCourses } from "@/lib/courses-util";
+import { daysUntil, deleteExam, type Exam } from "@/lib/exam";
 
 export function ExamHub({
   exam,
@@ -37,75 +13,6 @@ export function ExamHub({
   onRemove?: () => void;
 }) {
   const days = Math.max(0, daysUntil(exam.date));
-  const [uploads, setUploads] = useState<Upload[]>([]);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setUploads(loadUploads(exam.course));
-  }, [exam.course]);
-
-  const totalChapters = chapters.length;
-  const reviewed = 0;
-  const pct = totalChapters > 0 ? Math.round((reviewed / totalChapters) * 100) : 0;
-
-  const advice =
-    days <= 3
-      ? "Final stretch! Do a practice quiz every day."
-      : days <= 10
-        ? "Focus on your weakest chapters this week."
-        : "Great timing — steady daily sessions will get you there.";
-
-  const onFiles = async (list: FileList | null) => {
-    if (!list?.length) return;
-    const fileList = Array.from(list);
-    const files = fileList.map((f) => ({
-      name: f.name,
-      size: f.size,
-      date: new Date().toISOString().slice(0, 10),
-      by: "You",
-    }));
-    setUploads(addUploads(exam.course, files));
-
-    const docFiles = fileList.filter((f) => 
-      f.name.match(/\.(pdf|pptx|ppt)$/i) || 
-      f.type === "application/pdf" ||
-      f.type.includes("presentation") ||
-      f.type.includes("powerpoint")
-    );
-
-    if (docFiles.length > 0) {
-      toast.info(`Sending ${docFiles.length} document${docFiles.length > 1 ? "s" : ""} (PDF/PowerPoint) to AI for analysis...`);
-      try {
-        let allNewTopics: any[] = [];
-        for (const file of docFiles) {
-          const parsed = await syllabusService.parseSyllabus(file, exam.course);
-          if (parsed?.topics && parsed.topics.length > 0) {
-            allNewTopics = [...allNewTopics, ...parsed.topics];
-          }
-        }
-        if (allNewTopics.length > 0) {
-          toast.success(`Materials analyzed by AI! ${allNewTopics.length} chapters/topics ready ✨`);
-          const newTopics = allNewTopics.map((t: any, idx: number) => ({
-            id: t.order_index || idx + 1,
-            name: t.chapter_title,
-            durationMinutes: Math.round((t.estimated_hours || 2) * 60),
-          }));
-          let currentCourses = getUserCourses();
-          currentCourses = currentCourses.map((c: any) =>
-            c.name.toLowerCase() === exam.course.toLowerCase() ? { ...c, status: "ready", topics: newTopics } : c
-          );
-          saveUserCourses(currentCourses);
-          const prefix = getUserStoragePrefix();
-          localStorage.setItem(`sg-${prefix}-active-course`, JSON.stringify({ name: exam.course, status: "ready", topics: newTopics }));
-        }
-      } catch (err: any) {
-        console.warn("AI parse error in ExamHub:", err);
-        toast.error("Could not process some documents. Please check file format.");
-      }
-    } else {
-      toast.success(`${files.length} file${files.length > 1 ? "s" : ""} uploaded · +50 points`);
-    }
-  };
 
   const handleRemoveExam = () => {
     if (exam.id) {
@@ -113,125 +20,102 @@ export function ExamHub({
     } else {
       deleteExam(exam.course);
     }
-    toast.success("Exam removed from dashboard");
+    toast.success("Exam reminder removed");
     onRemove?.();
   };
 
+  const formattedDate = new Date(exam.date + "T00:00:00").toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const reminderMessage =
+    days === 0
+      ? "Today is exam day! Take a deep breath and give it your best. 🌟"
+      : days === 1
+        ? "Exam is tomorrow! Review key points and get a good night's rest. 🌙"
+        : days <= 3
+          ? "Final stretch! Focus on high-yield topics and stay calm. 🎯"
+          : days <= 7
+            ? "1 week left! Steady daily review will keep you prepared. ⏱️"
+            : "Plenty of time ahead — pace yourself and stay consistent. 📚";
+
   return (
-    <Card className="lg:col-span-3">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold tracking-wider text-primary">UPCOMING EXAM</p>
-          <h2 className="text-2xl font-semibold">
-            {exam.course} — {exam.type}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {new Date(exam.date + "T00:00:00").toDateString()} · {exam.professor}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-gradient-magic px-4 py-2 text-center text-primary-foreground">
-            <div className="font-display text-3xl font-semibold leading-none">{days}</div>
-            <div className="text-[10px] font-bold opacity-80">DAYS LEFT</div>
-          </div>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/exam-checkin">
-              <Pencil className="h-3.5 w-3.5" /> Edit
-            </Link>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRemoveExam}
-            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            title="Delete this exam"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+    <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5 p-6 shadow-soft lg:col-span-3">
+      {/* Subtle background ambient blur */}
+      <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
 
-      <div className="grid gap-4 md:grid-cols-[auto_1fr]">
-        <div className="flex items-center gap-4 rounded-xl bg-muted/60 p-4">
-          <ProgressRing value={pct} size={110} stroke={10}>
-            <div className="font-display text-2xl font-semibold">{pct}%</div>
-          </ProgressRing>
-          <div className="text-sm">
-            <p className="font-semibold">Course progress</p>
-            <p className="text-muted-foreground">
-              {totalChapters > 0 ? `${reviewed}/${totalChapters} chapters` : "0 chapters studied"}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Left: Exam Details & Friendly Reminder */}
+        <div className="flex items-start gap-4">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <Calendar className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-primary">
+                <Bell className="h-3 w-3" /> Upcoming Exam Reminder
+              </span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                {exam.type}
+              </span>
+            </div>
+
+            <h2 className="mt-1.5 text-2xl font-bold tracking-tight text-foreground">
+              {exam.course}
+            </h2>
+
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1 font-medium text-foreground/80">
+                <Calendar className="h-3.5 w-3.5 text-primary" />
+                {formattedDate}
+              </span>
+              {exam.professor && (
+                <>
+                  <span>·</span>
+                  <span>Prof. {exam.professor}</span>
+                </>
+              )}
+            </div>
+
+            <p className="mt-3 flex items-center gap-1.5 text-sm font-medium text-foreground/80">
+              <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+              <span>{reminderMessage}</span>
             </p>
-            <p className="text-muted-foreground">{flashcards.length} flashcards</p>
-            <p className="text-muted-foreground">{quiz.length}-question quiz</p>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Button variant="magic" asChild>
-              <Link to="/pomodoro">
-                <Play /> Start session
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link to="/flashcards">
-                <BookOpen /> Flashcards ({flashcards.length})
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link to="/quiz">
-                <HelpCircle /> Practice quiz
-              </Link>
-            </Button>
+        {/* Right: Prominent Days-Left Countdown & Quiet Controls */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t pt-3 sm:border-0 sm:pt-0 sm:flex-col sm:items-end">
+          <div className="rounded-2xl bg-gradient-magic px-5 py-3 text-center text-primary-foreground shadow-glow">
+            <div className="font-display text-3xl font-extrabold leading-none">{days}</div>
+            <div className="mt-0.5 text-[10px] font-bold tracking-wider opacity-90 uppercase">
+              {days === 1 ? "Day Left" : "Days Left"}
+            </div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button variant="secondary" onClick={() => fileRef.current?.click()}>
-              <UploadIcon /> Upload course material
+
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Link to="/exam-checkin" title="Edit or add exams">
+                <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+              </Link>
             </Button>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept=".pdf,.ppt,.pptx,.doc,.docx,image/*"
-              className="hidden"
-              onChange={(e) => {
-                onFiles(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" disabled={!uploads.length} className="justify-between">
-                  <span className="flex items-center gap-2">
-                    <FileText />{" "}
-                    {uploads.length ? `Previous uploads (${uploads.length})` : "No uploads yet"}
-                  </span>
-                  <ChevronDown />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel>Materials for this course</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {uploads.map((u, i) => (
-                  <DropdownMenuItem
-                    key={i}
-                    className="flex-col items-start gap-0"
-                    onSelect={() => toast(`Opening ${u.name} (preview only)`)}
-                  >
-                    <span className="font-semibold">{u.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {fmtSize(u.size)} · {u.date} · by {u.by}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-accent p-3">
-            <Genie pose="mid" className="h-10 w-10 shrink-0" />
-            <p className="text-sm font-semibold">
-              {days} days left: {advice}
-            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRemoveExam}
+              className="h-8 w-8 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              title="Dismiss reminder"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
       </div>
