@@ -7,6 +7,7 @@ from app.services.study_kit_generator import generate_study_kit
 
 router = APIRouter()
 
+@router.post("/generate-study-kit")
 @router.post("/v1/generate-study-kit")
 async def generate_study_kit_endpoint(
     req: GenerateStudyKitRequest,

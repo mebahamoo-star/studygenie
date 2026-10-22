@@ -9,6 +9,7 @@ import com.studygenie.backend.exception.AiEngineUnavailableException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,9 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 @Component
 public class AiEngineClientImpl implements AiEngineClient {
@@ -32,7 +36,21 @@ public class AiEngineClientImpl implements AiEngineClient {
     @CircuitBreaker(name = "aiEngine")
     public ParseResponseData parseSyllabus(MultipartFile file, String courseName, String languageHint) {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", file.getResource());
+        try {
+            final String filename = (file.getOriginalFilename() != null && !file.getOriginalFilename().isBlank())
+                    ? file.getOriginalFilename()
+                    : "syllabus.pdf";
+            ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
+                @Override
+                public String getFilename() {
+                    return filename;
+                }
+            };
+            body.add("file", fileResource);
+        } catch (IOException e) {
+            body.add("file", file.getResource());
+        }
+
         if (courseName != null && !courseName.isBlank()) {
             body.add("course_name", courseName);
         }
@@ -46,7 +64,11 @@ public class AiEngineClientImpl implements AiEngineClient {
                 .body(body)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new AiEngineBadRequestException("Invalid request to AI Engine");
+                    String error = "";
+                    try {
+                        error = new String(res.getBody().readAllBytes(), StandardCharsets.UTF_8);
+                    } catch (Exception ignored) {}
+                    throw new AiEngineBadRequestException("Invalid request to AI Engine: " + error);
                 })
                 .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
                     throw new AiEngineUnavailableException("AI Engine is unavailable");
@@ -64,7 +86,11 @@ public class AiEngineClientImpl implements AiEngineClient {
                 .body(request)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new AiEngineBadRequestException("Invalid request to AI Engine");
+                    String error = "";
+                    try {
+                        error = new String(res.getBody().readAllBytes(), StandardCharsets.UTF_8);
+                    } catch (Exception ignored) {}
+                    throw new AiEngineBadRequestException("Invalid request to AI Engine: " + error);
                 })
                 .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
                     throw new AiEngineUnavailableException("AI Engine is unavailable");
@@ -82,7 +108,11 @@ public class AiEngineClientImpl implements AiEngineClient {
                 .body(request)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new AiEngineBadRequestException("Invalid request to AI Engine");
+                    String error = "";
+                    try {
+                        error = new String(res.getBody().readAllBytes(), StandardCharsets.UTF_8);
+                    } catch (Exception ignored) {}
+                    throw new AiEngineBadRequestException("Invalid request to AI Engine: " + error);
                 })
                 .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
                     throw new AiEngineUnavailableException("AI Engine is unavailable");
@@ -105,7 +135,6 @@ public class AiEngineClientImpl implements AiEngineClient {
         } catch (AiEngineException ex) {
             throw ex;
         } catch (Exception ex) {
-            // Could be a connection timeout or read timeout mapping
             if (ex.getMessage() != null && ex.getMessage().toLowerCase().contains("timeout")) {
                 throw new AiEngineTimeoutException("Timeout communicating with AI Engine");
             }

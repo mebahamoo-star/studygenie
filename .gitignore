@@ -71,3 +71,10 @@ Thumbs.db
 logs/
 .venv/
 *.pyc
+
+.venv*/
+*.zip
+scratch/
+.output/
+.wrangler/
+frontend/.env

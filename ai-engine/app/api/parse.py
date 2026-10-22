@@ -1,14 +1,15 @@
+from fastapi import APIRouter, UploadFile, File, Form, Depends, Header, Request
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-
-from app.errors import make_envelope
 from app.security import verify_internal_token
+from app.errors import AppError, make_envelope
+from app.schemas.parse import ParseResponseData
 from app.services.pdf_extractor import extract_pdf_content
 from app.services.syllabus_parser import parse_syllabus
 
 router = APIRouter()
 
-@router.post("/v1/parse-syllabus")
+@router.post("/v1/parse-syllabus", response_model=dict)
+@router.post("/parse-syllabus", response_model=dict)
 async def parse_syllabus_endpoint(
     request: Request,
     file: UploadFile = File(...),
@@ -17,8 +18,9 @@ async def parse_syllabus_endpoint(
     token: str = Depends(verify_internal_token)
 ):
     file_bytes = await file.read()
+    filename = file.filename or ""
     
-    extracted_text, pages, extraction_method = extract_pdf_content(file_bytes)
+    extracted_text, pages, extraction_method = extract_pdf_content(file_bytes, filename=filename)
     
     result_data = await parse_syllabus(
         file_bytes=file_bytes,
@@ -26,7 +28,8 @@ async def parse_syllabus_endpoint(
         language_hint=language_hint,
         extracted_text=extracted_text,
         pages=pages,
-        extraction_method=extraction_method
+        extraction_method=extraction_method,
+        filename=filename
     )
     
     # Fill request ID

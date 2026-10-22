@@ -19,6 +19,7 @@ public class AiEngineConfig {
     @Bean
     public RestClient aiEngineRestClient(AiEngineProperties properties, RestClient.Builder builder) {
         HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(properties.getConnectTimeout())
                 .build();
 

@@ -10,5 +10,6 @@ public record TopicItem(
         String chapterTitle,
         double estimatedHours,
         int importance,
-        List<String> subtopics
+        List<String> subtopics,
+        String contentExcerpt
 ) {}

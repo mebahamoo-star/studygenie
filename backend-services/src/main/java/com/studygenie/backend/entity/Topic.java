@@ -39,6 +39,9 @@ public class Topic {
     @Column(name = "estimated_hours", nullable = false)
     private Double estimatedHours;
 
+    @Column(name = "content_excerpt", columnDefinition = "LONGTEXT")
+    private String contentExcerpt;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

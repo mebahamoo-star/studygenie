@@ -27,7 +27,7 @@ def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand:
         back = fc.back.strip()
         if not front or not back:
             continue
-        if len(front) > 300 or len(back) > 800:
+        if len(front) > 600 or len(back) > 2000:
             continue
         if front.lower() in seen_fronts:
             continue
@@ -60,7 +60,7 @@ def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand:
         else:
             continue
             
-        if len(q.explanation) > 500:
+        if len(q.explanation) > 1200:
             continue
             
         seen_questions.add(q_text.lower())

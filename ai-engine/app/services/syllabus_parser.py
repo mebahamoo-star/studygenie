@@ -8,20 +8,30 @@ from app.schemas.common import ResponseMeta, UsageMeta
 from app.schemas.parse import ParseResponseData, ParseResult, TopicItem
 
 
-async def parse_syllabus(file_bytes: bytes, course_name: str | None, language_hint: str, extracted_text: str, pages: int, extraction_method: str) -> ParseResponseData:
+async def parse_syllabus(
+    file_bytes: bytes,
+    course_name: str | None,
+    language_hint: str,
+    extracted_text: str,
+    pages: int,
+    extraction_method: str,
+    filename: str = ""
+) -> ParseResponseData:
     provider = get_provider()
     
     warnings = []
     
     input_sha256 = hashlib.sha256(file_bytes).hexdigest()
     
-    if extraction_method == "text":
+    if extraction_method in ("text", "pptx_text", "ppt_text"):
         if len(extracted_text) > settings.max_input_chars:
             extracted_text = extracted_text[:settings.max_input_chars]
             warnings.append(f"Text truncated to {settings.max_input_chars} characters.")
         
         user_prompt = USER_PROMPT_TEMPLATE.format(document_text=extracted_text)
         
+        if filename:
+            user_prompt += f"\nHint: Document filename is '{filename}'. If this document represents a specific lecture or chapter deck (e.g. Chapter 2, Lecture 3), extract and name the topics accordingly."
         if course_name:
             user_prompt += f"\nHint: Course name is {course_name}"
         if language_hint and language_hint != "auto":
@@ -41,6 +51,8 @@ async def parse_syllabus(file_bytes: bytes, course_name: str | None, language_hi
         
     else:
         user_prompt = "Extract topics from this syllabus PDF."
+        if filename:
+            user_prompt += f" Document filename is '{filename}'. If this document represents a specific chapter or lecture (e.g. Chapter 2, Lecture 3), extract and name the chapter topics accordingly."
         if course_name:
             user_prompt += f" Course name is {course_name}."
             
@@ -87,13 +99,16 @@ async def parse_syllabus(file_bytes: bytes, course_name: str | None, language_hi
             if s_str:
                 subs.append(s_str)
         subs = subs[:12]
+
+        content_excerpt = (t.content_excerpt or "").strip()[:15000]
         
         normalized_topics.append(TopicItem(
             order_index=0, # will set later
             chapter_title=title,
             estimated_hours=hours,
             importance=importance,
-            subtopics=subs
+            subtopics=subs,
+            content_excerpt=content_excerpt
         ))
         
     normalized_topics = normalized_topics[:40]

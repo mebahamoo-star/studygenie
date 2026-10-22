@@ -12,6 +12,7 @@ import com.studygenie.backend.entity.Course;
 import com.studygenie.backend.entity.Student;
 import com.studygenie.backend.entity.StudyPlan;
 import com.studygenie.backend.entity.PlanTask;
+import com.studygenie.backend.entity.Syllabus;
 import com.studygenie.backend.entity.Topic;
 import com.studygenie.backend.entity.enums.CourseStatus;
 import com.studygenie.backend.exception.DuplicateResourceException;
@@ -22,6 +23,7 @@ import com.studygenie.backend.repository.CourseRepository;
 import com.studygenie.backend.repository.StudentRepository;
 import com.studygenie.backend.repository.StudyPlanRepository;
 import com.studygenie.backend.repository.PlanTaskRepository;
+import com.studygenie.backend.repository.SyllabusRepository;
 import com.studygenie.backend.repository.TopicRepository;
 import com.studygenie.backend.service.ai.StudyPlanService;
 import org.slf4j.Logger;
@@ -31,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -47,12 +50,15 @@ public class CourseService {
     private final PlanTaskRepository planTaskRepository;
     private final StudyPlanService studyPlanService;
     private final TopicRepository topicRepository;
+    private final SyllabusRepository syllabusRepository;
 
     public CourseService(CourseRepository courseRepository, CollegeRepository collegeRepository, 
                          StudentRepository studentRepository, StudyPlanRepository studyPlanRepository, 
                          PlanTaskRepository planTaskRepository,
-                         StudyPlanService studyPlanService, TopicRepository topicRepository) {
+                         StudyPlanService studyPlanService, TopicRepository topicRepository,
+                         SyllabusRepository syllabusRepository) {
         this.topicRepository = topicRepository;
+        this.syllabusRepository = syllabusRepository;
         this.courseRepository = courseRepository;
         this.collegeRepository = collegeRepository;
         this.studentRepository = studentRepository;
@@ -62,12 +68,30 @@ public class CourseService {
     }
 
     @Transactional(readOnly = true)
+    public List<CourseDto> getAllCourses() {
+        return courseRepository.findAll().stream()
+                .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege().getId(), c.getStatus()))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public List<CourseDto> getCoursesByCollege(Long collegeId) {
-        if (!collegeRepository.existsById(collegeId)) {
-            throw new ResourceNotFoundException("College not found");
+        if (collegeId == null || !collegeRepository.existsById(collegeId)) {
+            return getAllCourses();
         }
         return courseRepository.findByCollegeId(collegeId).stream()
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege().getId(), c.getStatus()))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseDto> getMyCourses(Long studentId) {
+        List<StudyPlan> plans = studyPlanRepository.findByStudentId(studentId);
+        return plans.stream()
+                .map(StudyPlan::getCourse)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
     }
 
@@ -90,18 +114,121 @@ public class CourseService {
         }
         return topicRepository.findBySyllabusId(c.getSyllabus().getId()).stream()
                 .map(t -> new TopicDto(
+                        t.getId(),
                         t.getChapterTitle(),
                         t.getOrderIndex(),
-                        t.getEstimatedHours()))
+                        t.getEstimatedHours(),
+                        t.getContentExcerpt()))
                 .collect(Collectors.toList());
     }
 
     @Transactional
-    public CourseDto createCourse(Long collegeId, String name) {
-        College college = collegeRepository.findById(collegeId)
-                .orElseThrow(() -> new ResourceNotFoundException("College not found"));
+    public TopicDto addTopic(Long courseId, String chapterTitle, Double estimatedHours) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
 
-        List<Course> existingCourses = courseRepository.findByCollegeId(collegeId);
+        Syllabus syllabus = course.getSyllabus();
+        if (syllabus == null) {
+            syllabus = syllabusRepository.findByCourseId(course.getId()).orElse(null);
+            if (syllabus == null) {
+                syllabus = Syllabus.builder()
+                        .course(course)
+                        .createdAt(LocalDateTime.now())
+                        .build();
+                syllabus = syllabusRepository.save(syllabus);
+            }
+            course.setSyllabus(syllabus);
+        }
+
+        List<Topic> existingTopics = topicRepository.findBySyllabusId(syllabus.getId());
+        int nextOrder = existingTopics.stream()
+                .mapToInt(Topic::getOrderIndex)
+                .max()
+                .orElse(0) + 1;
+
+        double hrs = (estimatedHours != null && estimatedHours >= 0.5) ? estimatedHours : 2.0;
+
+        Topic topic = Topic.builder()
+                .syllabus(syllabus)
+                .chapterTitle(chapterTitle.trim())
+                .orderIndex(nextOrder)
+                .estimatedHours(hrs)
+                .build();
+        topic = topicRepository.save(topic);
+
+        course.setStatus(CourseStatus.READY);
+        courseRepository.save(course);
+
+        return new TopicDto(topic.getId(), topic.getChapterTitle(), topic.getOrderIndex(), topic.getEstimatedHours());
+    }
+
+    @Transactional
+    public void deleteTopic(Long courseId, Long topicId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
+
+        Topic topic = topicRepository.findById(topicId)
+                .orElseThrow(() -> new ResourceNotFoundException("Topic not found"));
+
+        if (!topic.getSyllabus().getCourse().getId().equals(course.getId())) {
+            throw new IllegalArgumentException("Topic does not belong to this course");
+        }
+
+        topicRepository.delete(topic);
+
+        List<Topic> remaining = topicRepository.findBySyllabusId(topic.getSyllabus().getId());
+        if (remaining.isEmpty()) {
+            course.setStatus(CourseStatus.NO_SYLLABUS);
+            courseRepository.save(course);
+        }
+    }
+
+    @Transactional
+    public void deleteCourse(Long courseId) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
+
+        // Delete associated study plans and their tasks
+        List<StudyPlan> plans = studyPlanRepository.findByCourseId(courseId);
+        for (StudyPlan plan : plans) {
+            List<PlanTask> tasks = planTaskRepository.findByStudyPlanId(plan.getId());
+            if (!tasks.isEmpty()) {
+                planTaskRepository.deleteAll(tasks);
+            }
+            studyPlanRepository.delete(plan);
+        }
+
+        // Delete associated syllabus and its topics
+        syllabusRepository.findByCourseId(courseId).ifPresent(syllabus -> {
+            List<Topic> topics = topicRepository.findBySyllabusId(syllabus.getId());
+            if (!topics.isEmpty()) {
+                topicRepository.deleteAll(topics);
+            }
+            syllabusRepository.delete(syllabus);
+        });
+
+        // Delete course
+        courseRepository.delete(course);
+        log.info("Deleted course '{}' (ID: {}) successfully", course.getName(), courseId);
+    }
+
+    @Transactional
+    public CourseDto createCourse(Long collegeId, String name) {
+        College college = null;
+        if (collegeId != null) {
+            college = collegeRepository.findById(collegeId).orElse(null);
+        }
+        if (college == null) {
+            college = collegeRepository.findById(1L).orElseGet(() -> {
+                List<College> all = collegeRepository.findAll();
+                return all.isEmpty() ? null : all.get(0);
+            });
+        }
+        if (college == null) {
+            throw new ResourceNotFoundException("College not found");
+        }
+
+        List<Course> existingCourses = courseRepository.findByCollegeId(college.getId());
         for (Course ec : existingCourses) {
             if (ec.getName().equalsIgnoreCase(name.trim())) {
                 return new CourseDto(ec.getId(), ec.getName(), ec.getCollege().getId(), ec.getStatus());
@@ -118,7 +245,7 @@ public class CourseService {
             course = courseRepository.save(course);
             courseRepository.flush(); 
         } catch (DataIntegrityViolationException e) {
-            for (Course ec : courseRepository.findByCollegeId(collegeId)) {
+            for (Course ec : courseRepository.findByCollegeId(college.getId())) {
                 if (ec.getName().equalsIgnoreCase(name.trim())) {
                     return new CourseDto(ec.getId(), ec.getName(), ec.getCollege().getId(), ec.getStatus());
                 }
@@ -215,7 +342,20 @@ public class CourseService {
 
         List<PlanTask> planTasks = planTaskRepository.findByStudyPlanId(studyPlan.getId());
         List<Task> tasks = planTasks.stream()
-                .map(pt -> new Task(pt.getScheduledDate(), String.valueOf(pt.getTopic().getId()), "LEARN", (int) (pt.getTopic().getEstimatedHours() * 60)))
+                .map(pt -> {
+                    String title = (pt.getTopic() != null && pt.getTopic().getChapterTitle() != null)
+                            ? pt.getTopic().getChapterTitle()
+                            : "Topic " + (pt.getTopic() != null ? pt.getTopic().getId() : "1");
+                    return new Task(
+                            pt.getScheduledDate(),
+                            String.valueOf(pt.getTopic() != null ? pt.getTopic().getId() : 1),
+                            title,
+                            "STUDY",
+                            (int) ((pt.getTopic() != null ? pt.getTopic().getEstimatedHours() : 2.0) * 60),
+                            "Study " + title,
+                            List.of()
+                    );
+                })
                 .collect(Collectors.toList());
 
         PlanSummary summary = new PlanSummary("NORMAL", 1, 0, 0, tasks.size(), 0, true, List.of());

@@ -26,10 +26,11 @@ public class SyllabusController {
     @PostMapping(value = "/parse", consumes = "multipart/form-data")
     public ResponseEntity<ApiResponse<ParseResponseData>> parseSyllabus(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "course_id", required = false) Long courseId,
             @RequestParam(value = "course_name", required = false) String courseName,
             @RequestParam(value = "language_hint", defaultValue = "auto") String languageHint) {
 
-        ParseResponseData data = syllabusService.parseAndSave(file, courseName, languageHint);
+        ParseResponseData data = syllabusService.parseAndSave(file, courseId, courseName, languageHint);
         return ResponseEntity.ok(ApiResponse.ok("Syllabus parsed successfully", data));
     }
 }

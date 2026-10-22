@@ -1,4 +1,3 @@
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,8 +9,8 @@ class Settings(BaseSettings):
     llm_provider: str = "gemini"
     gemini_api_key: str | None = None
     
-    llm_model_parse: str = "gemini-2.5-flash"
-    llm_model_study_kit: str = "gemini-2.5-flash-lite"
+    llm_model_parse: str = "gemini-3.5-flash-lite"
+    llm_model_study_kit: str = "gemini-3.5-flash-lite"
     
     llm_thinking_budget: int | None = None
     
