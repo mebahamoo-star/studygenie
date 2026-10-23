@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Card } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { daysUntil, deleteExam, type Exam } from "@/lib/exam";
+import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
 
 export function ExamHub({
   exam,
@@ -35,7 +36,6 @@ export function ExamHub({
       : urgencyStatus === "orange"
         ? "bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/25"
         : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/25";
-
 
   const handleRemoveExam = () => {
     if (exam.id) {
@@ -121,7 +121,9 @@ export function ExamHub({
         {/* Right: Prominent Days-Left Countdown & Quiet Controls */}
         <div className="flex shrink-0 items-center justify-between gap-3 border-t pt-3 sm:border-0 sm:pt-0 sm:flex-col sm:items-end">
           <div className={cn("rounded-2xl px-5 py-3 text-center text-white shadow-glow", hubCountdownBg)}>
-            <div className="font-display text-3xl font-extrabold leading-none">{days}</div>
+            <div className="font-display text-3xl font-extrabold leading-none">
+              <CountingNumber key={exam.id || exam.course} number={days} fromNumber={0} className="tabular-nums" />
+            </div>
             <div className="mt-0.5 text-[10px] font-bold tracking-wider opacity-90 uppercase">
               {days === 1 ? "Day Left" : "Days Left"}
             </div>

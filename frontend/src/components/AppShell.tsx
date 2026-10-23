@@ -21,6 +21,7 @@ import { useApp } from "@/lib/app-state";
 import { fetchAndSyncExams, loadExamsForUser, isCourseEnrolled, type Exam } from "@/lib/exam";
 import { hasUserEnrolledCourses, getUserCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
+import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
 import {
   Sidebar,
   SidebarContent,
@@ -407,11 +408,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             )}
             <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
-              <Flame className="h-4 w-4 text-gold" /> {streak}
+              <Flame className="h-4 w-4 text-gold" /> <CountingNumber number={streak} fromNumber={0} className="tabular-nums" />
               <span className="hidden sm:inline font-normal text-muted-foreground">day streak</span>
             </div>
             <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
-              <Star className="h-4 w-4 fill-gold text-gold" /> {points.toLocaleString()}
+              <Star className="h-4 w-4 fill-gold text-gold" /> <CountingNumber number={points} fromNumber={0} className="tabular-nums" thousandSeparator="," />
             </div>
             <ThemeToggle />
             <Link

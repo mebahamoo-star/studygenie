@@ -30,7 +30,8 @@
     "exactOptionalPropertyTypes": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@animate-ui/react/primitives/texts/counting-number": ["./src/components/animate-ui/texts/counting-number.tsx"]
     }
   }
 }

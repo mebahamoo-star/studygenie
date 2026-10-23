@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { daysUntil, fetchAndSyncExams, loadExamsForUser, saveExam, type Exam } from "@/lib/exam";
 import { ExamHub } from "@/components/ExamHub";
+import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
 import { Card } from "@/components/AppShell";
 import { Genie, type GeniePose } from "@/components/Genie";
 import { ProgressRing } from "@/components/ProgressRing";
@@ -1258,7 +1259,7 @@ function Dashboard() {
                           : "bg-muted text-muted-foreground"
                       )}
                     >
-                      {days > 0 ? `${days}d` : "Today"}
+                      {days > 0 ? (<><CountingNumber number={days} fromNumber={0} className="tabular-nums" />d</>) : "Today"}
                     </span>
                   </button>
                 );
@@ -1368,11 +1369,11 @@ function Dashboard() {
         <div className="flex w-full items-center justify-between border-t pt-2.5 text-xs">
           <div className="flex items-center gap-1 font-semibold text-foreground">
             <span>🔥</span>
-            <span>{user?.streakCount ?? 3}d streak</span>
+            <span><CountingNumber number={user?.streakCount ?? 3} fromNumber={0} className="tabular-nums" />d streak</span>
           </div>
           <div className="flex items-center gap-1 font-display font-semibold text-gold">
             <span>⭐</span>
-            <span>{user?.geniePoints ?? 340} pts</span>
+            <span><CountingNumber number={user?.geniePoints ?? 340} fromNumber={0} className="tabular-nums" /> pts</span>
           </div>
         </div>
       </Card>
@@ -1779,7 +1780,7 @@ function Dashboard() {
                         )}
                       >
                         <Clock className="h-3 w-3" />
-                        {days > 0 ? `${days}d left` : "Today"}
+                        {days > 0 ? (<><CountingNumber number={days} fromNumber={0} className="tabular-nums" />d left</>) : "Today"}
                       </span>
                     </div>
 
