@@ -22,31 +22,45 @@ class FakeProvider(Provider):
         # It's better to detect the schema type based on its name.
         schema_name = schema.__name__
         
-        if schema_name == "ParseResult":
-            # derived from user text if possible, else defaults
+        if schema_name in ("CourseAnalysisResult", "ParseResult"):
             topics = []
             if "FORCE_ERROR: zero_topics" not in user:
                 topics = [
                     {
-                        "order_index": 1,
+                        "categoryTitle": "Introduction to AI derived from input",
                         "chapter_title": "Introduction to AI derived from input",
+                        "order_index": 1,
                         "estimated_hours": 2.0,
                         "importance": 3,
-                        "subtopics": ["Basics", "History"]
+                        "subtopics": [
+                            {"title": "Basics", "summary": "Fundamental concepts and definitions."},
+                            {"title": "History", "summary": "Evolution and key milestones in AI."}
+                        ]
                     },
                     {
-                        "order_index": 2,
+                        "categoryTitle": "Advanced Topics",
                         "chapter_title": "Advanced Topics",
+                        "order_index": 2,
                         "estimated_hours": 4.5,
                         "importance": 5,
-                        "subtopics": ["Deep Learning", "Transformers"]
+                        "subtopics": [
+                            {"title": "Deep Learning", "summary": "Neural networks and gradient descent."},
+                            {"title": "Transformers", "summary": "Self-attention and sequence modeling."}
+                        ]
                     }
                 ]
-            
             data = {
                 "course_title": "Fake Course",
+                "courseTitle": "Fake Course",
                 "language": "en",
-                "topics": topics
+                "topics": topics,
+                "flashcards": [
+                    {
+                        "question": "What is AI?",
+                        "answer": "Artificial Intelligence",
+                        "topicTag": "Introduction to AI derived from input"
+                    }
+                ]
             }
         elif schema_name == "StudyKitResult":
             data = {
@@ -77,8 +91,8 @@ class FakeProvider(Provider):
         usage = {"prompt_tokens": 100, "output_tokens": 50}
         return validated, usage, model
 
-    async def generate_json(self, system: str, user: str, model: str, temperature: float, max_output_tokens: int, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, int], str]:
+    async def generate_json(self, system: str, user: str, model: str, temperature: float, max_output_tokens: int, schema: type[BaseModel], response_schema: dict | None = None, **kwargs) -> tuple[BaseModel, dict[str, int], str]:
         return await self._execute(user, model, schema)
 
-    async def generate_json_from_pdf(self, system: str, user: str, pdf_bytes: bytes, model: str, temperature: float, max_output_tokens: int, schema: type[BaseModel]) -> tuple[BaseModel, dict[str, int], str]:
+    async def generate_json_from_pdf(self, system: str, user: str, pdf_bytes: bytes, model: str, temperature: float, max_output_tokens: int, schema: type[BaseModel], response_schema: dict | None = None, **kwargs) -> tuple[BaseModel, dict[str, int], str]:
         return await self._execute(user, model, schema)

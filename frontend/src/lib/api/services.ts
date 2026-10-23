@@ -590,6 +590,21 @@ export const browseService = {
 
 
 
+  async generateOrUpdatePlan(
+    courseId: number | string,
+    params: { examDate: string; dailyHours: number; mode: "normal" | "survival" }
+  ): Promise<PlanResponseData> {
+    const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan`, {
+      method: "POST",
+      body: JSON.stringify({
+        examDate: params.examDate,
+        dailyHours: params.dailyHours,
+        mode: params.mode,
+      }),
+    });
+    return res.data!;
+  },
+
   async getCoursePlan(courseId: number | string): Promise<PlanResponseData> {
 
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan`);

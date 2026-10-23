@@ -1,14 +1,17 @@
 package com.studygenie.backend.service.port;
 
+import com.studygenie.backend.dto.ai.FlashcardDto;
 import com.studygenie.backend.dto.ai.ParseResponseData;
 import com.studygenie.backend.dto.ai.TopicItem;
 import com.studygenie.backend.entity.College;
 import com.studygenie.backend.entity.Course;
+import com.studygenie.backend.entity.Flashcard;
 import com.studygenie.backend.entity.Syllabus;
 import com.studygenie.backend.entity.Topic;
 import com.studygenie.backend.entity.enums.CourseStatus;
 import com.studygenie.backend.repository.CollegeRepository;
 import com.studygenie.backend.repository.CourseRepository;
+import com.studygenie.backend.repository.FlashcardRepository;
 import com.studygenie.backend.repository.SyllabusRepository;
 import com.studygenie.backend.repository.TopicRepository;
 import org.slf4j.Logger;
@@ -18,6 +21,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -32,15 +36,18 @@ public class JpaSyllabusResultStore implements SyllabusResultStore {
     private final CollegeRepository collegeRepository;
     private final SyllabusRepository syllabusRepository;
     private final TopicRepository topicRepository;
+    private final FlashcardRepository flashcardRepository;
 
     public JpaSyllabusResultStore(CourseRepository courseRepository,
                                   CollegeRepository collegeRepository,
                                   SyllabusRepository syllabusRepository,
-                                  TopicRepository topicRepository) {
+                                  TopicRepository topicRepository,
+                                  FlashcardRepository flashcardRepository) {
         this.courseRepository = courseRepository;
         this.collegeRepository = collegeRepository;
         this.syllabusRepository = syllabusRepository;
         this.topicRepository = topicRepository;
+        this.flashcardRepository = flashcardRepository;
     }
 
     @Override
@@ -68,7 +75,7 @@ public class JpaSyllabusResultStore implements SyllabusResultStore {
             if (college != null) {
                 String name = (courseName != null && !courseName.isBlank())
                         ? courseName.trim()
-                        : (data.courseTitle() != null ? data.courseTitle() : "My Course");
+                        : data.getEffectiveCourseTitle();
                 course = Course.builder()
                         .name(name)
                         .college(college)
@@ -107,11 +114,14 @@ public class JpaSyllabusResultStore implements SyllabusResultStore {
 
         // Save new topics, strictly deduplicating identical chapters
         int addedCount = 0;
+        List<Topic> savedTopics = new ArrayList<>();
+
         for (TopicItem item : data.topics()) {
-            if (item.chapterTitle() == null || item.chapterTitle().isBlank()) {
+            String title = item.getEffectiveTitle();
+            if (title == null || title.isBlank()) {
                 continue;
             }
-            String rawTitle = item.chapterTitle().trim().replaceAll("(?i)\\s*\\(part\\s*\\d+\\)$", "").trim();
+            String rawTitle = title.trim().replaceAll("(?i)\\s*\\(part\\s*\\d+\\)$", "").trim();
             String normKey = normalizeChapterTitle(rawTitle);
 
             // If a chapter with the same concept/title already exists in the syllabus, DO NOT duplicate!
@@ -128,9 +138,36 @@ public class JpaSyllabusResultStore implements SyllabusResultStore {
                     .estimatedHours(hrs)
                     .contentExcerpt(item.contentExcerpt())
                     .build();
-            topicRepository.save(topic);
+            Topic saved = topicRepository.save(topic);
+            savedTopics.add(saved);
             existingTitles.add(normKey);
             addedCount++;
+        }
+
+        // Save high-yield flashcards returned from the structured Gemini call (strictly capped at 10 max)
+        List<Topic> allAvailableTopics = new ArrayList<>(existingTopics);
+        allAvailableTopics.addAll(savedTopics);
+
+        if (data.flashcards() != null && !data.flashcards().isEmpty() && !allAvailableTopics.isEmpty()) {
+            int cardsAdded = 0;
+            List<FlashcardDto> cardsToSave = data.flashcards().stream()
+                    .filter(fc -> fc.question() != null && !fc.question().isBlank())
+                    .limit(10)
+                    .toList();
+
+            for (FlashcardDto fc : cardsToSave) {
+                Topic matchedTopic = findMatchingTopic(allAvailableTopics, fc.topicTag());
+                if (matchedTopic == null) continue;
+                String answer = (fc.answer() != null && !fc.answer().isBlank()) ? fc.answer().trim() : "Key concept";
+                Flashcard card = Flashcard.builder()
+                        .topic(matchedTopic)
+                        .frontText(fc.question().trim())
+                        .backText(answer)
+                        .build();
+                flashcardRepository.save(card);
+                cardsAdded++;
+            }
+            log.info("Successfully persisted {} high-yield study flashcards for course '{}'", cardsAdded, course.getName());
         }
 
         // Update Course Status to READY
@@ -138,6 +175,20 @@ public class JpaSyllabusResultStore implements SyllabusResultStore {
         courseRepository.save(course);
         log.info("Successfully persisted {} new topics (total: {}) for course '{}' (ID: {}). Status set to READY.",
                 addedCount, existingTopics.size() + addedCount, course.getName(), course.getId());
+    }
+
+    private Topic findMatchingTopic(List<Topic> topics, String topicTag) {
+        if (topics.isEmpty()) return null;
+        if (topicTag != null && !topicTag.isBlank()) {
+            String normTag = normalizeChapterTitle(topicTag);
+            for (Topic t : topics) {
+                if (normalizeChapterTitle(t.getChapterTitle()).contains(normTag) ||
+                        normTag.contains(normalizeChapterTitle(t.getChapterTitle()))) {
+                    return t;
+                }
+            }
+        }
+        return topics.get(0);
     }
 
     private String normalizeChapterTitle(String title) {

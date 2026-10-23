@@ -96,6 +96,21 @@ function Plan() {
         enrolled = getUserCourses();
       }
       setCourses(enrolled);
+
+      // Auto-select active course if redirected from course configuration
+      const activeCourseRaw = localStorage.getItem("sg-active-course");
+      if (activeCourseRaw) {
+        try {
+          const act = JSON.parse(activeCourseRaw);
+          const matched = enrolled.find((e) => String(e.id) === String(act.id)) || act;
+          handleSelectSubject(matched);
+          return;
+        } catch {}
+      }
+
+      if (enrolled.length > 0) {
+        handleSelectSubject(enrolled[0]);
+      }
     };
 
     loadSubjects();

@@ -563,6 +563,94 @@ public class CourseService {
         return data;
     }
 
+    @Transactional
+    public PlanResponseData regeneratePlan(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode) {
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
+
+        if (course.getStatus() == CourseStatus.NO_SYLLABUS || course.getSyllabus() == null) {
+            throw new ResourceNotFoundException("This course has no syllabus yet.", "NO_SYLLABUS");
+        }
+        if (course.getStatus() != CourseStatus.READY) {
+            throw new ResourceNotReadyException("Course syllabus is not ready yet.", "SYLLABUS_NOT_READY");
+        }
+
+        Student student = studentRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
+
+        // Fetch existing StudyPlan or create new one
+        StudyPlan studyPlan = studyPlanRepository.findByStudentIdAndCourseId(userId, courseId)
+                .orElseGet(() -> StudyPlan.builder()
+                        .student(student)
+                        .course(course)
+                        .examDate(examDate)
+                        .build());
+
+        studyPlan.setExamDate(examDate);
+        studyPlan = studyPlanRepository.save(studyPlan);
+
+        // Delete previous plan tasks for this plan so we regenerate fresh with all latest chapters
+        List<PlanTask> oldTasks = planTaskRepository.findByStudyPlanId(studyPlan.getId());
+        if (!oldTasks.isEmpty()) {
+            planTaskRepository.deleteAll(oldTasks);
+        }
+
+        // Fetch all current syllabus topics (including newly added chapters!)
+        List<TopicPlanInput> topics = topicRepository.findBySyllabusId(course.getSyllabus().getId()).stream()
+                .map(t -> new TopicPlanInput(
+                        String.valueOf(t.getId()),
+                        t.getChapterTitle(),
+                        t.getOrderIndex(),
+                        t.getEstimatedHours(),
+                        1
+                ))
+                .collect(Collectors.toList());
+
+        GeneratePlanRequest request = new GeneratePlanRequest(
+                LocalDate.now(),
+                examDate,
+                topics,
+                dailyHours != null ? dailyHours : 2.0,
+                List.of(7),
+                mode != null ? mode : "NORMAL",
+                3,
+                0.2
+        );
+
+        PlanResponseData data = studyPlanService.generatePlan(request);
+
+        List<PlanTask> planTasks = new ArrayList<>();
+        if (data.tasks() != null) {
+            for (Task task : data.tasks()) {
+                try {
+                    Long topicId = Long.valueOf(task.topicRef());
+                    Topic topic = topicRepository.findById(topicId).orElse(null);
+                    if (topic == null) {
+                        log.warn("Topic with ID {} not found. Skipping task.", topicId);
+                        continue;
+                    }
+                    PlanTask planTask = PlanTask.builder()
+                            .studyPlan(studyPlan)
+                            .topic(topic)
+                            .scheduledDate(task.date())
+                            .isCompleted(false)
+                            .build();
+                    planTasks.add(planTask);
+                } catch (NumberFormatException e) {
+                    log.warn("Invalid topic ref: {}. Skipping task.", task.topicRef());
+                }
+            }
+            if (!planTasks.isEmpty()) {
+                planTaskRepository.saveAll(planTasks);
+            }
+        }
+
+        log.info("Successfully regenerated study plan for course '{}' (ID: {}) with {} tasks",
+                course.getName(), course.getId(), planTasks.size());
+
+        return data;
+    }
+
     @Transactional(readOnly = true)
     public PlanResponseData getPlan(Long courseId, Long userId) {
         StudyPlan studyPlan = studyPlanRepository.findByStudentIdAndCourseId(userId, courseId)

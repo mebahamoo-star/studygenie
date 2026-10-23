@@ -304,6 +304,21 @@ public class CourseController {
 
 
 
+        @Operation(summary = "Generate or regenerate study plan for a course")
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/courses/{courseId}/plan")
+    public ResponseEntity<ApiResponse<PlanResponseData>> generateOrUpdatePlan(
+            @PathVariable Long courseId,
+            @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails,
+            @Valid @RequestBody JoinCourseRequest body) {
+        LocalDate examDate = body.examDate();
+        Double dailyHours = body.dailyHours();
+        String mode = body.mode();
+        Long userId = userDetails.id();
+        PlanResponseData data = courseService.regeneratePlan(courseId, userId, examDate, dailyHours, mode);
+        return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
+    }
+
     @Operation(summary = "Join a course and generate a study plan")
 
     @SecurityRequirement(name = "bearerAuth")

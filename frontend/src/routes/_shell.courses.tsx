@@ -9,14 +9,14 @@ import { MagicLoader } from "@/components/MagicLoader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { pageHead } from "@/lib/head";
 import { browseService, syllabusService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { deduplicateTopics, getUserCourses, saveUserCourses } from "@/lib/courses-util";
+import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits } from "@/lib/courses-util";
 import { clearExam, deleteExam, isCourseEnrolled, loadExam, loadExams } from "@/lib/exam";
 import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import type { Course, CourseStatus, Topic } from "@/lib/api/types";
@@ -572,20 +572,55 @@ function EmptyUpload({
         const topicsList = parsed?.topics || parsed?.data?.topics || [];
         if (topicsList.length > 0) {
           for (const t of topicsList) {
-            let title = (t.chapter_title || t.chapterTitle || t.name || "").trim().replace(/\s*\(Part\s*\d+\)$/i, "").trim();
+            let title = (t.categoryTitle || t.category_title || t.chapter_title || t.chapterTitle || t.name || "").trim().replace(/\s*\(Part\s*\d+\)$/i, "").trim();
             if (!title) continue;
             const normKey = title.replace(/^chapter\s*\d+[:\s.-]*/i, "").trim().toLowerCase();
             if (seenTitles.has(normKey)) continue; // Strictly prevent duplicate syllabus chapters
             seenTitles.add(normKey);
 
+            const subtopicsList = (t.subtopics || []).map((s: any) =>
+              typeof s === "object" && s !== null ? (s.title ? `${s.title}: ${s.summary || ""}`.trim() : JSON.stringify(s)) : String(s)
+            );
+            const excerpt = t.content_excerpt || t.contentExcerpt || (
+              Array.isArray(t.subtopics)
+                ? t.subtopics.map((s: any) => typeof s === "object" && s?.summary ? `${s.title}: ${s.summary}` : "").filter(Boolean).join("\n\n")
+                : ""
+            );
+
             allExtractedTopics.push({
               id: t.order_index || t.orderIndex || (allExtractedTopics.length + 1),
               name: title,
               durationMinutes: Math.round((t.estimated_hours || t.estimatedHours || 2) * 60),
-              importance: t.importance || 3,
-              subtopics: t.subtopics || [],
-              contentExcerpt: t.content_excerpt || t.contentExcerpt || "",
+              importance: t.importance || 4,
+              subtopics: subtopicsList,
+              contentExcerpt: excerpt,
             });
+          }
+        }
+
+        const flashcardsList = (parsed?.flashcards || parsed?.data?.flashcards || []).slice(0, 10);
+        if (flashcardsList.length > 0) {
+          try {
+            const allKits = getUserTaskKits();
+            const kitKey = (course?.name || "course").toLowerCase().trim();
+            const currentKit = allKits[kitKey] || { flashcards: [], quiz: [] };
+            const existing = currentKit.flashcards || [];
+            const mappedNew = flashcardsList.map((fc: any, fIdx: number) => ({
+              id: `fc-${Date.now()}-${fIdx}`,
+              front: fc.question || fc.q || fc.front || "Question",
+              back: fc.answer || fc.a || fc.back || "Answer",
+              q: fc.question || fc.q || fc.front || "Question",
+              a: fc.answer || fc.a || fc.back || "Answer",
+              chapter: fc.topicTag || course?.name || "Key Concepts",
+            }));
+            allKits[kitKey] = {
+              ...currentKit,
+              flashcards: [...mappedNew, ...existing].slice(0, 10),
+            };
+            saveUserTaskKits(allKits);
+            toast.success(`Generated ${flashcardsList.length} high-yield study flashcards! ✨`);
+          } catch (e) {
+            console.warn("Could not save flashcards locally:", e);
           }
         }
       }
@@ -677,7 +712,7 @@ function EmptyUpload({
       </div>
       <h2 className="mt-4 text-2xl font-semibold">Upload Syllabus or Chapters</h2>
       <p className="mt-1 max-w-md text-sm text-muted-foreground">
-        Upload your syllabus or lecture slide decks (PDF, PPTX, PPT) to extract all topics and build your schedule.
+        Upload your syllabus or lecture slide decks (PDF, PPT, PPTX) to extract all topics and build your schedule.
       </p>
 
       <div
@@ -701,12 +736,12 @@ function EmptyUpload({
           id="course-file-upload"
           className="hidden"
           multiple
-          accept=".pdf,.pptx,.ppt,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+          accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
           onChange={(e) => handleFileUpload(e.target.files)}
         />
         <label htmlFor="course-file-upload" className="cursor-pointer">
           <span className="font-semibold text-primary">Click to upload</span> or drag and drop
-          <span className="block text-xs text-muted-foreground">PDF or PowerPoint presentations up to 25MB</span>
+          <span className="block text-xs text-muted-foreground">PDF (.pdf) or PowerPoint (.ppt, .pptx) files up to 25MB</span>
         </label>
       </div>
       {course && (
@@ -740,6 +775,8 @@ function JoinChallenge({
     return d;
   });
   const [mode, setMode] = useState<"normal" | "survival">("normal");
+  const [dailyHours, setDailyHours] = useState<number>(2.5);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploadingMore, setUploadingMore] = useState(false);
   const [expandedTopicIndex, setExpandedTopicIndex] = useState<number | null>(null);
@@ -804,20 +841,55 @@ function JoinChallenge({
         const topicsList = parsed?.topics || parsed?.data?.topics || [];
         if (topicsList.length > 0) {
           for (const item of topicsList) {
-            let title = (item.chapter_title || item.chapterTitle || item.name || "").trim().replace(/\s*\(Part\s*\d+\)$/i, "").trim();
+            let title = (item.categoryTitle || item.category_title || item.chapter_title || item.chapterTitle || item.name || "").trim().replace(/\s*\(Part\s*\d+\)$/i, "").trim();
             if (!title) continue;
             const normKey = title.replace(/^chapter\s*\d+[:\s.-]*/i, "").trim().toLowerCase();
             if (seenTitles.has(normKey)) continue; // Strictly prevent duplicate syllabus chapters
             seenTitles.add(normKey);
 
+            const subtopicsList = (item.subtopics || []).map((s: any) =>
+              typeof s === "object" && s !== null ? (s.title ? `${s.title}: ${s.summary || ""}`.trim() : JSON.stringify(s)) : String(s)
+            );
+            const excerpt = item.content_excerpt || item.contentExcerpt || (
+              Array.isArray(item.subtopics)
+                ? item.subtopics.map((s: any) => typeof s === "object" && s?.summary ? `${s.title}: ${s.summary}` : "").filter(Boolean).join("\n\n")
+                : ""
+            );
+
             currentTopics.push({
               id: item.order_index || item.orderIndex || (currentTopics.length + 1),
               name: title,
               durationMinutes: Math.round((item.estimated_hours || item.estimatedHours || 2) * 60),
-              importance: item.importance || 3,
-              subtopics: item.subtopics || [],
-              contentExcerpt: item.content_excerpt || item.contentExcerpt || "",
+              importance: item.importance || 4,
+              subtopics: subtopicsList,
+              contentExcerpt: excerpt,
             });
+          }
+        }
+
+        const flashcardsList = (parsed?.flashcards || parsed?.data?.flashcards || []).slice(0, 10);
+        if (flashcardsList.length > 0) {
+          try {
+            const allKits = getUserTaskKits();
+            const kitKey = course.name.toLowerCase().trim();
+            const currentKit = allKits[kitKey] || { flashcards: [], quiz: [] };
+            const existing = currentKit.flashcards || [];
+            const mappedNew = flashcardsList.map((fc: any, fIdx: number) => ({
+              id: `fc-${Date.now()}-${fIdx}`,
+              front: fc.question || fc.q || fc.front || "Question",
+              back: fc.answer || fc.a || fc.back || "Answer",
+              q: fc.question || fc.q || fc.front || "Question",
+              a: fc.answer || fc.a || fc.back || "Answer",
+              chapter: fc.topicTag || course.name || "Key Concepts",
+            }));
+            allKits[kitKey] = {
+              ...currentKit,
+              flashcards: [...mappedNew, ...existing].slice(0, 10),
+            };
+            saveUserTaskKits(allKits);
+            toast.success(`Generated ${flashcardsList.length} study flashcards! ✨`);
+          } catch (e) {
+            console.warn("Could not save flashcards locally:", e);
           }
         }
       }
@@ -904,6 +976,7 @@ function JoinChallenge({
   };
 
   const handleGeneratePlan = async () => {
+    setPlanModalOpen(false);
     setLoading(true);
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -922,19 +995,29 @@ function JoinChallenge({
 
     const daysUntil = Math.max(1, Math.ceil((targetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
     const bufferDays = daysUntil <= 3 ? 0 : daysUntil <= 7 ? 1 : 2;
+    const effDailyHours = mode === "survival" ? Math.max(3.5, dailyHours) : dailyHours;
 
     try {
       let planData: any = null;
       const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
       if (isRealId) {
         try {
-          planData = await browseService.joinCourse(course.id, {
+          planData = await browseService.generateOrUpdatePlan(course.id, {
             examDate: dateStr,
-            dailyHours: mode === "survival" ? 4.0 : 2.5,
+            dailyHours: effDailyHours,
             mode,
           });
-        } catch (joinErr) {
-          console.warn("Could not join via course ID, attempting direct plan generation", joinErr);
+        } catch (planErr) {
+          console.warn("Could not regenerate via /plan endpoint, trying fallback joinCourse:", planErr);
+          try {
+            planData = await browseService.joinCourse(course.id, {
+              examDate: dateStr,
+              dailyHours: effDailyHours,
+              mode,
+            });
+          } catch (joinErr) {
+            console.warn("Could not join via course ID, attempting direct plan generation", joinErr);
+          }
         }
       }
 
@@ -982,8 +1065,23 @@ function JoinChallenge({
 
       if (planData) {
         localStorage.setItem("sg-active-plan", JSON.stringify(planData));
+        if (course.id) {
+          localStorage.setItem(`sg-plan-${course.id}`, JSON.stringify(planData));
+        }
       }
-      localStorage.setItem("sg-active-course", JSON.stringify(course));
+      const updatedCourse = {
+        ...course,
+        topics: topics.length > 0 ? topics : course.topics,
+      };
+      localStorage.setItem("sg-active-course", JSON.stringify(updatedCourse));
+      
+      const userCourses = getUserCourses();
+      const cIdx = userCourses.findIndex((c) => String(c.id) === String(course.id));
+      if (cIdx !== -1) {
+        userCourses[cIdx] = updatedCourse;
+        saveUserCourses(userCourses);
+      }
+
       toast.success("Study plan successfully generated! ✨");
       nav({ to: "/plan" });
     } catch (err: any) {
@@ -1023,7 +1121,7 @@ function JoinChallenge({
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".pdf,.pptx,.ppt,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+            accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
             className="hidden"
             onChange={(e) => handleUploadMoreChapters(e.target.files)}
           />
@@ -1267,9 +1365,187 @@ function JoinChallenge({
           </div>
         </div>
       </div>
-      <Button variant="magic" size="lg" className="mt-6 w-full" onClick={handleGeneratePlan}>
-        <Wand2 /> Generate My Plan
+      <Button variant="magic" size="lg" className="mt-6 w-full gap-2 text-base font-bold shadow-soft" onClick={() => setPlanModalOpen(true)}>
+        <Wand2 className="h-5 w-5" /> Generate My Plan
       </Button>
+
+      {/* Target Timeline & Exam Schedule Modal Dialog */}
+      <Dialog open={planModalOpen} onOpenChange={setPlanModalOpen}>
+        <DialogContent className="max-w-lg sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5 text-primary" />
+              Set Target Exam Time & Timeline
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              Configure your exam date and target daily study hours for{" "}
+              <span className="font-semibold text-foreground">{course.name}</span> to generate an optimized, day-by-day plan.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Target Exam Date Selection */}
+            <div className="rounded-xl border border-border/70 bg-muted/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+                  <CalendarIcon className="h-3.5 w-3.5 text-primary" /> Target Exam Date
+                </Label>
+                {date && (
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
+                    {Math.max(1, Math.ceil((date.getTime() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24)))} days remaining
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[
+                  { label: "7 Days (Sprint)", days: 7 },
+                  { label: "14 Days (Balanced)", days: 14 },
+                  { label: "21 Days", days: 21 },
+                  { label: "30 Days (Deep Study)", days: 30 },
+                ].map((preset) => {
+                  const pDate = new Date();
+                  pDate.setDate(pDate.getDate() + preset.days);
+                  pDate.setHours(0, 0, 0, 0);
+                  const isSelected = date && date.toDateString() === pDate.toDateString();
+                  return (
+                    <button
+                      key={preset.days}
+                      type="button"
+                      onClick={() => setDate(pDate)}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-semibold transition border",
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-background border-border/60 hover:bg-muted text-muted-foreground"
+                      )}
+                    >
+                      +{preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-sm font-medium mt-1">
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    {date ? date.toDateString() : "Pick custom exam date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={date}
+                    onSelect={(newDate) => {
+                      if (newDate) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (newDate.getTime() <= today.getTime()) {
+                          toast.info("Please pick a future date for your exam.");
+                          return;
+                        }
+                        setDate(newDate);
+                      }
+                    }}
+                    disabled={(d) => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return d.getTime() <= today.getTime();
+                    }}
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Target Daily Study Time */}
+            <div className="rounded-xl border border-border/70 bg-muted/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-primary" /> Target Daily Study Time
+                </Label>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-black text-primary font-mono">{dailyHours}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">hours / day</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {[1.5, 2.0, 2.5, 3.5, 4.0].map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => setDailyHours(h)}
+                    className={cn(
+                      "flex-1 rounded-lg py-1.5 text-xs font-bold transition border",
+                      dailyHours === h
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-background border-border/60 hover:bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {h}h
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Study Mode */}
+            <div className="rounded-xl border border-border/70 bg-muted/40 p-4 space-y-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Pacing & Strategy
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMode("normal")}
+                  className={cn(
+                    "flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition",
+                    mode === "normal"
+                      ? "border-primary bg-primary/10 text-primary shadow-xs"
+                      : "border-border/60 bg-background hover:bg-muted/60 text-muted-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
+                    <Shield className="h-4 w-4" /> Normal Mode
+                  </div>
+                  <span className="text-[11px] leading-tight text-muted-foreground">
+                    Balanced daily rhythm with structured rest & review days.
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMode("survival")}
+                  className={cn(
+                    "flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition",
+                    mode === "survival"
+                      ? "border-destructive bg-destructive/10 text-destructive shadow-xs"
+                      : "border-border/60 bg-background hover:bg-muted/60 text-muted-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
+                    <Flame className="h-4 w-4" /> Survival Mode
+                  </div>
+                  <span className="text-[11px] leading-tight text-muted-foreground">
+                    Intense cram sprint designed for upcoming deadlines.
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPlanModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="magic" className="gap-2" onClick={handleGeneratePlan} disabled={loading}>
+              <Wand2 className="h-4 w-4" />
+              Generate Study Plan ({topics.length} Chapters)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ReportCourseDialog
         open={reportDialogOpen}
         onOpenChange={setReportDialogOpen}

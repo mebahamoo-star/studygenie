@@ -118,43 +118,59 @@ function Flashcards() {
     // 1. Check user-scoped kits for this course
     const allKits = getUserTaskKits();
     const courseCards: FlashcardItem[] = [];
+    const courseNorm = (course.name || "").toLowerCase().trim();
+    const courseIdStr = String(course.id || "");
+    const topicNames = (course.topics || []).map((t) => (t.name || "").toLowerCase().trim());
 
-    // Check by course name and topics
+    // Filter kits that belong specifically to this course or its chapters
     Object.entries(allKits).forEach(([key, kit]: [string, any]) => {
-      if (kit?.flashcards && Array.isArray(kit.flashcards)) {
+      const kNorm = key.toLowerCase().trim();
+      const belongsToCourse =
+        kNorm.includes(courseNorm) ||
+        courseNorm.includes(kNorm) ||
+        kNorm.startsWith(courseIdStr) ||
+        topicNames.some((tName) => tName && (kNorm.includes(tName) || tName.includes(kNorm)));
+
+      if (belongsToCourse && kit?.flashcards && Array.isArray(kit.flashcards)) {
         kit.flashcards.forEach((f: any, idx: number) => {
-          courseCards.push({
-            id: f.id || `${key}-${idx}`,
-            q: f.q || f.front || f.question,
-            a: f.a || f.back || f.answer,
-            chapter: key,
-          });
+          if (!courseCards.some((c) => c.q === (f.q || f.front || f.question))) {
+            courseCards.push({
+              id: f.id || `${key}-${idx}`,
+              q: f.q || f.front || f.question,
+              a: f.a || f.back || f.answer,
+              chapter: f.chapter || key,
+            });
+          }
         });
       }
     });
 
-    // 2. Also check if active cards in storage match this course
-    const prefix = getUserStoragePrefix();
-    const activeCardsRaw = localStorage.getItem(`sg-${prefix}-active-cards`) || localStorage.getItem("sg-active-cards");
-    if (activeCardsRaw) {
-      try {
-        const parsed = JSON.parse(activeCardsRaw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.forEach((f: any, idx: number) => {
-            if (!courseCards.some((c) => c.q === (f.q || f.front))) {
-              courseCards.unshift({
-                id: f.id || `active-${idx}`,
-                q: f.q || f.front,
-                a: f.a || f.back,
-                chapter: course.name,
-              });
-            }
-          });
-        }
-      } catch {}
+    // Fallback if no direct course kits match yet
+    if (courseCards.length === 0) {
+      const prefix = getUserStoragePrefix();
+      const activeCardsRaw = localStorage.getItem(`sg-${prefix}-active-cards`) || localStorage.getItem("sg-active-cards");
+      if (activeCardsRaw) {
+        try {
+          const parsed = JSON.parse(activeCardsRaw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            parsed.forEach((f: any, idx: number) => {
+              if (!courseCards.some((c) => c.q === (f.q || f.front))) {
+                courseCards.push({
+                  id: f.id || `active-${idx}`,
+                  q: f.q || f.front,
+                  a: f.a || f.back,
+                  chapter: course.name,
+                });
+              }
+            });
+          }
+        } catch {}
+      }
     }
 
-    setCards(courseCards);
+    // STRICT LIMIT: strictly enforce requested deck limit (default 10)
+    const targetSessionLimit = Math.min(25, Math.max(1, requestedCount || 10));
+    setCards(courseCards.slice(0, targetSessionLimit));
 
     // Fetch topics if course topics are not populated
     if (!course.topics || course.topics.length === 0) {

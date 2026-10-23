@@ -8,6 +8,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { useApp } from "@/lib/app-state";
 import { authService } from "@/lib/api/services";
+import { TopographyBackground } from "@/components/animate-ui/backgrounds/topography";
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -159,9 +160,20 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   return (
     <div className="grid min-h-screen md:grid-cols-2">
-      <div className="hidden flex-col items-center justify-center gap-6 bg-gradient-magic p-12 text-primary-foreground md:flex">
-        <Genie pose={signup ? "high" : "mid"} className="h-72 w-72 animate-float" />
-        <h2 className="text-3xl font-semibold">{signup ? "Make your first wish." : "Welcome back, scholar."}</h2>
+      <div className="relative hidden flex-col items-center justify-center gap-6 bg-gradient-magic p-12 text-primary-foreground md:flex overflow-hidden">
+        <TopographyBackground
+          className="absolute inset-0 pointer-events-auto"
+          lineColor="rgba(255, 255, 255, 0.45)"
+          levels={16}
+          speed={1}
+          scale={1}
+          peak={1}
+          interactive={true}
+        />
+        <div className="relative z-10 flex flex-col items-center justify-center gap-6 pointer-events-none">
+          <Genie pose={signup ? "high" : "mid"} className="h-72 w-72 animate-float drop-shadow-2xl" />
+          <h2 className="text-3xl font-semibold text-center">{signup ? "Make your first wish." : "Welcome back, scholar."}</h2>
+        </div>
       </div>
       <div className="flex flex-col bg-background p-8">
         <div className="flex items-center justify-between">
