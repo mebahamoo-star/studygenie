@@ -1504,7 +1504,7 @@ function JoinChallenge({
                           toast.info("Please pick a future date for your exam.");
                           return;
                         }
-                        setDate(newDate);
+                        handleUpdateTargetExamDate(newDate);
                       }
                     }}
                     disabled={(d) => {

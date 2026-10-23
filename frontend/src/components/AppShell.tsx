@@ -18,8 +18,8 @@ import {
 import type { ReactNode } from "react";
 import { Genie } from "./Genie";
 import { useApp } from "@/lib/app-state";
-import { fetchAndSyncExams, type Exam } from "@/lib/exam";
-import { hasUserEnrolledCourses } from "@/lib/courses-util";
+import { fetchAndSyncExams, loadExamsForUser, isCourseEnrolled, type Exam } from "@/lib/exam";
+import { hasUserEnrolledCourses, getUserCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
 import {
   Sidebar,
@@ -103,13 +103,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [exams, setExams] = useState<Exam[]>([]);
 
   useEffect(() => {
-    fetchAndSyncExams().then((userExams) => {
-      const enrolled = getUserCourses();
-      const filtered = enrolled.length > 0
-        ? userExams.filter((ex) => isCourseEnrolled(ex.course, enrolled))
-        : [];
-      setExams(filtered);
-    });
+    const updateExams = async () => {
+      try {
+        const userExams = await fetchAndSyncExams();
+        setExams(userExams);
+      } catch {
+        setExams(loadExamsForUser());
+      }
+    };
+    updateExams();
+
+    const handleUpdate = () => {
+      setExams(loadExamsForUser());
+    };
+    window.addEventListener("sg-exams-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("sg-exams-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
   }, [path]);
 
   // Determine overall exam ticker urgency:

@@ -95,6 +95,9 @@ export function saveExams(exams: Exam[]): void {
     } else {
       localStorage.removeItem(singleKey);
     }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("sg-exams-updated"));
+    }
   } catch {}
 }
 

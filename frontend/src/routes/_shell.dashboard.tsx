@@ -769,11 +769,20 @@ function Dashboard() {
       } catch {}
       if (isMounted) setDone(savedDone);
 
-      // 1. Fetch user enrolled courses from Neon cloud database
+      // 1. Fetch user enrolled courses from Neon cloud database and merge with local
       let enrolled: Course[] = [];
       try {
         const remote = await browseService.getEnrolledCourses();
-        enrolled = remote || [];
+        const localCourses = getUserCourses();
+        const merged = new Map<string, Course>();
+        (remote || []).forEach((c) => merged.set(c.name.toLowerCase().trim(), c));
+        localCourses.forEach((c) => {
+          const key = c.name.toLowerCase().trim();
+          if (!merged.has(key)) {
+            merged.set(key, c);
+          }
+        });
+        enrolled = Array.from(merged.values());
         saveUserCourses(enrolled);
       } catch {
         enrolled = getUserCourses();
@@ -791,7 +800,32 @@ function Dashboard() {
       // Always load campus challenges for the space down the dashboard
       await loadChallenges(enrolled, validExams);
 
-      // 3. If user has no courses enrolled, set course display and exit tasks setup
+      // Ensure any courses from target exams or active course are included
+      if (enrolled.length === 0) {
+        const actRaw =
+          localStorage.getItem(`sg-${prefix}-active-course`) ||
+          localStorage.getItem("sg-active-course");
+        if (actRaw) {
+          try {
+            const parsed = JSON.parse(actRaw);
+            if (parsed && parsed.name) enrolled.push(parsed);
+          } catch {}
+        }
+      }
+      if (validExams.length > 0) {
+        validExams.forEach((ex) => {
+          if (!enrolled.some((c) => c.name.toLowerCase().trim() === ex.course.toLowerCase().trim())) {
+            enrolled.push({
+              id: ex.id || `c-${Date.now()}`,
+              name: ex.course,
+              status: "ready",
+              topics: [],
+            });
+          }
+        });
+      }
+
+      // 3. If user still has no courses enrolled, set course display and exit tasks setup
       if (enrolled.length === 0) {
         setCourseName(validExams.length > 0 ? validExams[0].course : "No active course");
         setHasPlans(false);
