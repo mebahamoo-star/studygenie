@@ -55,6 +55,10 @@ import java.util.stream.Collectors;
 @Service
 public class CourseService {
 
+    private final java.util.Map<String, CachedCourses> coursesCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private record CachedCourses(long timestamp, List<CourseDto> list) {}
+
+
     private static final Logger log = LoggerFactory.getLogger(CourseService.class);
 
     private final CourseRepository courseRepository;
@@ -104,19 +108,32 @@ public class CourseService {
 
     @Transactional(readOnly = true)
     public List<CourseDto> getAllCourses() {
-        return courseRepository.findAll().stream()
+        CachedCourses cached = coursesCache.get("all");
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp() < 30_000)) {
+            return cached.list();
+        }
+        List<CourseDto> list = courseRepository.findAll().stream()
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
+        coursesCache.put("all", new CachedCourses(System.currentTimeMillis(), list));
+        return list;
     }
 
     @Transactional(readOnly = true)
     public List<CourseDto> getCoursesByCollege(Long collegeId) {
-        if (collegeId == null || !collegeRepository.existsById(collegeId)) {
+        if (collegeId == null) {
             return getAllCourses();
         }
-        return courseRepository.findByCollegeId(collegeId).stream()
+        String key = "col_" + collegeId;
+        CachedCourses cached = coursesCache.get(key);
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp() < 30_000)) {
+            return cached.list();
+        }
+        List<CourseDto> list = courseRepository.findByCollegeId(collegeId).stream()
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
+        coursesCache.put(key, new CachedCourses(System.currentTimeMillis(), list));
+        return list;
     }
 
     @Transactional(readOnly = true)

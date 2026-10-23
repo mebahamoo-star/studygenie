@@ -48,13 +48,34 @@ function CoursesPage() {
   const [loadingSelectedTopics, setLoadingSelectedTopics] = useState(false);
 
   const refreshCourses = async () => {
-    // 1. Fetch courses specifically enrolled by THIS user from the cloud database
+    const savedCol = localStorage.getItem("sg-user-col");
+    let colId: any = undefined;
+    if (savedCol) {
+      try {
+        const parsed = JSON.parse(savedCol);
+        if (parsed?.id && !isNaN(Number(parsed.id))) colId = Number(parsed.id);
+      } catch {}
+    }
+
+    // Parallel fetch: user enrolled courses + college catalog simultaneously
+    const [enrolledRes, catalogRes] = await Promise.allSettled([
+      browseService.getEnrolledCourses(),
+      colId !== undefined ? browseService.getAllCourses(colId) : Promise.resolve([]),
+    ]);
+
     let enrolled: Course[] = [];
     let isRemoteOnline = false;
-    try {
-      enrolled = await browseService.getEnrolledCourses();
+    if (enrolledRes.status === "fulfilled" && Array.isArray(enrolledRes.value)) {
+      enrolled = enrolledRes.value;
       isRemoteOnline = true;
-    } catch {}
+    }
+
+    if (catalogRes.status === "fulfilled" && Array.isArray(catalogRes.value)) {
+      setCollegeCatalog(catalogRes.value);
+      try {
+        localStorage.setItem("sg-catalog-cache", JSON.stringify(catalogRes.value));
+      } catch {}
+    }
 
     const saved = getUserCourses();
     const savedMap = new Map<string, Course>();
@@ -62,8 +83,6 @@ function CoursesPage() {
 
     let myCourses: Course[] = [];
     if (isRemoteOnline) {
-      // Backend is online: cloud enrolled list is the single source of truth for THIS user!
-      // Attach locally cached topics/chapters if available
       myCourses = enrolled.map((c) => {
         const local = savedMap.get(c.name.trim().toLowerCase());
         const hasLocalTopics = local?.topics && local.topics.length > 0;
@@ -74,7 +93,6 @@ function CoursesPage() {
         };
       });
     } else {
-      // Offline demo fallback
       myCourses = saved;
     }
 
@@ -82,48 +100,38 @@ function CoursesPage() {
     saveUserCourses(myCourses);
     if (myCourses.length > 0) {
       setSel((prev) => (prev && myCourses.some((c) => String(c.id) === String(prev)) ? prev : String(myCourses[0].id)));
-    } else {
-      setSel("");
     }
 
-    // Prefetch topics from cloud database for enrolled courses
-    enrolled.forEach(async (c) => {
+    // Prefetch missing topics concurrently
+    const coursesNeedingTopics = enrolled.filter((c) => {
       const local = savedMap.get(c.name.trim().toLowerCase());
-      if ((!local?.topics || local.topics.length === 0) && c.id && !String(c.id).startsWith("course-") && !String(c.id).startsWith("c-")) {
-        try {
-          const remoteTopics = await browseService.getCourseTopics(c.id);
-          if (remoteTopics && remoteTopics.length > 0) {
-            setCourseList((prev) =>
-              prev.map((pc) =>
-                String(pc.id) === String(c.id) || pc.name.toLowerCase() === c.name.toLowerCase()
-                  ? { ...pc, topics: remoteTopics, status: "ready" }
-                  : pc
-              )
-            );
-            const currentSaved = getUserCourses();
-            const updatedSaved = currentSaved.map((sc) =>
-              String(sc.id) === String(c.id) || sc.name.toLowerCase() === c.name.toLowerCase()
-                ? { ...sc, topics: remoteTopics, status: "ready" }
-                : sc
-            );
-            saveUserCourses(updatedSaved);
-          }
-        } catch {}
-      }
+      return (!local?.topics || local.topics.length === 0) && c.id && !String(c.id).startsWith("course-") && !String(c.id).startsWith("c-");
     });
 
-    // 2. Fetch full college catalog for browsing and 1-click enrolling
-    try {
-      const savedCol = localStorage.getItem("sg-user-col");
-      let colId: any = undefined;
-      if (savedCol) {
-        const parsed = JSON.parse(savedCol);
-        if (parsed?.id && !isNaN(Number(parsed.id))) colId = Number(parsed.id);
-      }
-      const remoteCourses = await browseService.getAllCourses(colId);
-      setCollegeCatalog(remoteCourses);
-    } catch (err) {
-      console.warn("Could not fetch remote college courses:", err);
+    if (coursesNeedingTopics.length > 0) {
+      Promise.allSettled(
+        coursesNeedingTopics.map(async (c) => {
+          try {
+            const remoteTopics = await browseService.getCourseTopics(c.id);
+            if (remoteTopics && remoteTopics.length > 0) {
+              setCourseList((prev) =>
+                prev.map((pc) =>
+                  String(pc.id) === String(c.id) || pc.name.toLowerCase() === c.name.toLowerCase()
+                    ? { ...pc, topics: remoteTopics, status: "ready" }
+                    : pc
+                )
+              );
+              const currentSaved = getUserCourses();
+              const updatedSaved = currentSaved.map((sc) =>
+                String(sc.id) === String(c.id) || sc.name.toLowerCase() === c.name.toLowerCase()
+                  ? { ...sc, topics: remoteTopics, status: "ready" }
+                  : sc
+              );
+              saveUserCourses(updatedSaved);
+            }
+          } catch {}
+        })
+      );
     }
   };
 
@@ -131,7 +139,7 @@ function CoursesPage() {
     refreshCourses();
   }, []);
 
-  const handleEnrollFromCatalog = async (catalogCourse: Course) => {
+    const handleEnrollFromCatalog = async (catalogCourse: Course) => {
     const existing = courseList.find((c) => c.name.toLowerCase() === catalogCourse.name.toLowerCase());
     if (existing) {
       setSel(String(existing.id));

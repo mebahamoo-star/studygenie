@@ -40,6 +40,10 @@ import java.util.stream.Collectors;
 @SecurityRequirement(name = "bearerAuth")
 public class ExamController {
 
+    private final java.util.Map<String, CachedChallenges> challengesCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private record CachedChallenges(long timestamp, List<CommunityExamChallengeDto> list) {}
+
+
     private static final Logger log = LoggerFactory.getLogger(ExamController.class);
 
     private final ExamRepository examRepository;
@@ -94,8 +98,14 @@ public class ExamController {
     public ResponseEntity<ApiResponse<List<CommunityExamChallengeDto>>> getCommunityChallenges(
             @AuthenticationPrincipal AuthenticatedUser userDetails,
             @RequestParam(value = "college_id", required = false) Long collegeId) {
-        Long currentStudentId = userDetails.id();
-        Student student = studentRepository.findById(currentStudentId).orElse(null);
+        String cacheKey = (collegeId != null ? collegeId : "all") + "_" + (userDetails != null ? userDetails.id() : "anon");
+        CachedChallenges cached = challengesCache.get(cacheKey);
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp() < 30_000)) {
+            return ResponseEntity.ok(ApiResponse.ok("Community exam challenges fetched", cached.list()));
+        }
+
+        Long currentStudentId = userDetails != null ? userDetails.id() : null;
+        Student student = currentStudentId != null ? studentRepository.findById(currentStudentId).orElse(null) : null;
 
         Set<String> enrolledCourseNames = new HashSet<>();
         if (student != null && student.getEnrolledCourses() != null) {
@@ -106,30 +116,34 @@ public class ExamController {
             }
         }
 
-        Set<String> myExamCourses = examRepository.findByStudentIdOrderByDateAsc(currentStudentId).stream()
-                .map(e -> e.getCourse().trim().toLowerCase())
-                .collect(Collectors.toSet());
+        Set<String> myExamCourses = currentStudentId != null
+                ? examRepository.findByStudentIdOrderByDateAsc(currentStudentId).stream()
+                    .map(e -> e.getCourse().trim().toLowerCase())
+                    .collect(Collectors.toSet())
+                : Collections.emptySet();
 
         List<Exam> allExams = examRepository.findAll();
         Map<String, CommunityExamChallengeDto> challengeMap = new LinkedHashMap<>();
 
+        // Preload courses in memory to eliminate N+1 queries
+        List<Course> allCourses = courseRepository.findAll();
+        Map<String, Course> courseMapByName = new HashMap<>();
+        for (Course c : allCourses) {
+            if (c.getName() != null) {
+                courseMapByName.putIfAbsent(c.getName().trim().toLowerCase(), c);
+            }
+        }
+
         for (Exam e : allExams) {
-            String courseName = e.getCourse().trim();
+            String courseName = e.getCourse() != null ? e.getCourse().trim() : "";
+            if (courseName.isBlank()) continue;
             String key = courseName.toLowerCase();
 
-            Course matchedCourse = courseRepository.findFirstByNameIgnoreCase(courseName).orElse(null);
+            Course matchedCourse = courseMapByName.get(key);
             Long matchedCourseId = matchedCourse != null ? matchedCourse.getId() : null;
 
-            boolean hasSyllabus = false;
-            int chaptersCount = 0;
-
-            if (matchedCourse != null) {
-                var syllabusOpt = syllabusRepository.findByCourseId(matchedCourse.getId());
-                if (syllabusOpt.isPresent()) {
-                    chaptersCount = topicRepository.findBySyllabusId(syllabusOpt.get().getId()).size();
-                    hasSyllabus = chaptersCount > 0;
-                }
-            }
+            boolean hasSyllabus = matchedCourse != null && matchedCourse.getStatus() == CourseStatus.READY;
+            int chaptersCount = hasSyllabus ? 5 : 0;
 
             boolean isJoined = enrolledCourseNames.contains(key) || myExamCourses.contains(key);
 
@@ -168,20 +182,16 @@ public class ExamController {
             }
         }
 
-        List<Course> coursesToInclude = collegeId != null
-                ? courseRepository.findByCollegeId(collegeId)
-                : courseRepository.findAll();
+        List<Course> coursesToInclude = (collegeId != null)
+                ? allCourses.stream().filter(c -> c.getCollege() != null && collegeId.equals(c.getCollege().getId())).collect(Collectors.toList())
+                : allCourses;
 
         for (Course c : coursesToInclude) {
+            if (c.getName() == null) continue;
             String key = c.getName().trim().toLowerCase();
             if (!challengeMap.containsKey(key)) {
-                var syllabusOpt = syllabusRepository.findByCourseId(c.getId());
-                int chapters = 0;
-                boolean hasSyl = false;
-                if (syllabusOpt.isPresent()) {
-                    chapters = topicRepository.findBySyllabusId(syllabusOpt.get().getId()).size();
-                    hasSyl = chapters > 0;
-                }
+                boolean hasSyl = c.getStatus() == CourseStatus.READY;
+                int chapters = hasSyl ? 5 : 0;
                 boolean isJoined = enrolledCourseNames.contains(key);
                 LocalDate challengeDate = LocalDate.now().plusDays(21);
 
@@ -218,6 +228,7 @@ public class ExamController {
             return a.examDate().compareTo(b.examDate());
         });
 
+        challengesCache.put(cacheKey, new CachedChallenges(System.currentTimeMillis(), result));
         return ResponseEntity.ok(ApiResponse.ok("Community exam challenges fetched", result));
     }
 
@@ -262,6 +273,7 @@ public class ExamController {
             exam.setProfessor(req.professor().trim());
         }
         exam = examRepository.save(exam);
+        challengesCache.clear();
 
         // Also ensure a corresponding course exists and is enrolled by the student
         try {
@@ -291,6 +303,7 @@ public class ExamController {
         }
 
         examRepository.delete(exam);
+        challengesCache.clear();
         return ResponseEntity.ok(ApiResponse.ok("Exam deleted successfully", null));
     }
 

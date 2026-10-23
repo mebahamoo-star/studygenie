@@ -770,13 +770,18 @@ function Dashboard() {
       } catch {}
       if (isMounted) setDone(savedDone);
 
-      // 1. Fetch user enrolled courses from Neon cloud database and merge with local
-      let enrolled: Course[] = [];
-      try {
-        const remote = await browseService.getEnrolledCourses();
+      // 1. Concurrently fetch remote courses and sync exams
+      let enrolled: Course[] = getUserCourses();
+      const [remoteCoursesRes, validExamsRes] = await Promise.allSettled([
+        browseService.getEnrolledCourses(),
+        fetchAndSyncExams(enrolled),
+      ]);
+
+      if (remoteCoursesRes.status === "fulfilled" && Array.isArray(remoteCoursesRes.value)) {
+        const remote = remoteCoursesRes.value;
         const localCourses = getUserCourses();
         const merged = new Map<string, Course>();
-        (remote || []).forEach((c) => merged.set(c.name.toLowerCase().trim(), c));
+        remote.forEach((c) => merged.set(c.name.toLowerCase().trim(), c));
         localCourses.forEach((c) => {
           const key = c.name.toLowerCase().trim();
           if (!merged.has(key)) {
@@ -785,21 +790,19 @@ function Dashboard() {
         });
         enrolled = Array.from(merged.values());
         saveUserCourses(enrolled);
-      } catch {
-        enrolled = getUserCourses();
       }
+
+      const validExams = validExamsRes.status === "fulfilled" && Array.isArray(validExamsRes.value)
+        ? validExamsRes.value
+        : loadExamsForUser();
 
       if (!isMounted) return;
       setEnrolledCount(enrolled.length);
-
-      // 2. Load and sync user exams (including target exams set by user)
-      const validExams = await fetchAndSyncExams(enrolled);
-      if (!isMounted) return;
       setExams(validExams);
       setCurrentExamIndex(0);
 
-      // Always load campus challenges for the space down the dashboard
-      await loadChallenges(enrolled, validExams);
+      // Refresh community challenges concurrently in background
+      loadChallenges(enrolled, validExams);
 
       // Ensure any courses from target exams or active course are included
       if (enrolled.length === 0) {
@@ -866,6 +869,32 @@ function Dashboard() {
         ? `${activeCourse.code} · ${activeCourse.name}`
         : activeCourse.name;
       setCourseName(displayName);
+
+      // Pre-fetch any missing plans in parallel
+      const missingPlanCourses = enrolled.filter((c) => {
+        const raw =
+          localStorage.getItem(`sg-${prefix}-plan-${c.name}`) ||
+          localStorage.getItem(`sg-plan-${c.name}`) ||
+          localStorage.getItem(`sg-${prefix}-plan-${c.id}`) ||
+          localStorage.getItem(`sg-plan-${c.id}`);
+        return !raw && c.id && !String(c.id).startsWith("c-") && !String(c.id).startsWith("course-");
+      });
+
+      if (missingPlanCourses.length > 0) {
+        await Promise.allSettled(
+          missingPlanCourses.map(async (c) => {
+            try {
+              const remotePlan = await browseService.getCoursePlan(c.id);
+              if (remotePlan?.tasks && remotePlan.tasks.length > 0) {
+                localStorage.setItem(`sg-${prefix}-plan-${c.id}`, JSON.stringify(remotePlan));
+                localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(remotePlan));
+                localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(remotePlan));
+                localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(remotePlan));
+              }
+            } catch {}
+          })
+        );
+      }
 
       // 5. Discover plans across all enrolled courses and local storage
       const allPlans: DiscoveredPlan[] = [];
