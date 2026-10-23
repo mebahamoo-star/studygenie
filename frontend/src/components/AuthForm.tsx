@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { AlertCircle, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Genie, GenieLogo } from "./Genie";
@@ -290,6 +291,14 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
                 required
               />
             </div>
+            {signup && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5 leading-relaxed">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div>
+                  <span className="font-bold">Important Academic Note:</span> Please ensure your <strong>University, College, and Major</strong> are chosen accurately on the next step. Once registered, your academic affiliation is <strong>permanently locked</strong> and cannot be changed later to preserve course catalogs and study records.
+                </div>
+              </div>
+            )}
             <Button variant="magic" size="lg" type="submit" disabled={loading || oauthLoading !== null} className="mt-2">
               {loading ? "Connecting..." : signup ? "Sign up" : "Log in"}
             </Button>

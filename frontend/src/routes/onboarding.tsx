@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowRight, Check, ChevronLeft, GraduationCap, Landmark, Plus, Search, Loader2 } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, GraduationCap, Landmark, Plus, Search, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Genie, GenieLogo } from "@/components/Genie";
 import { ThemeToggle } from "@/components/AppShell";
@@ -357,16 +357,24 @@ function Onboarding() {
           <div className="mb-6 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <Genie pose="mid" className="h-16 w-16 shrink-0" />
-              <h1 className="text-2xl font-semibold">
-                {
-                  [
-                    "Where do you study?",
-                    "Which college or faculty?",
-                    "What is your major?",
-                    "Pick or add your courses",
-                  ][step]
-                }
-              </h1>
+              <div>
+                <h1 className="text-2xl font-semibold">
+                  {
+                    [
+                      "Where do you study?",
+                      "Which college or faculty?",
+                      "What is your major?",
+                      "Pick or add your courses",
+                    ][step]
+                  }
+                </h1>
+                {step < 3 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1.5 mt-1">
+                    <Lock className="h-3 w-3 shrink-0" />
+                    Selections are permanent and cannot be modified after registration.
+                  </p>
+                )}
+              </div>
             </div>
             <Button
               variant="outline"

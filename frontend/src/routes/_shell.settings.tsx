@@ -1,6 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { LogOut, Trash2, Volume2 } from "lucide-react";
+import {
+  BookOpen,
+  GraduationCap,
+  Landmark,
+  Lock,
+  LogOut,
+  Mail,
+  ShieldAlert,
+  Trash2,
+  User as UserIcon,
+  Volume2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Card, PageTitle } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -74,28 +85,121 @@ function Settings() {
   return (
     <div className="mx-auto max-w-2xl space-y-6" dir={ar ? "rtl" : "ltr"}>
       <PageTitle title={ar ? "الإعدادات" : "Settings"} />
-      <Card className="grid gap-4">
-        <h2 className="text-lg font-semibold">{ar ? "الملف الشخصي" : "Profile"}</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="grid gap-2">
-            <Label>{ar ? "الاسم" : "Full name"}</Label>
-            <Input className="rounded-xl" placeholder="Full name" defaultValue={user?.fullName || ""} />
+      <Card className="grid gap-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
+          <div>
+            <h2 className="text-lg font-bold flex items-center gap-2">
+              <UserIcon className="h-5 w-5 text-primary" />
+              {ar ? "معلومات الحساب الأكاديمي" : "Academic Student Profile"}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {ar
+                ? "بياناتك الشخصية والأكاديمية المسجلة بشكل دائم"
+                : "Your verified student credentials and permanent academic affiliation"}
+            </p>
           </div>
-          <div className="grid gap-2">
-            <Label>{ar ? "البريد" : "Email"}</Label>
-            <Input className="rounded-xl" placeholder="Email" defaultValue={user?.email || ""} />
+          <span className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-400">
+            <Lock className="h-3.5 w-3.5" />
+            {ar ? "سجل غير قابل للتعديل" : "Non-Editable Record"}
+          </span>
+        </div>
+
+        {/* Academic Protection Warning Callout */}
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3 leading-relaxed">
+          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+          <div>
+            <span className="font-bold">
+              {ar ? "تنبيه حماية النظام الأكاديمي:" : "Academic Affiliation Notice:"}
+            </span>{" "}
+            {ar
+              ? "الجامعة والكلية والتخصص مسجلة بشكل دائم ولا يمكن تعديلها بعد إنشاء الحساب لحماية ارتباطات المناهج الدراسية وقواعد بيانات المقررات وجداول الاختبارات."
+              : "Your University, College, and Major are permanently registered and cannot be modified to protect course catalogs, syllabus databases, and study records."}
           </div>
-          <div className="grid gap-2">
-            <Label>{ar ? "الجامعة" : "University"}</Label>
-            <Input className="rounded-xl" placeholder="University" defaultValue={uniName} />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          {/* Full Name */}
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                <UserIcon className="h-3.5 w-3.5" /> {ar ? "الاسم الكامل" : "Full Name"}
+              </Label>
+              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                <Lock className="h-2.5 w-2.5" /> {ar ? "قراءة فقط" : "Read-only"}
+              </span>
+            </div>
+            <div className="flex h-11 items-center rounded-xl border border-border/80 bg-muted/40 px-3.5 text-sm font-medium text-foreground select-none">
+              {user?.fullName || (ar ? "طالب مسجل" : "Registered Student")}
+            </div>
           </div>
-          <div className="grid gap-2">
-            <Label>{ar ? "الكلية" : "College"}</Label>
-            <Input className="rounded-xl" placeholder="College / Faculty" defaultValue={colName} />
+
+          {/* Email */}
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5" /> {ar ? "البريد الإلكتروني" : "Email Address"}
+              </Label>
+              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                <Lock className="h-2.5 w-2.5" /> {ar ? "قراءة فقط" : "Read-only"}
+              </span>
+            </div>
+            <div className="flex h-11 items-center rounded-xl border border-border/80 bg-muted/40 px-3.5 text-sm font-medium text-foreground select-none">
+              {user?.email || (ar ? "غير متوفر" : "Not specified")}
+            </div>
           </div>
-          <div className="col-span-2 grid gap-2">
-            <Label>{ar ? "التخصص" : "Major / Specialization"}</Label>
-            <Input className="rounded-xl" placeholder="Major / Specialization" defaultValue={majorName} />
+
+          {/* University */}
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                <Landmark className="h-3.5 w-3.5 text-primary" /> {ar ? "الجامعة" : "University"}
+              </Label>
+              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                <Lock className="h-2.5 w-2.5" /> {ar ? "مقفل" : "Locked"}
+              </span>
+            </div>
+            <div className="flex h-11 items-center justify-between rounded-xl border border-border/80 bg-muted/50 px-3.5 text-sm font-semibold text-foreground select-none">
+              <span className="truncate">{uniName || (ar ? "جامعة الملك سعود" : "King Saud University")}</span>
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary shrink-0 ml-2">
+                {ar ? "مؤكد" : "Verified"}
+              </span>
+            </div>
+          </div>
+
+          {/* College */}
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                <GraduationCap className="h-3.5 w-3.5 text-primary" /> {ar ? "الكلية" : "College / Faculty"}
+              </Label>
+              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                <Lock className="h-2.5 w-2.5" /> {ar ? "مقفل" : "Locked"}
+              </span>
+            </div>
+            <div className="flex h-11 items-center justify-between rounded-xl border border-border/80 bg-muted/50 px-3.5 text-sm font-semibold text-foreground select-none">
+              <span className="truncate">{colName || (ar ? "كلية علوم الحاسب والمعلومات" : "College of Computer & Info Sciences")}</span>
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary shrink-0 ml-2">
+                {ar ? "كلية" : "Faculty"}
+              </span>
+            </div>
+          </div>
+
+          {/* Major */}
+          <div className="sm:col-span-2 grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5 text-primary" /> {ar ? "التخصص الأكاديمي" : "Major / Specialization"}
+              </Label>
+              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                <Lock className="h-2.5 w-2.5" /> {ar ? "مقفل" : "Locked"}
+              </span>
+            </div>
+            <div className="flex h-11 items-center justify-between rounded-xl border border-border/80 bg-muted/50 px-3.5 text-sm font-semibold text-foreground select-none">
+              <span className="truncate">{majorName || (ar ? "علوم الحاسب (Computer Science)" : "Computer Science")}</span>
+              <span className="rounded-md bg-accent px-2 py-0.5 text-[10px] font-bold text-muted-foreground shrink-0 ml-2">
+                {ar ? "تخصص رئيسي" : "Active Major"}
+              </span>
+            </div>
           </div>
         </div>
       </Card>
