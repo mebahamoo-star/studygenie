@@ -16,8 +16,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { pageHead } from "@/lib/head";
 import { browseService, syllabusService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits } from "@/lib/courses-util";
-import { clearExam, deleteExam, isCourseEnrolled, loadExam, loadExams } from "@/lib/exam";
+import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, toLocalDateStr } from "@/lib/courses-util";
+import { clearExam, deleteExam, isCourseEnrolled, loadExam, loadExams, saveExam } from "@/lib/exam";
 import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import type { Course, CourseStatus, Topic } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -518,6 +518,37 @@ function EmptyUpload({
   const [fileCount, setFileCount] = useState(0);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
+  const handleUpdateTargetExamDate = (newDate: Date) => {
+    setDate(newDate);
+    const dateStr = toLocalDateStr(newDate);
+
+    try {
+      saveExam({
+        id: courseExam?.id,
+        course: course.name,
+        type: courseExam?.type || "Final Exam",
+        date: dateStr,
+        professor: courseExam?.professor || "",
+        uploaderName: courseExam?.uploaderName || "You",
+      });
+
+      const curCourses = getUserCourses();
+      const cIdx = curCourses.findIndex(
+        (c) => String(c.id) === String(course.id) || c.name.toLowerCase().trim() === course.name.toLowerCase().trim()
+      );
+      if (cIdx !== -1) {
+        curCourses[cIdx] = { ...curCourses[cIdx], ...course };
+      } else {
+        curCourses.push(course);
+      }
+      saveUserCourses(curCourses);
+
+      toast.success(`Target exam date for ${course.name} set to ${dateStr}`);
+    } catch (e) {
+      console.warn("Could not auto-save exam date:", e);
+    }
+  };
+
   const handleFileUpload = async (fileList?: FileList | File[] | null) => {
     if (!fileList || fileList.length === 0) return;
     const files = Array.from(fileList).filter((f) =>
@@ -769,7 +800,14 @@ function JoinChallenge({
 }) {
   const nav = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const courseExam = loadExams().find(
+    (e) => e.course.toLowerCase().trim() === course.name.toLowerCase().trim()
+  );
   const [date, setDate] = useState<Date | undefined>(() => {
+    if (courseExam?.date) {
+      const parsed = new Date(courseExam.date);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
     const d = new Date();
     d.setDate(d.getDate() + 21);
     return d;
@@ -786,9 +824,7 @@ function JoinChallenge({
   const [manualHours, setManualHours] = useState("2");
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
-  const courseExam = loadExams().find(
-    (e) => e.course.toLowerCase() === course.name.toLowerCase()
-  );
+
 
   useEffect(() => {
     if (course.topics && course.topics.length > 0) {
@@ -993,6 +1029,20 @@ function JoinChallenge({
     const dateStr = targetDate.toISOString().slice(0, 10);
     const startDateStr = new Date().toISOString().slice(0, 10);
 
+    // Sync to Exam store & backend so Dashboard upper panel and exam cards reflect target exam immediately
+    try {
+      saveExam({
+        id: courseExam?.id,
+        course: course.name,
+        type: courseExam?.type || "Final Exam",
+        date: dateStr,
+        professor: courseExam?.professor || "",
+        uploaderName: courseExam?.uploaderName,
+      });
+    } catch (examErr) {
+      console.warn("Could not sync exam locally:", examErr);
+    }
+
     const daysUntil = Math.max(1, Math.ceil((targetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
     const bufferDays = daysUntil <= 3 ? 0 : daysUntil <= 7 ? 1 : 2;
     const effDailyHours = mode === "survival" ? Math.max(3.5, dailyHours) : dailyHours;
@@ -1064,10 +1114,17 @@ function JoinChallenge({
       }
 
       if (planData) {
-        localStorage.setItem("sg-active-plan", JSON.stringify(planData));
-        if (course.id) {
-          localStorage.setItem(`sg-plan-${course.id}`, JSON.stringify(planData));
-        }
+        const prefix = getUserStoragePrefix();
+        try {
+          localStorage.setItem(`sg-${prefix}-active-plan`, JSON.stringify(planData));
+          localStorage.setItem("sg-active-plan", JSON.stringify(planData));
+          if (course.id) {
+            localStorage.setItem(`sg-${prefix}-plan-${course.id}`, JSON.stringify(planData));
+            localStorage.setItem(`sg-plan-${course.id}`, JSON.stringify(planData));
+          }
+          localStorage.setItem(`sg-${prefix}-plan-${course.name}`, JSON.stringify(planData));
+          localStorage.setItem(`sg-plan-${course.name}`, JSON.stringify(planData));
+        } catch {}
       }
       const updatedCourse = {
         ...course,
@@ -1076,11 +1133,13 @@ function JoinChallenge({
       localStorage.setItem("sg-active-course", JSON.stringify(updatedCourse));
       
       const userCourses = getUserCourses();
-      const cIdx = userCourses.findIndex((c) => String(c.id) === String(course.id));
+      const cIdx = userCourses.findIndex((c) => String(c.id) === String(course.id) || c.name.toLowerCase().trim() === course.name.toLowerCase().trim());
       if (cIdx !== -1) {
         userCourses[cIdx] = updatedCourse;
-        saveUserCourses(userCourses);
+      } else {
+        userCourses.push(updatedCourse);
       }
+      saveUserCourses(userCourses);
 
       toast.success("Study plan successfully generated! ✨");
       nav({ to: "/plan" });
@@ -1330,7 +1389,7 @@ function JoinChallenge({
                       toast.info("Please pick a future date for your exam.");
                       return;
                     }
-                    setDate(newDate);
+                    handleUpdateTargetExamDate(newDate);
                   }
                 }}
                 disabled={(d) => {
@@ -1412,7 +1471,7 @@ function JoinChallenge({
                     <button
                       key={preset.days}
                       type="button"
-                      onClick={() => setDate(pDate)}
+                      onClick={() => handleUpdateTargetExamDate(pDate)}
                       className={cn(
                         "rounded-lg px-2.5 py-1 text-xs font-semibold transition border",
                         isSelected

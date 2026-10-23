@@ -497,7 +497,7 @@ function Dashboard() {
       // Populate from remote
       remote.forEach((item) => {
         const key = item.courseName.toLowerCase().trim();
-        const isJoined = enrolledNames.has(key) || examCourseNames.has(key);
+        const isJoined = enrolledNames.has(key);
         map.set(key, { ...item, isJoined });
       });
 
@@ -505,7 +505,7 @@ function Dashboard() {
       catalogCourses.forEach((c) => {
         const key = c.name.toLowerCase().trim();
         if (!map.has(key)) {
-          const isJoined = enrolledNames.has(key) || examCourseNames.has(key);
+          const isJoined = enrolledNames.has(key);
           const hasSyllabus = c.status === "ready" || (c.topics && c.topics.length > 0);
           const chaptersCount = c.topics?.length || (hasSyllabus ? 5 : 0);
           map.set(key, {
@@ -530,7 +530,7 @@ function Dashboard() {
       fallbackChallenges.forEach((item) => {
         const key = item.courseName.toLowerCase().trim();
         if (!map.has(key)) {
-          const isJoined = enrolledNames.has(key) || examCourseNames.has(key);
+          const isJoined = enrolledNames.has(key);
           map.set(key, { ...item, isJoined });
         }
       });
@@ -758,7 +758,7 @@ function Dashboard() {
 
     const loadDashboardData = async () => {
       const prefix = getUserStoragePrefix();
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = toLocalDateStr(new Date());
       const doneKey = `sg-${prefix}-checklist-done-${todayStr}`;
 
       // Load saved done checkboxes for today
@@ -782,8 +782,8 @@ function Dashboard() {
       if (!isMounted) return;
       setEnrolledCount(enrolled.length);
 
-      // 2. Load and sync user exams
-      const validExams = await fetchAndSyncExams();
+      // 2. Load and sync user exams (including target exams set by user)
+      const validExams = await fetchAndSyncExams(enrolled);
       if (!isMounted) return;
       setExams(validExams);
       setCurrentExamIndex(0);
@@ -818,6 +818,15 @@ function Dashboard() {
         activeCourse = enrolled[0];
       }
 
+      if (activeCourse && validExams.length > 0) {
+        const matchingIdx = validExams.findIndex(
+          (e) => e.course.toLowerCase().trim() === activeCourse!.name.toLowerCase().trim()
+        );
+        if (matchingIdx >= 0) {
+          setCurrentExamIndex(matchingIdx);
+        }
+      }
+
       const displayName = activeCourse.code && activeCourse.code.toUpperCase() !== "CUSTOM"
         ? `${activeCourse.code} · ${activeCourse.name}`
         : activeCourse.name;
@@ -827,16 +836,32 @@ function Dashboard() {
       const allPlans: DiscoveredPlan[] = [];
 
       for (const c of enrolled) {
+        let planData: any = null;
         const raw =
           localStorage.getItem(`sg-${prefix}-plan-${c.name}`) ||
           localStorage.getItem(`sg-plan-${c.name}`) ||
           localStorage.getItem(`sg-${prefix}-plan-${c.id}`) ||
           localStorage.getItem(`sg-plan-${c.id}`);
 
-        let planData: any = null;
         if (raw) {
           try {
             planData = JSON.parse(raw);
+          } catch {}
+        }
+
+        // If not in localStorage, fetch from backend API
+        if ((!planData || !planData.tasks || planData.tasks.length === 0) && c.id && !String(c.id).startsWith("c-") && !String(c.id).startsWith("course-")) {
+          try {
+            const remotePlan = await browseService.getCoursePlan(c.id);
+            if (remotePlan?.tasks && remotePlan.tasks.length > 0) {
+              planData = remotePlan;
+              try {
+                localStorage.setItem(`sg-${prefix}-plan-${c.id}`, JSON.stringify(remotePlan));
+                localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(remotePlan));
+                localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(remotePlan));
+                localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(remotePlan));
+              } catch {}
+            }
           } catch {}
         }
 
@@ -909,14 +934,18 @@ function Dashboard() {
       let foundDateLabel = "Today";
 
       allPlans.forEach((plan) => {
-        const todayTasks = plan.tasks.filter((t: any) => t.date === todayStr);
-        todayTasks.forEach((t: any) => {
+        const todayTasks = plan.tasks.filter((t: any) => {
+          const d = t.date || t.scheduledDate || t.scheduled_date;
+          return d === todayStr;
+        });
+        todayTasks.forEach((t: any, idx: number) => {
+          const taskId = String(t.id || `${plan.courseName}-${todayStr}-${t.topic_ref || t.topicRef || t.topic_title || t.title || idx}`);
           aggregatedTasks.push({
-            id: String(t.id),
-            label: t.title || t.name || "Study Task",
+            id: taskId,
+            label: t.title || t.name || t.topic_title || t.topicTitle || t.chapter_title || t.chapterTitle || "Study Task",
             course: plan.courseName,
-            min: t.estimated_minutes || t.durationMinutes || 45,
-            tag: t.is_review ? "Review" : "Core Topic",
+            min: t.estimated_minutes || t.estimatedMinutes || t.durationMinutes || t.minutes || t.min || 45,
+            tag: t.is_review || t.task_type === "REVIEW" || t.taskType === "REVIEW" ? "Review" : "Core Topic",
             description: t.description || "",
             date: t.date || todayStr,
             courseId: plan.courseId,
@@ -929,9 +958,10 @@ function Dashboard() {
         let nearestFutureDate: string | null = null;
         allPlans.forEach((plan) => {
           plan.tasks.forEach((t: any) => {
-            if (t.date && t.date >= todayStr) {
-              if (!nearestFutureDate || t.date < nearestFutureDate) {
-                nearestFutureDate = t.date;
+            const d = t.date || t.scheduledDate || t.scheduled_date;
+            if (d && d >= todayStr) {
+              if (!nearestFutureDate || d < nearestFutureDate) {
+                nearestFutureDate = d;
               }
             }
           });
@@ -940,31 +970,33 @@ function Dashboard() {
         if (nearestFutureDate) {
           foundDateLabel = nearestFutureDate;
           allPlans.forEach((plan) => {
-            const nearTasks = plan.tasks.filter((t: any) => t.date === nearestFutureDate);
-            nearTasks.forEach((t: any) => {
+            const nearTasks = plan.tasks.filter((t: any) => (t.date || t.scheduledDate || t.scheduled_date) === nearestFutureDate);
+            nearTasks.forEach((t: any, idx: number) => {
+              const taskId = String(t.id || `${plan.courseName}-${nearestFutureDate}-${t.topic_ref || t.topicRef || t.topic_title || t.title || idx}`);
               aggregatedTasks.push({
-                id: String(t.id),
-                label: t.title || t.name || "Study Task",
+                id: taskId,
+                label: t.title || t.name || t.topic_title || t.topicTitle || t.chapter_title || t.chapterTitle || "Study Task",
                 course: plan.courseName,
-                min: t.estimated_minutes || t.durationMinutes || 45,
-                tag: t.is_review ? "Review" : "Core Topic",
+                min: t.estimated_minutes || t.estimatedMinutes || t.durationMinutes || t.minutes || t.min || 45,
+                tag: t.is_review || t.task_type === "REVIEW" || t.taskType === "REVIEW" ? "Review" : "Core Topic",
                 description: t.description || "",
-                date: t.date,
+                date: t.date || nearestFutureDate,
                 courseId: plan.courseId,
               });
             });
           });
         } else {
           // Fallback: pick the first available tasks
-          foundDateLabel = "Upcoming";
+          foundDateLabel = "Today";
           allPlans.forEach((plan) => {
-            plan.tasks.slice(0, 2).forEach((t: any) => {
+            plan.tasks.slice(0, 3).forEach((t: any, idx: number) => {
+              const taskId = String(t.id || `${plan.courseName}-${todayStr}-${t.topic_ref || t.topicRef || t.topic_title || t.title || idx}`);
               aggregatedTasks.push({
-                id: String(t.id),
-                label: t.title || t.name || "Study Task",
+                id: taskId,
+                label: t.title || t.name || t.topic_title || t.topicTitle || t.chapter_title || t.chapterTitle || "Study Task",
                 course: plan.courseName,
-                min: t.estimated_minutes || t.durationMinutes || 45,
-                tag: t.is_review ? "Review" : "Core Topic",
+                min: t.estimated_minutes || t.estimatedMinutes || t.durationMinutes || t.minutes || t.min || 45,
+                tag: t.is_review || t.task_type === "REVIEW" || t.taskType === "REVIEW" ? "Review" : "Core Topic",
                 description: t.description || "",
                 date: t.date || todayStr,
                 courseId: plan.courseId,
@@ -996,16 +1028,20 @@ function Dashboard() {
   const getTasksForDate = (targetDateStr: string, plans: DiscoveredPlan[] = discoveredPlans): TaskItem[] => {
     const list: TaskItem[] = [];
     plans.forEach((plan) => {
-      const matching = (plan.tasks || []).filter((t: any) => t.date === targetDateStr);
-      matching.forEach((t: any) => {
+      const matching = (plan.tasks || []).filter((t: any) => {
+        const d = t.date || t.scheduledDate || t.scheduled_date;
+        return d === targetDateStr;
+      });
+      matching.forEach((t: any, idx: number) => {
+        const taskId = String(t.id || `${plan.courseName}-${targetDateStr}-${t.topic_ref || t.topicRef || t.topic_title || t.title || idx}`);
         list.push({
-          id: String(t.id),
-          label: t.title || t.name || "Study Task",
+          id: taskId,
+          label: t.title || t.name || t.topic_title || t.topicTitle || t.chapter_title || t.chapterTitle || "Study Task",
           course: plan.courseName,
-          min: t.estimated_minutes || t.durationMinutes || 45,
-          tag: t.is_review ? "Review" : "Core Topic",
+          min: t.estimated_minutes || t.estimatedMinutes || t.durationMinutes || t.minutes || t.min || 45,
+          tag: t.is_review || t.task_type === "REVIEW" || t.taskType === "REVIEW" ? "Review" : "Core Topic",
           description: t.description || "",
-          date: t.date || targetDateStr,
+          date: targetDateStr,
           courseId: plan.courseId,
         });
       });

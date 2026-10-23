@@ -149,6 +149,28 @@
 @utility shadow-glow { box-shadow: var(--shadow-glow); }
 @utility shadow-survival { box-shadow: var(--shadow-survival); }
 @utility animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+@utility animate-flash-fast { animation: flash-fast 0.65s ease-in-out infinite; }
+@utility animate-flash-slow { animation: flash-slow 2.2s ease-in-out infinite; }
+@utility animate-ping-fast { animation: ping-custom 0.75s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@utility animate-ping-slow { animation: ping-custom 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+@keyframes flash-fast {
+  0%, 100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.9)); }
+  50% { opacity: 0.35; transform: scale(0.85); filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.3)); }
+}
+
+@keyframes flash-slow {
+  0%, 100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.7)); }
+  50% { opacity: 0.5; transform: scale(0.92); filter: drop-shadow(0 0 1px rgba(245, 158, 11, 0.2)); }
+}
+
+@keyframes ping-custom {
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
 @utility animate-float { animation: float 4s ease-in-out infinite; }
 @utility preserve-3d { transform-style: preserve-3d; }
 @utility backface-hidden { backface-visibility: hidden; }

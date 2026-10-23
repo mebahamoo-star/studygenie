@@ -9,6 +9,8 @@ import com.studygenie.backend.dto.browse.CourseDto;
 import com.studygenie.backend.dto.syllabus.TopicDto;
 import com.studygenie.backend.entity.College;
 import com.studygenie.backend.entity.Course;
+import com.studygenie.backend.entity.Exam;
+import com.studygenie.backend.repository.ExamRepository;
 import com.studygenie.backend.entity.Flashcard;
 import com.studygenie.backend.entity.FlashcardReview;
 import com.studygenie.backend.entity.PlanTask;
@@ -68,6 +70,7 @@ public class CourseService {
     private final FlashcardReviewRepository flashcardReviewRepository;
     private final QuizQuestionRepository quizQuestionRepository;
     private final QuizAttemptRepository quizAttemptRepository;
+    private final ExamRepository examRepository;
 
     public CourseService(CourseRepository courseRepository,
                          CollegeRepository collegeRepository,
@@ -81,7 +84,8 @@ public class CourseService {
                          FlashcardRepository flashcardRepository,
                          FlashcardReviewRepository flashcardReviewRepository,
                          QuizQuestionRepository quizQuestionRepository,
-                         QuizAttemptRepository quizAttemptRepository) {
+                         QuizAttemptRepository quizAttemptRepository,
+                         ExamRepository examRepository) {
         this.courseRepository = courseRepository;
         this.collegeRepository = collegeRepository;
         this.universityRepository = universityRepository;
@@ -95,6 +99,7 @@ public class CourseService {
         this.flashcardReviewRepository = flashcardReviewRepository;
         this.quizQuestionRepository = quizQuestionRepository;
         this.quizAttemptRepository = quizAttemptRepository;
+        this.examRepository = examRepository;
     }
 
     @Transactional(readOnly = true)
@@ -520,6 +525,11 @@ public class CourseService {
                 .examDate(examDate)
                 .build();
         studyPlan = studyPlanRepository.save(studyPlan);
+        if (student.getEnrolledCourses() != null && !student.getEnrolledCourses().contains(course)) {
+            student.getEnrolledCourses().add(course);
+            studentRepository.save(student);
+        }
+        syncExamDate(student, course.getName(), examDate);
 
         // 2. Generate Plan
         GeneratePlanRequest request = new GeneratePlanRequest(
@@ -588,6 +598,11 @@ public class CourseService {
 
         studyPlan.setExamDate(examDate);
         studyPlan = studyPlanRepository.save(studyPlan);
+        if (student.getEnrolledCourses() != null && !student.getEnrolledCourses().contains(course)) {
+            student.getEnrolledCourses().add(course);
+            studentRepository.save(student);
+        }
+        syncExamDate(student, course.getName(), examDate);
 
         // Delete previous plan tasks for this plan so we regenerate fresh with all latest chapters
         List<PlanTask> oldTasks = planTaskRepository.findByStudyPlanId(studyPlan.getId());
@@ -676,5 +691,22 @@ public class CourseService {
 
         PlanSummary summary = new PlanSummary("NORMAL", 1, 0, 0, tasks.size(), 0, true, List.of());
         return new PlanResponseData(tasks, List.of(), summary);
+    }
+    private void syncExamDate(Student student, String courseName, LocalDate examDate) {
+        if (student == null || courseName == null || examDate == null) return;
+        try {
+            var existingExam = examRepository.findFirstByStudentIdAndCourseIgnoreCase(student.getId(), courseName.trim());
+            Exam exam = existingExam.orElseGet(() -> Exam.builder()
+                    .student(student)
+                    .uploaderName(student.getFullName() != null && !student.getFullName().isBlank() ? student.getFullName() : student.getEmail())
+                    .course(courseName.trim())
+                    .type("Final Exam")
+                    .build());
+            exam.setDate(examDate);
+            examRepository.save(exam);
+            log.info("Synchronized Exam date for student '{}' course '{}' to {}", student.getId(), courseName, examDate);
+        } catch (Exception e) {
+            log.warn("Non-fatal: could not sync Exam record for course {}: {}", courseName, e.getMessage());
+        }
     }
 }

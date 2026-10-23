@@ -8,6 +8,8 @@ import com.studygenie.backend.entity.College;
 import com.studygenie.backend.entity.Course;
 import com.studygenie.backend.entity.Exam;
 import com.studygenie.backend.entity.Student;
+import com.studygenie.backend.entity.StudyPlan;
+import com.studygenie.backend.repository.StudyPlanRepository;
 import com.studygenie.backend.entity.enums.CourseStatus;
 import com.studygenie.backend.exception.ResourceNotFoundException;
 import com.studygenie.backend.repository.CollegeRepository;
@@ -46,31 +48,41 @@ public class ExamController {
     private final CollegeRepository collegeRepository;
     private final SyllabusRepository syllabusRepository;
     private final TopicRepository topicRepository;
+    private final StudyPlanRepository studyPlanRepository;
 
     public ExamController(ExamRepository examRepository,
                           StudentRepository studentRepository,
                           CourseRepository courseRepository,
                           CollegeRepository collegeRepository,
                           SyllabusRepository syllabusRepository,
-                          TopicRepository topicRepository) {
+                          TopicRepository topicRepository,
+                          StudyPlanRepository studyPlanRepository) {
         this.examRepository = examRepository;
         this.studentRepository = studentRepository;
         this.courseRepository = courseRepository;
         this.collegeRepository = collegeRepository;
         this.syllabusRepository = syllabusRepository;
         this.topicRepository = topicRepository;
+        this.studyPlanRepository = studyPlanRepository;
     }
 
     @GetMapping
     @Operation(summary = "Get all exams for current student")
     public ResponseEntity<ApiResponse<List<ExamDto>>> getMyExams(
             @AuthenticationPrincipal AuthenticatedUser userDetails) {
-        List<Exam> exams;
-        if (userDetails != null && userDetails.id() != null) {
-            exams = examRepository.findByStudentIdOrderByDateAsc(userDetails.id());
-        } else {
-            exams = examRepository.findAll();
+        if (userDetails == null || userDetails.id() == null) {
+            return ResponseEntity.ok(ApiResponse.ok("Exams fetched successfully", List.of()));
         }
+
+        Long studentId = userDetails.id();
+        Student student = studentRepository.findById(studentId).orElse(null);
+        if (student == null) {
+            return ResponseEntity.ok(ApiResponse.ok("Exams fetched successfully", List.of()));
+        }
+
+        // Return all exams belonging to this student (both enrolled course exams and target exams)
+        List<Exam> exams = examRepository.findByStudentIdOrderByDateAsc(studentId);
+
         List<ExamDto> list = exams.stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
@@ -236,14 +248,19 @@ public class ExamController {
                     : student.getEmail();
         }
 
-        Exam exam = Exam.builder()
-                .student(student)
-                .uploaderName(uploader.trim())
+        final Student targetStudent = student;
+        Optional<Exam> existingExam = examRepository.findFirstByStudentIdAndCourseIgnoreCase(student.getId(), req.course().trim());
+        Exam exam = existingExam.orElseGet(() -> Exam.builder()
+                .student(targetStudent)
                 .course(req.course().trim())
-                .type(req.type().trim())
-                .date(req.date())
-                .professor(req.professor() != null ? req.professor().trim() : "")
-                .build();
+                .build());
+
+        exam.setUploaderName(uploader.trim());
+        exam.setType(req.type().trim());
+        exam.setDate(req.date());
+        if (req.professor() != null && !req.professor().isBlank()) {
+            exam.setProfessor(req.professor().trim());
+        }
         exam = examRepository.save(exam);
 
         // Also ensure a corresponding course exists and is enrolled by the student

@@ -104,7 +104,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchAndSyncExams().then((userExams) => {
-      setExams(userExams);
+      const enrolled = getUserCourses();
+      const filtered = enrolled.length > 0
+        ? userExams.filter((ex) => isCourseEnrolled(ex.course, enrolled))
+        : [];
+      setExams(filtered);
     });
   }, [path]);
 
@@ -132,17 +136,29 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const tickerBadgeStyle =
     tickerStatus === "red"
-      ? "border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400 animate-pulse-soft"
+      ? "border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400"
       : tickerStatus === "orange"
         ? "border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400"
         : "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
 
-  const tickerDotStyle =
+  const tickerPointConfig =
     tickerStatus === "red"
-      ? { ping: "bg-red-400", dot: "bg-red-500" }
+      ? {
+          pingClass: "animate-ping-fast bg-red-400 opacity-75",
+          dotClass: "animate-flash-fast bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.85)]",
+          showPing: true,
+        }
       : tickerStatus === "orange"
-        ? { ping: "bg-amber-400", dot: "bg-amber-500" }
-        : { ping: "bg-emerald-400", dot: "bg-emerald-500" };
+        ? {
+            pingClass: "animate-ping-slow bg-amber-400 opacity-60",
+            dotClass: "animate-flash-slow bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]",
+            showPing: true,
+          }
+        : {
+            pingClass: "",
+            dotClass: "bg-emerald-500 shadow-sm",
+            showPing: false,
+          };
 
   const initials = (user?.fullName || "Scholar")
     .split(" ")
@@ -286,14 +302,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Separator orientation="vertical" className="mr-1 h-5 hidden sm:block" />
 
             <div className={cn("flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold shadow-sm transition-colors", tickerBadgeStyle)}>
-              <span className="relative flex h-2 w-2">
-                <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", tickerDotStyle.ping)}></span>
-                <span className={cn("relative inline-flex h-2 w-2 rounded-full", tickerDotStyle.dot)}></span>
+              <span className="relative flex h-2 w-2 items-center justify-center">
+                {tickerPointConfig.showPing && (
+                  <span className={cn("absolute inline-flex h-full w-full rounded-full", tickerPointConfig.pingClass)}></span>
+                )}
+                <span className={cn("relative inline-flex h-2 w-2 rounded-full", tickerPointConfig.dotClass)}></span>
               </span>
               <span className="hidden sm:inline tracking-wider uppercase text-[10px]">
-                {tickerStatus === "red" ? "EXAM TICKER · < 15D" : tickerStatus === "orange" ? "EXAM TICKER · 15-30D" : "EXAM TICKER · SAFE"}
+                {tickerStatus === "red" ? "EXAM TICKER · DANGER" : tickerStatus === "orange" ? "EXAM TICKER · MODERATE" : "EXAM TICKER · SAFE"}
               </span>
-              <span className="sm:hidden text-[10px]">LIVE</span>
+              <span className="sm:hidden text-[10px] tracking-wider uppercase font-extrabold">
+                {tickerStatus === "red" ? "DANGER" : tickerStatus === "orange" ? "MODERATE" : "SAFE"}
+              </span>
             </div>
 
             {exams.length > 0 ? (

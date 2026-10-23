@@ -31,7 +31,7 @@ import { Slider } from "@/components/ui/slider";
 import { pageHead } from "@/lib/head";
 import { browseService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { getUserCourses, getUserTaskKits, saveUserTaskKits } from "@/lib/courses-util";
+import { getUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix } from "@/lib/courses-util";
 import type { Course, PlanResponseData } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -129,6 +129,15 @@ function Plan() {
         const res = await browseService.getCoursePlan(c.id);
         if (res?.tasks && res.tasks.length > 0) {
           planData = res;
+          const prefix = getUserStoragePrefix();
+          try {
+            localStorage.setItem(`sg-${prefix}-plan-${c.id}`, JSON.stringify(res));
+            localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(res));
+            if (c.name) {
+              localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(res));
+              localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(res));
+            }
+          } catch {}
         }
       } catch {}
     }
