@@ -2,13 +2,13 @@ import type { ApiResponse, AuthResponse, UserSummary } from "./types";
 
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    // When accessed from another device on the local network (e.g. mobile phone, tablet, laptop)
-    if (host && host !== "localhost" && host !== "127.0.0.1") {
-      return `http://${host}:8080`;
-    }
+    // In browser, always use relative path ("") so all API requests go through
+    // Vite's reverse proxy on the same port (5173). This allows mobile devices,
+    // tablets, and WhatsApp in-app browser to access the backend API and parse syllabi
+    // without port 8080 firewall blocking or CORS issues.
+    return "";
   }
-  return (import.meta.env["VITE_API_URL"] as string) || "http://localhost:8080";
+  return (import.meta.env["VITE_API_URL"] as string) || "http://127.0.0.1:8080";
 }
 
 export const API_BASE_URL = getApiBaseUrl();
