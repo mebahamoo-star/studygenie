@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { pageHead } from "@/lib/head";
 import { browseService, syllabusService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, toLocalDateStr } from "@/lib/courses-util";
+import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, toLocalDateStr, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile } from "@/lib/courses-util";
 import { clearExam, deleteExam, isCourseEnrolled, loadExam, loadExams, saveExam } from "@/lib/exam";
 import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import type { Course, CourseStatus, Topic } from "@/lib/api/types";
@@ -48,14 +48,9 @@ function CoursesPage() {
   const [loadingSelectedTopics, setLoadingSelectedTopics] = useState(false);
 
   const refreshCourses = async () => {
-    const savedCol = localStorage.getItem("sg-user-col");
+    const { col } = getUserAcademicProfile();
     let colId: any = undefined;
-    if (savedCol) {
-      try {
-        const parsed = JSON.parse(savedCol);
-        if (parsed?.id && !isNaN(Number(parsed.id))) colId = Number(parsed.id);
-      } catch {}
-    }
+    if (col?.id && !isNaN(Number(col.id))) colId = Number(col.id);
 
     // Parallel fetch: user enrolled courses + college catalog simultaneously
     const [enrolledRes, catalogRes] = await Promise.allSettled([
@@ -200,14 +195,8 @@ function CoursesPage() {
     };
 
     try {
-      const savedCol = localStorage.getItem("sg-user-col");
-      let colId = 1;
-      if (savedCol) {
-        try {
-          const parsed = JSON.parse(savedCol);
-          if (parsed?.id && !isNaN(Number(parsed.id))) colId = Number(parsed.id);
-        } catch {}
-      }
+      const { col } = getUserAcademicProfile();
+      let colId = (col?.id && !isNaN(Number(col.id))) ? Number(col.id) : 1;
       const created = await browseService.createCourse(colId, trimmed);
       if (created) {
         newCourse = {
@@ -319,7 +308,7 @@ function CoursesPage() {
       setSel(String(finalId));
     }
     const current = updated.find((c) => String(c.id) === String(finalId));
-    if (current) localStorage.setItem("sg-active-course", JSON.stringify(current));
+    if (current) saveActiveCourse(current);
   };
 
   return (
@@ -581,14 +570,8 @@ function EmptyUpload({
       let targetCourseId = course?.id;
       if (!targetCourseId || String(targetCourseId).startsWith("course-") || String(targetCourseId).startsWith("c-")) {
         try {
-          const savedCol = localStorage.getItem("sg-user-col");
-          let colId = 1;
-          if (savedCol) {
-            try {
-              const parsed = JSON.parse(savedCol);
-              if (parsed?.id && !isNaN(Number(parsed.id))) colId = Number(parsed.id);
-            } catch {}
-          }
+          const { col } = getUserAcademicProfile();
+      let colId = (col?.id && !isNaN(Number(col.id))) ? Number(col.id) : 1;
           const created = await browseService.createCourse(colId, course?.name || "My Course");
           if (created?.id) {
             targetCourseId = created.id;
@@ -1124,21 +1107,20 @@ function JoinChallenge({
       if (planData) {
         const prefix = getUserStoragePrefix();
         try {
-          localStorage.setItem(`sg-${prefix}-active-plan`, JSON.stringify(planData));
-          localStorage.setItem("sg-active-plan", JSON.stringify(planData));
+          saveActivePlan(planData);
           if (course.id) {
             localStorage.setItem(`sg-${prefix}-plan-${course.id}`, JSON.stringify(planData));
-            localStorage.setItem(`sg-plan-${course.id}`, JSON.stringify(planData));
+            if (prefix === "guest") localStorage.setItem(`sg-plan-${course.id}`, JSON.stringify(planData));
           }
           localStorage.setItem(`sg-${prefix}-plan-${course.name}`, JSON.stringify(planData));
-          localStorage.setItem(`sg-plan-${course.name}`, JSON.stringify(planData));
+          if (prefix === "guest") localStorage.setItem(`sg-plan-${course.name}`, JSON.stringify(planData));
         } catch {}
       }
       const updatedCourse = {
         ...course,
         topics: topics.length > 0 ? topics : course.topics,
       };
-      localStorage.setItem("sg-active-course", JSON.stringify(updatedCourse));
+      saveActiveCourse(updatedCourse);
       
       const userCourses = getUserCourses();
       const cIdx = userCourses.findIndex((c) => String(c.id) === String(course.id) || c.name.toLowerCase().trim() === course.name.toLowerCase().trim());

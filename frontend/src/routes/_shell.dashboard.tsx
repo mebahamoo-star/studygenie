@@ -35,7 +35,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useApp } from "@/lib/app-state";
 import { pageHead } from "@/lib/head";
-import { deduplicateTopics, getUserCourses, getUserStoragePrefix, getUserTaskKits, saveUserCourses, saveUserTaskKits } from "@/lib/courses-util";
+import { deduplicateTopics, getUserCourses, getUserStoragePrefix, getUserTaskKits, saveUserCourses, saveUserTaskKits, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile } from "@/lib/courses-util";
 import { browseService, examService, type CommunityChallenge } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
 import type { Course, Topic } from "@/lib/api/types";
@@ -450,22 +450,11 @@ function Dashboard() {
     let collegeId: number | string | undefined = undefined;
 
     try {
-      const savedUni = localStorage.getItem("sg-user-uni");
-      if (savedUni) {
-        const parsed = JSON.parse(savedUni);
-        uniName = parsed.name || "";
-      }
-      const savedCol = localStorage.getItem("sg-user-col");
-      if (savedCol) {
-        const parsed = JSON.parse(savedCol);
-        colName = parsed.name || "";
-        collegeId = parsed.id;
-      }
-      const savedMajor = localStorage.getItem("sg-user-major");
-      if (savedMajor) {
-        const parsed = JSON.parse(savedMajor);
-        majorName = parsed.name || "";
-      }
+      const profile = getUserAcademicProfile();
+      if (profile.uni?.name) uniName = profile.uni.name;
+      if (profile.col?.name) colName = profile.col.name;
+      if (profile.col?.id) collegeId = profile.col.id;
+      if (profile.major?.name) majorName = profile.major.name;
     } catch {}
 
     setCampusInfo({
@@ -597,7 +586,7 @@ function Dashboard() {
 
       const nextEnrolled = [courseObj, ...enrolled.filter((c) => c.name.toLowerCase() !== ch.courseName.toLowerCase())];
       saveUserCourses(nextEnrolled);
-      localStorage.setItem("sg-active-course", JSON.stringify(courseObj));
+      saveActiveCourse(courseObj);
 
       // Enroll in backend
       if (ch.courseId) {
@@ -691,15 +680,17 @@ function Dashboard() {
         planData = { tasks: tasksGenerated };
       }
 
-      localStorage.setItem("sg-active-plan", JSON.stringify(planData));
+      saveActivePlan(planData);
 
       // 5. Generate NotebookLM-style active recall flashcards and quiz questions
       const flashcards = generateNotebookLMFlashcards(ch.courseName, topics);
       const quizQuestions = generateExamQuizzes(ch.courseName, topics);
 
       localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(flashcards));
-      localStorage.setItem("sg-active-cards", JSON.stringify(flashcards));
-      localStorage.setItem("sg-active-quiz", JSON.stringify(quizQuestions));
+      if (prefix === "guest") {
+        localStorage.setItem("sg-active-cards", JSON.stringify(flashcards));
+        localStorage.setItem("sg-active-quiz", JSON.stringify(quizQuestions));
+      }
 
       const kits = getUserTaskKits();
       kits[ch.courseName.toLowerCase().trim()] = {
@@ -780,15 +771,18 @@ function Dashboard() {
       if (remoteCoursesRes.status === "fulfilled" && Array.isArray(remoteCoursesRes.value)) {
         const remote = remoteCoursesRes.value;
         const localCourses = getUserCourses();
-        const merged = new Map<string, Course>();
-        remote.forEach((c) => merged.set(c.name.toLowerCase().trim(), c));
-        localCourses.forEach((c) => {
-          const key = c.name.toLowerCase().trim();
-          if (!merged.has(key)) {
-            merged.set(key, c);
-          }
+        const localMap = new Map<string, Course>();
+        localCourses.forEach((c) => localMap.set(c.name.toLowerCase().trim(), c));
+
+        enrolled = remote.map((c) => {
+          const loc = localMap.get(c.name.toLowerCase().trim());
+          const hasLocalTopics = loc?.topics && loc.topics.length > 0;
+          return {
+            ...c,
+            topics: hasLocalTopics ? loc.topics : c.topics || [],
+            status: hasLocalTopics || c.status === "ready" ? "ready" : c.status,
+          };
         });
-        enrolled = Array.from(merged.values());
         saveUserCourses(enrolled);
       }
 
@@ -806,15 +800,8 @@ function Dashboard() {
 
       // Ensure any courses from target exams or active course are included
       if (enrolled.length === 0) {
-        const actRaw =
-          localStorage.getItem(`sg-${prefix}-active-course`) ||
-          localStorage.getItem("sg-active-course");
-        if (actRaw) {
-          try {
-            const parsed = JSON.parse(actRaw);
-            if (parsed && parsed.name) enrolled.push(parsed);
-          } catch {}
-        }
+        const act = getActiveCourse();
+        if (act && act.name) enrolled.push(act);
       }
       if (validExams.length > 0) {
         validExams.forEach((ex) => {
@@ -839,20 +826,11 @@ function Dashboard() {
       }
 
       // 4. Determine active course
-      const activeCourseRaw =
-        localStorage.getItem(`sg-${prefix}-active-course`) ||
-        localStorage.getItem("sg-active-course");
-      let activeCourse: Course | null = null;
-      if (activeCourseRaw) {
-        try {
-          const parsed = JSON.parse(activeCourseRaw);
-          if (enrolled.some((c) => c.name.toLowerCase() === parsed.name?.toLowerCase())) {
-            activeCourse = parsed;
-          }
-        } catch {}
+      let activeCourse = getActiveCourse();
+      if (activeCourse && !enrolled.some((c) => c.name.toLowerCase() === activeCourse!.name?.toLowerCase())) {
+        activeCourse = null;
       }
-
-      if (!activeCourse) {
+      if (!activeCourse && enrolled.length > 0) {
         activeCourse = enrolled[0];
       }
 
@@ -873,10 +851,7 @@ function Dashboard() {
       // Pre-fetch any missing plans in parallel
       const missingPlanCourses = enrolled.filter((c) => {
         const raw =
-          localStorage.getItem(`sg-${prefix}-plan-${c.name}`) ||
-          localStorage.getItem(`sg-plan-${c.name}`) ||
-          localStorage.getItem(`sg-${prefix}-plan-${c.id}`) ||
-          localStorage.getItem(`sg-plan-${c.id}`);
+          localStorage.getItem(`sg-${prefix}-plan-${c.name}`) || localStorage.getItem(`sg-${prefix}-plan-${c.id}`) || (prefix === "guest" ? (localStorage.getItem(`sg-plan-${c.name}`) || localStorage.getItem(`sg-plan-${c.id}`)) : null);
         return !raw && c.id && !String(c.id).startsWith("c-") && !String(c.id).startsWith("course-");
       });
 
@@ -887,9 +862,11 @@ function Dashboard() {
               const remotePlan = await browseService.getCoursePlan(c.id);
               if (remotePlan?.tasks && remotePlan.tasks.length > 0) {
                 localStorage.setItem(`sg-${prefix}-plan-${c.id}`, JSON.stringify(remotePlan));
-                localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(remotePlan));
-                localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(remotePlan));
-                localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(remotePlan));
+            localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(remotePlan));
+            if (prefix === "guest") {
+              localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(remotePlan));
+              localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(remotePlan));
+            }
               }
             } catch {}
           })
@@ -902,10 +879,7 @@ function Dashboard() {
       for (const c of enrolled) {
         let planData: any = null;
         const raw =
-          localStorage.getItem(`sg-${prefix}-plan-${c.name}`) ||
-          localStorage.getItem(`sg-plan-${c.name}`) ||
-          localStorage.getItem(`sg-${prefix}-plan-${c.id}`) ||
-          localStorage.getItem(`sg-plan-${c.id}`);
+          localStorage.getItem(`sg-${prefix}-plan-${c.name}`) || localStorage.getItem(`sg-${prefix}-plan-${c.id}`) || (prefix === "guest" ? (localStorage.getItem(`sg-plan-${c.name}`) || localStorage.getItem(`sg-plan-${c.id}`)) : null);
 
         if (raw) {
           try {
@@ -921,9 +895,11 @@ function Dashboard() {
               planData = remotePlan;
               try {
                 localStorage.setItem(`sg-${prefix}-plan-${c.id}`, JSON.stringify(remotePlan));
-                localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(remotePlan));
-                localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(remotePlan));
-                localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(remotePlan));
+            localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(remotePlan));
+            if (prefix === "guest") {
+              localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(remotePlan));
+              localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(remotePlan));
+            }
               } catch {}
             }
           } catch {}
@@ -942,22 +918,17 @@ function Dashboard() {
 
       // Also check global active plan
       try {
-        const activeRaw =
-          localStorage.getItem(`sg-${prefix}-active-plan`) ||
-          localStorage.getItem("sg-active-plan");
-        if (activeRaw) {
-          const parsed = JSON.parse(activeRaw);
-          if (parsed?.tasks && parsed.tasks.length > 0) {
-            const alreadyIn = allPlans.some((p) => p.tasks.length === parsed.tasks.length);
-            if (!alreadyIn) {
-              allPlans.push({
-                courseName: activeCourse?.name || "General Course",
-                courseCode: activeCourse?.code && activeCourse.code.toUpperCase() !== "CUSTOM" ? activeCourse.code : undefined,
-                courseId: activeCourse?.id,
-                topics: activeCourse?.topics,
-                tasks: parsed.tasks,
-              });
-            }
+        const parsed = getActivePlan();
+        if (parsed?.tasks && parsed.tasks.length > 0) {
+          const alreadyIn = allPlans.some((p) => p.tasks.length === parsed.tasks.length);
+          if (!alreadyIn) {
+            allPlans.push({
+              courseName: activeCourse?.name || "General Course",
+              courseCode: activeCourse?.code && activeCourse.code.toUpperCase() !== "CUSTOM" ? activeCourse.code : undefined,
+              courseId: activeCourse?.id,
+              topics: activeCourse?.topics,
+              tasks: parsed.tasks,
+            });
           }
         }
       } catch {}

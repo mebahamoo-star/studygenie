@@ -111,16 +111,21 @@ export function sanitizeUserCourses(courses: Course[]): Course[] {
 export function getUserCourses(): Course[] {
   try {
     const prefix = getUserStoragePrefix();
+    if (prefix === "guest") {
+      const raw = localStorage.getItem("sg-guest-courses") || localStorage.getItem("sg-user-courses");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return sanitizeUserCourses(parsed);
+        }
+      }
+      return [];
+    }
+
+    // Strict account isolation: only read user-scoped key
     const raw = localStorage.getItem(`sg-${prefix}-courses`);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return sanitizeUserCourses(parsed);
-      }
-    }
-    const oldRaw = localStorage.getItem("sg-user-courses");
-    if (oldRaw) {
-      const parsed = JSON.parse(oldRaw);
       if (Array.isArray(parsed)) {
         return sanitizeUserCourses(parsed);
       }
@@ -136,6 +141,135 @@ export function saveUserCourses(courses: Course[]): void {
     const prefix = getUserStoragePrefix();
     const sanitized = sanitizeUserCourses(courses);
     localStorage.setItem(`sg-${prefix}-courses`, JSON.stringify(sanitized));
+    if (prefix === "guest") {
+      localStorage.setItem("sg-user-courses", JSON.stringify(sanitized));
+    }
+  } catch {}
+}
+
+export function getActiveCourse(): Course | null {
+  try {
+    const prefix = getUserStoragePrefix();
+    const raw = localStorage.getItem(`sg-${prefix}-active-course`);
+    if (raw) return JSON.parse(raw);
+    if (prefix === "guest") {
+      const legacy = localStorage.getItem("sg-active-course");
+      if (legacy) return JSON.parse(legacy);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveCourse(course: Course | null): void {
+  try {
+    const prefix = getUserStoragePrefix();
+    if (course) {
+      localStorage.setItem(`sg-${prefix}-active-course`, JSON.stringify(course));
+      if (prefix === "guest") {
+        localStorage.setItem("sg-active-course", JSON.stringify(course));
+      }
+    } else {
+      localStorage.removeItem(`sg-${prefix}-active-course`);
+      if (prefix === "guest") {
+        localStorage.removeItem("sg-active-course");
+      }
+    }
+  } catch {}
+}
+
+export function getActivePlan(): any | null {
+  try {
+    const prefix = getUserStoragePrefix();
+    const raw = localStorage.getItem(`sg-${prefix}-active-plan`);
+    if (raw) return JSON.parse(raw);
+    if (prefix === "guest") {
+      const legacy = localStorage.getItem("sg-active-plan");
+      if (legacy) return JSON.parse(legacy);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveActivePlan(plan: any | null): void {
+  try {
+    const prefix = getUserStoragePrefix();
+    if (plan) {
+      localStorage.setItem(`sg-${prefix}-active-plan`, JSON.stringify(plan));
+      if (prefix === "guest") {
+        localStorage.setItem("sg-active-plan", JSON.stringify(plan));
+      }
+    } else {
+      localStorage.removeItem(`sg-${prefix}-active-plan`);
+      if (prefix === "guest") {
+        localStorage.removeItem("sg-active-plan");
+      }
+    }
+  } catch {}
+}
+
+export interface UserAcademicProfile {
+  uni?: { id?: number | string; name: string } | null;
+  col?: { id?: number | string; name: string } | null;
+  major?: { id?: number | string; name: string } | null;
+}
+
+export function getUserAcademicProfile(): UserAcademicProfile {
+  try {
+    const prefix = getUserStoragePrefix();
+    const uniRaw =
+      localStorage.getItem(`sg-${prefix}-user-uni`) ||
+      (prefix === "guest" ? localStorage.getItem("sg-user-uni") : null);
+    const colRaw =
+      localStorage.getItem(`sg-${prefix}-user-col`) ||
+      (prefix === "guest" ? localStorage.getItem("sg-user-col") : null);
+    const majorRaw =
+      localStorage.getItem(`sg-${prefix}-user-major`) ||
+      (prefix === "guest" ? localStorage.getItem("sg-user-major") : null);
+
+    return {
+      uni: uniRaw ? JSON.parse(uniRaw) : null,
+      col: colRaw ? JSON.parse(colRaw) : null,
+      major: majorRaw ? JSON.parse(majorRaw) : null,
+    };
+  } catch {
+    return {};
+  }
+}
+
+export function saveUserAcademicProfile(profile: UserAcademicProfile): void {
+  try {
+    const prefix = getUserStoragePrefix();
+    if (profile.uni !== undefined) {
+      if (profile.uni) {
+        localStorage.setItem(`sg-${prefix}-user-uni`, JSON.stringify(profile.uni));
+        if (prefix === "guest") localStorage.setItem("sg-user-uni", JSON.stringify(profile.uni));
+      } else {
+        localStorage.removeItem(`sg-${prefix}-user-uni`);
+        if (prefix === "guest") localStorage.removeItem("sg-user-uni");
+      }
+    }
+    if (profile.col !== undefined) {
+      if (profile.col) {
+        localStorage.setItem(`sg-${prefix}-user-col`, JSON.stringify(profile.col));
+        if (prefix === "guest") localStorage.setItem("sg-user-col", JSON.stringify(profile.col));
+      } else {
+        localStorage.removeItem(`sg-${prefix}-user-col`);
+        if (prefix === "guest") localStorage.removeItem("sg-user-col");
+      }
+    }
+    if (profile.major !== undefined) {
+      if (profile.major) {
+        localStorage.setItem(`sg-${prefix}-user-major`, JSON.stringify(profile.major));
+        if (prefix === "guest") localStorage.setItem("sg-user-major", JSON.stringify(profile.major));
+      } else {
+        localStorage.removeItem(`sg-${prefix}-user-major`);
+        if (prefix === "guest") localStorage.removeItem("sg-user-major");
+      }
+    }
   } catch {}
 }
 

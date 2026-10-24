@@ -18,6 +18,7 @@ import { Card } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
 import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
 import { useApp } from "@/lib/app-state";
+import { getUserAcademicProfile } from "@/lib/courses-util";
 import { pageHead } from "@/lib/head";
 import { gamificationService } from "@/lib/api/services";
 import type { GamificationProfile } from "@/lib/api/types";
@@ -48,16 +49,9 @@ function Profile() {
 
   useEffect(() => {
     try {
-      const savedUni = localStorage.getItem("sg-user-uni");
-      if (savedUni) {
-        const u = JSON.parse(savedUni);
-        setUniName(u.name || "");
-      }
-      const savedMajor = localStorage.getItem("sg-user-major");
-      if (savedMajor) {
-        const m = JSON.parse(savedMajor);
-        setMajorName(m.name || "");
-      }
+      const profile = getUserAcademicProfile();
+      if (profile.uni?.name) setUniName(profile.uni.name);
+      if (profile.major?.name) setMajorName(profile.major.name);
     } catch {}
 
     gamificationService

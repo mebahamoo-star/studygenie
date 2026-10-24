@@ -98,10 +98,9 @@ function Plan() {
       setCourses(enrolled);
 
       // Auto-select active course if redirected from course configuration
-      const activeCourseRaw = localStorage.getItem("sg-active-course");
-      if (activeCourseRaw) {
+      const act = getActiveCourse();
+      if (act) {
         try {
-          const act = JSON.parse(activeCourseRaw);
           const matched = enrolled.find((e) => String(e.id) === String(act.id)) || act;
           handleSelectSubject(matched);
           return;
@@ -144,14 +143,12 @@ function Plan() {
 
     if (!planData) {
       try {
-        const localPlan = localStorage.getItem(`sg-plan-${c.id}`);
+        const prefix = getUserStoragePrefix();
+        const localPlan = localStorage.getItem(`sg-${prefix}-plan-${c.id}`) || (prefix === "guest" ? localStorage.getItem(`sg-plan-${c.id}`) : null);
         if (localPlan) {
           planData = JSON.parse(localPlan);
         } else {
-          const activePlan = localStorage.getItem("sg-active-plan");
-          if (activePlan) {
-            planData = JSON.parse(activePlan);
-          }
+          planData = getActivePlan();
         }
       } catch {}
     }

@@ -21,7 +21,7 @@ import { useApp } from "@/lib/app-state";
 import { pageHead } from "@/lib/head";
 import { cn } from "@/lib/utils";
 import { celebrationSounds, getSavedCelebrationSound, setSavedCelebrationSound, playCelebrationSound, type CelebrationSoundType } from "@/lib/sound";
-import { getUserStoragePrefix } from "@/lib/courses-util";
+import { getUserStoragePrefix, getUserAcademicProfile } from "@/lib/courses-util";
 import { clearExam } from "@/lib/exam";
 
 export const Route = createFileRoute("/_shell/settings")({
@@ -41,12 +41,10 @@ function Settings() {
   useEffect(() => {
     setSelectedSound(getSavedCelebrationSound());
     try {
-      const u = localStorage.getItem("sg-user-uni");
-      if (u) setUniName(JSON.parse(u).name || "");
-      const c = localStorage.getItem("sg-user-col");
-      if (c) setColName(JSON.parse(c).name || "");
-      const m = localStorage.getItem("sg-user-major");
-      if (m) setMajorName(JSON.parse(m).name || "");
+      const profile = getUserAcademicProfile();
+      if (profile.uni?.name) setUniName(profile.uni.name);
+      if (profile.col?.name) setColName(profile.col.name);
+      if (profile.major?.name) setMajorName(profile.major.name);
     } catch {}
   }, []);
 
@@ -66,6 +64,9 @@ function Settings() {
     localStorage.removeItem(`sg-${prefix}-active-course`);
     localStorage.removeItem(`sg-${prefix}-active-plan`);
     localStorage.removeItem(`sg-${prefix}-active-cards`);
+    localStorage.removeItem(`sg-${prefix}-user-uni`);
+    localStorage.removeItem(`sg-${prefix}-user-col`);
+    localStorage.removeItem(`sg-${prefix}-user-major`);
     localStorage.removeItem("sg-exams");
     localStorage.removeItem("sg-exam");
     localStorage.removeItem("sg-uploads");

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { browseService } from "@/lib/api/services";
-import { saveUserCourses } from "@/lib/courses-util";
+import { saveUserCourses, saveUserAcademicProfile } from "@/lib/courses-util";
 import type { Course, University } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -270,15 +270,11 @@ function Onboarding() {
         saveUserCourses(selectedCoursesData);
         await browseService.syncEnrolledCourses(selectedCoursesData.map((c) => c.id || c.name)).catch(() => {});
       }
-      if (finalUni) {
-        localStorage.setItem("sg-user-uni", JSON.stringify(finalUni));
-      }
-      if (finalCol) {
-        localStorage.setItem("sg-user-col", JSON.stringify(finalCol));
-      }
-      if (selectedMajor) {
-        localStorage.setItem("sg-user-major", JSON.stringify({ name: selectedMajor }));
-      }
+      saveUserAcademicProfile({
+        uni: finalUni || undefined,
+        col: finalCol || undefined,
+        major: selectedMajor ? { name: selectedMajor } : undefined,
+      });
     } catch {}
   };
 

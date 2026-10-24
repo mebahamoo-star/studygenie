@@ -95,6 +95,9 @@ export function saveExams(exams: Exam[]): void {
     } else {
       localStorage.removeItem(singleKey);
     }
+    if (prefix === "guest") {
+      localStorage.setItem("sg-exams", JSON.stringify(exams));
+    }
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("sg-exams-updated"));
     }
@@ -211,7 +214,7 @@ export async function fetchAndSyncExams(
   try {
     if (getStoredAccessToken()) {
       const remote = await examService.getExams();
-      if (remote) {
+      if (remote !== null && remote !== undefined) {
         const mapped: Exam[] = remote.map((re) => ({
           id: String(re.id),
           course: re.course,
@@ -222,16 +225,21 @@ export async function fetchAndSyncExams(
           studentId: re.studentId || re.student_id,
         }));
 
-        // Merge remote with local exams so newly added or target exams aren't lost
+        // For authenticated user: backend exams are authoritative.
+        // We only retain local target exams if they correspond to this user's enrolled courses.
         const local = loadExams();
         const mergedMap = new Map<string, Exam>();
         mapped.forEach((ex) => mergedMap.set(ex.course.toLowerCase().trim(), ex));
-        local.forEach((ex) => {
-          const key = ex.course.toLowerCase().trim();
-          if (!mergedMap.has(key)) {
-            mergedMap.set(key, ex);
-          }
-        });
+
+        if (enrolled && enrolled.length > 0) {
+          local.forEach((ex) => {
+            const key = ex.course.toLowerCase().trim();
+            if (!mergedMap.has(key) && isCourseEnrolled(ex.course, enrolled)) {
+              mergedMap.set(key, ex);
+            }
+          });
+        }
+
         const merged = Array.from(mergedMap.values());
         saveExams(merged);
         return loadExamsForUser(enrolled);
