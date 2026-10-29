@@ -299,19 +299,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               <div className="flex items-center justify-between">
                 <Label>Password</Label>
                 {!signup && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      toast.info(
-                        email
-                          ? `Password reset link sent to ${email} (if registered).`
-                          : "Please enter your email above to receive password reset instructions."
-                      )
-                    }
+                  <Link
+                    to="/forgot-password"
                     className="text-xs font-medium text-muted-foreground transition-colors hover:text-primary hover:underline cursor-pointer"
                   >
                     Forgot password?
-                  </button>
+                  </Link>
                 )}
               </div>
               <Input
