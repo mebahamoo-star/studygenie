@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   BookOpen,
@@ -12,6 +13,7 @@ import {
   Siren,
   Sliders,
   Sparkles,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, PageTitle } from "@/components/AppShell";
@@ -31,7 +33,7 @@ import { Slider } from "@/components/ui/slider";
 import { pageHead } from "@/lib/head";
 import { browseService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { getUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix } from "@/lib/courses-util";
+import { getUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, isCourseMaterialUploaded } from "@/lib/courses-util";
 import type { Course, PlanResponseData } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -116,6 +118,9 @@ function Plan() {
   }, []);
 
   const handleSelectSubject = async (c: Course) => {
+    if (!isCourseMaterialUploaded(c)) {
+      toast.warning(`Cannot view plan: Course syllabus has not been uploaded for "${c.name}". Please upload course materials first.`);
+    }
     setSelectedCourse(c);
     setCourseInfo({ name: c.name, code: c.code });
     setPlanDays([]);
@@ -272,6 +277,10 @@ function Plan() {
 
   // Open modal asking how many cards the user wants (max 25)
   const handleFlashcardClick = (task: DayTask) => {
+    if (!selectedCourse || !isCourseMaterialUploaded(selectedCourse)) {
+      toast.warning("Cannot generate flashcards: Course syllabus has not been uploaded yet.");
+      return;
+    }
     const taskKey = task.ref && !task.ref.startsWith("task-") ? String(task.ref) : task.title.trim().toLowerCase();
     const titleKey = task.title.trim().toLowerCase();
     const existing = kitsMap[taskKey] || kitsMap[titleKey];
@@ -288,6 +297,10 @@ function Plan() {
 
   // Generate flashcards or quiz without duplicating for identical tasks
   const handleGenerateTaskKit = async (task: DayTask, target: "flashcards" | "quiz", cardCount: number = 10) => {
+    if (!selectedCourse || !isCourseMaterialUploaded(selectedCourse)) {
+      toast.warning(`Cannot generate ${target === "flashcards" ? "flashcards" : "quiz"}: Please upload the course syllabus first.`);
+      return;
+    }
     const taskKey = task.ref && !task.ref.startsWith("task-") ? String(task.ref) : task.title.trim().toLowerCase();
     const titleKey = task.title.trim().toLowerCase();
 
@@ -360,73 +373,16 @@ function Plan() {
         console.warn("Backend study kit generation failed, creating high-yield kit:", apiErr);
       }
 
-      // Professional fallback cards if AI generation was offline
-      if (flashcards.length === 0) {
-        const subs = task.subtopics && task.subtopics.length > 0 ? task.subtopics : ["Core principles", "Mechanisms", "Applications"];
-        const pool = [
-          { q: `What is the core definition and primary objective of ${task.title}?`, a: `Fundamental principles, definition, and foundational theory governing ${task.title}.` },
-          { q: `Explain the key mechanism underlying ${subs[0] || task.title}.`, a: `Essential operational rules, steps, and system constraints governing ${subs[0] || task.title}.` },
-          { q: `How does ${subs[0] || task.title} contrast with alternative models or techniques?`, a: `Key architectural trade-offs, efficiency differences, and distinct use cases.` },
-          { q: `What is a critical consideration or potential pitfall in ${task.title}?`, a: `Boundary conditions, performance overheads, and error handling protocols.` },
-          { q: `What role does ${subs[1] || subs[0] || task.title} play in overall exam problems?`, a: `Synthesis of conceptual equations, practical applications, and validation rules.` },
-          { q: `State the operational rule or formula relevant to ${task.title}.`, a: `The primary mathematical or algorithmic formulation and its required parameters.` },
-          { q: `Under what conditions is ${task.title} applied most effectively?`, a: `Optimal operational conditions, scalability boundaries, and resource availability.` },
-          { q: `What are the rate-limiting steps or trade-offs in ${subs[0] || task.title}?`, a: `Resource constraints, latency, and computational or physical bottlenecks.` },
-          { q: `Define the primary distinction of ${subs[2] || subs[0] || task.title}.`, a: `Specific terminology, domain rules, and standard industry classifications.` },
-          { q: `How do you verify correctness when analyzing ${task.title}?`, a: `Testing protocols, validation invariants, and verification methodologies.` },
-        ];
-
-        while (flashcards.length < sanitizedCardCount) {
-          const item = pool[flashcards.length % pool.length];
-          const suffix = flashcards.length >= pool.length ? ` (Part ${Math.floor(flashcards.length / pool.length) + 1})` : "";
-          flashcards.push({
-            id: `c-${Date.now()}-${flashcards.length + 1}`,
-            q: `${item.q}${suffix}`,
-            a: item.a,
-          });
-        }
+      // Strictly ensure study kits are never fabricated without syllabus
+      if (target === "flashcards" && flashcards.length === 0) {
+        toast.error("Could not generate flashcards from syllabus. Please verify that syllabus material is uploaded.");
+        return;
       }
-
-      if (quiz.length === 0) {
-        const sub = task.subtopics?.[0] || task.title;
-        quiz = [
-          {
-            id: `q-${Date.now()}-1`,
-            question: `Which statement best describes the primary objective of ${task.title}?`,
-            options: [
-              `To optimize and structure ${sub} systematically`,
-              "To replace all preceding standards without verification",
-              "To eliminate all trade-offs entirely",
-              "None of the above",
-            ],
-            explanation: `${task.title} establishes structured principles for ${sub}.`,
-          },
-          {
-            id: `q-${Date.now()}-2`,
-            question: `In the context of ${sub}, what is a critical consideration?`,
-            options: [
-              "Trade-offs between performance and complexity",
-              "Ignoring boundary conditions",
-              "Disabling concurrent execution",
-              "All of the above",
-            ],
-            explanation: "Engineering trade-offs are central to analyzing these systems.",
-          },
-          {
-            id: `q-${Date.now()}-3`,
-            question: `How does ${task.title} address system scalability?`,
-            options: [
-              "Through modular abstraction and structured protocols",
-              "By hardcoding fixed resource limits",
-              "By eliminating asynchronous messaging",
-              "It does not address scalability",
-            ],
-            explanation: "Modular abstraction provides clean expansion under varying workloads.",
-          },
-        ];
+      if (target === "quiz" && quiz.length === 0) {
+        toast.error("Could not generate quiz questions from syllabus. Please verify that syllabus material is uploaded.");
+        return;
       }
-
-      flashcards = flashcards.slice(0, sanitizedCardCount);
+            flashcards = flashcards.slice(0, sanitizedCardCount);
       const kitObj: StoredTaskKit = { kitId, flashcards, quiz };
       const nextMap = {
         ...kitsMap,
@@ -637,7 +593,27 @@ function Plan() {
         </div>
       )}
 
-      {planDays.length === 0 ? (
+      {!isCourseMaterialUploaded(selectedCourse) ? (
+        <Card className="flex flex-col items-center justify-center py-16 px-6 text-center border-amber-500/40 bg-gradient-to-b from-amber-500/5 to-transparent shadow-soft">
+          <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-4 ring-amber-500/10">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Course Syllabus Not Uploaded</h2>
+          <p className="mt-2 max-w-md text-xs text-muted-foreground leading-relaxed">
+            A study plan cannot be generated without syllabus materials. Please upload your syllabus or lecture slides for <strong>{selectedCourse.name}</strong> to automatically build your day-by-day plan.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button variant="magic" size="default" asChild className="gap-2 font-bold shadow-soft">
+              <Link to="/courses">
+                <Upload className="h-4 w-4" /> Upload Course Material
+              </Link>
+            </Button>
+            <Button variant="outline" size="default" onClick={() => setSelectedCourse(null)}>
+              Back to Subjects
+            </Button>
+          </div>
+        </Card>
+      ) : planDays.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
           <Genie pose="low" className="mb-4 h-24 w-24" />
           <h2 className="text-xl font-semibold text-foreground">No study plan generated for this subject yet</h2>

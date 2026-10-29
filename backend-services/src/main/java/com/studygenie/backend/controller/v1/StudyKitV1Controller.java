@@ -30,6 +30,12 @@ public class StudyKitV1Controller {
     @PostMapping("/generate")
     public ResponseEntity<ApiResponse<ClientStudyKitResponse>> generateStudyKit(
             @Valid @RequestBody GenerateStudyKitRequest request) {
+                if (request.topics() == null || request.topics().isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(
+                    "Cannot generate study kit without syllabus topics. Please upload the course syllabus first.",
+                    "NO_SYLLABUS_TOPICS"));
+        }
+
         ClientStudyKitResponse data = studyKitService.generateAndSave(request);
         return ResponseEntity.ok(ApiResponse.ok("Study kit generated and saved successfully", data));
     }

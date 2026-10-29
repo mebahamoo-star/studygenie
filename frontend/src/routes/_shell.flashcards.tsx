@@ -11,8 +11,10 @@ import {
   GraduationCap,
   HelpCircle,
   Loader2,
+  AlertTriangle,
   Lock,
   Plus,
+  Upload,
   RotateCcw,
   Sparkles,
   Trophy,
@@ -43,6 +45,7 @@ import {
   getUserStoragePrefix,
   getUserTaskKits,
   saveUserTaskKits,
+  isCourseMaterialUploaded,
 } from "@/lib/courses-util";
 import type { Course, Sm2Rating } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -109,6 +112,9 @@ function Flashcards() {
 
   // When a user selects a course, load flashcards specifically for that course
   const handleSelectCourse = async (course: Course) => {
+    if (!isCourseMaterialUploaded(course)) {
+      toast.warning(`Cannot generate flashcards: Please upload the syllabus for "${course.name}" first.`);
+    }
     setSelectedCourse(course);
     setCardIndex(0);
     setFlip(false);
@@ -226,6 +232,11 @@ function Flashcards() {
   // Generate flashcards on demand for the selected course
   const handleGenerateCourseCards = async () => {
     if (!selectedCourse) return;
+    if (!isCourseMaterialUploaded(selectedCourse) || !selectedCourse.topics || selectedCourse.topics.length === 0) {
+      toast.warning(`Cannot generate flashcards: Please upload the course syllabus for "${selectedCourse.name}" first.`);
+      setIsGenerating(false);
+      return;
+    }
     setIsGenerating(true);
 
     try {
@@ -269,24 +280,11 @@ function Flashcards() {
         console.warn("AI engine generation offline or failed, using high-yield template:", err);
       }
 
-      // Fallback generator if offline
+      // Strictly ensure flashcards are never fabricated without syllabus
       if (newFlashcards.length === 0) {
-        const pool = [
-          { q: `What is the core definition and primary objective of ${chapterTitle}?`, a: `Fundamental principles, definitions, and foundational theory governing ${chapterTitle}.` },
-          { q: `Explain the key operational mechanism in ${chapterTitle}.`, a: `Essential operational steps, system constraints, and rules governing ${chapterTitle}.` },
-          { q: `How does ${chapterTitle} contrast with alternative techniques or models?`, a: `Key architectural trade-offs, efficiency differences, and distinct use cases.` },
-          { q: `What is a critical consideration or edge case in ${chapterTitle}?`, a: `Boundary conditions, performance overheads, and error handling protocols.` },
-          { q: `State the primary equation or formula relevant to ${chapterTitle}.`, a: `Core mathematical formulation and required parameters for problem solving.` },
-        ];
-        while (newFlashcards.length < sanitizedCount) {
-          const item = pool[newFlashcards.length % pool.length];
-          newFlashcards.push({
-            id: `card-${Date.now()}-${newFlashcards.length + 1}`,
-            q: newFlashcards.length >= pool.length ? `${item.q} (Part ${Math.floor(newFlashcards.length / pool.length) + 1})` : item.q,
-            a: item.a,
-            chapter: chapterTitle,
-          });
-        }
+        toast.error("Could not generate flashcards from syllabus. Please ensure the syllabus contains readable chapter text.");
+        setIsGenerating(false);
+        return;
       }
 
       // Save to user storage
@@ -385,14 +383,27 @@ function Flashcards() {
                       <Sparkles className="h-3.5 w-3.5 text-primary" />
                       Active Recall
                     </span>
-                    <Button
-                      size="sm"
-                      variant="magic"
-                      className="gap-1.5 text-xs font-bold"
-                      onClick={() => handleSelectCourse(course)}
-                    >
-                      Open Flashcards →
-                    </Button>
+                    {isCourseMaterialUploaded(course) ? (
+                      <Button
+                        size="sm"
+                        variant="magic"
+                        className="gap-1.5 text-xs font-bold"
+                        onClick={() => handleSelectCourse(course)}
+                      >
+                        Open Flashcards →
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs font-semibold border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                        asChild
+                      >
+                        <Link to="/courses">
+                          <Lock className="h-3 w-3" /> Upload Syllabus
+                        </Link>
+                      </Button>
+                    )}
                   </div>
                 </Card>
               );
@@ -425,7 +436,13 @@ function Flashcards() {
           variant="secondary"
           size="sm"
           className="gap-1.5 text-xs font-bold border border-primary/20 text-primary"
-          onClick={() => setGenModalOpen(true)}
+          onClick={() => {
+            if (!isCourseMaterialUploaded(selectedCourse)) {
+              toast.warning(`Cannot generate flashcards: Please upload the course syllabus for "${selectedCourse.name}" first.`);
+              return;
+            }
+            setGenModalOpen(true);
+          }}
         >
           <Sparkles className="h-3.5 w-3.5" /> + Generate Cards (1-25)
         </Button>
@@ -443,7 +460,27 @@ function Flashcards() {
         }
       />
 
-      {cards.length === 0 ? (
+      {!isCourseMaterialUploaded(selectedCourse) ? (
+        <Card className="flex flex-col items-center justify-center py-16 px-6 text-center border-amber-500/40 bg-gradient-to-b from-amber-500/5 to-transparent shadow-soft">
+          <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-4 ring-amber-500/10">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Course Syllabus Not Uploaded</h2>
+          <p className="mt-2 max-w-md text-xs text-muted-foreground leading-relaxed">
+            Active-recall flashcards cannot be generated without syllabus material. Please upload your course syllabus or lecture slides for <strong>{selectedCourse.name}</strong> to automatically extract topics and unlock flashcards.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button variant="magic" size="default" asChild className="gap-2 font-bold shadow-soft">
+              <Link to="/courses">
+                <Upload className="h-4 w-4" /> Upload Course Material
+              </Link>
+            </Button>
+            <Button variant="outline" size="default" onClick={() => setSelectedCourse(null)}>
+              Back to Courses
+            </Button>
+          </div>
+        </Card>
+      ) : cards.length === 0 ? (
         <Card className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
           <Genie pose="mid" className="mb-4 h-24 w-24" />
           <h2 className="text-xl font-semibold text-foreground">No Flashcards Generated Yet</h2>

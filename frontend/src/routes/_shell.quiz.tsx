@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Lock, Plus, RotateCcw, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, Plus, RotateCcw, Upload, XCircle } from "lucide-react";
 import { Card, PageTitle } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
 import { ProgressRing } from "@/components/ProgressRing";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { pageHead } from "@/lib/head";
 import { studyService } from "@/lib/api/services";
 import { useApp } from "@/lib/app-state";
-import { hasUserEnrolledCourses } from "@/lib/courses-util";
+import { hasUserEnrolledCourses, hasUserUploadedMaterial } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_shell/quiz")({
@@ -27,6 +27,7 @@ interface QuestionItem {
 function Quiz() {
   const { addPoints, refreshGamification } = useApp();
   const [hasCourses, setHasCourses] = useState<boolean | null>(null);
+  const [hasMaterial, setHasMaterial] = useState<boolean | null>(null);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [i, setI] = useState(0);
   const [pick, setPick] = useState<number | null>(null);
@@ -36,7 +37,9 @@ function Quiz() {
 
   useEffect(() => {
     const enrolled = hasUserEnrolledCourses();
+    const uploaded = hasUserUploadedMaterial();
     setHasCourses(enrolled);
+    setHasMaterial(uploaded);
 
     if (enrolled) {
       try {
@@ -97,6 +100,33 @@ function Quiz() {
               </Link>
             </Button>
             <Button variant="outline" size="lg" asChild>
+              <Link to="/dashboard">Back to Dashboard</Link>
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (hasMaterial === false) {
+    return (
+      <div className="mx-auto max-w-xl">
+        <PageTitle title="Quiz" sub="Active Recall Practice" />
+        <Card className="flex flex-col items-center justify-center py-16 px-6 text-center border-amber-500/40 bg-gradient-to-b from-amber-500/5 to-transparent shadow-soft">
+          <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-4 ring-amber-500/10">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Course Syllabus Required</h2>
+          <p className="mt-2 max-w-md text-xs text-muted-foreground leading-relaxed">
+            Practice quizzes cannot be generated without syllabus material. Please upload your course syllabus or slide decks to automatically extract chapters and unlock practice quizzes.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button variant="magic" size="default" asChild className="gap-2 font-bold shadow-soft">
+              <Link to="/courses">
+                <Upload className="h-4 w-4" /> Upload Course Material
+              </Link>
+            </Button>
+            <Button variant="outline" size="default" asChild>
               <Link to="/dashboard">Back to Dashboard</Link>
             </Button>
           </div>

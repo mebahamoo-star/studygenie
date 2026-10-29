@@ -119,138 +119,6 @@ function getWeekDays(): WeekDayInfo[] {
   return days;
 }
 
-function getStructuredChaptersForCourse(courseName: string, major?: string): Topic[] {
-  const norm = (courseName || "").toLowerCase();
-
-  if (norm.includes("operat") || norm.includes("os")) {
-    return [
-      { id: 1, name: "Process Management & CPU Scheduling", durationMinutes: 120, importance: 4, subtopics: ["Process States", "Context Switching", "Round Robin & Priority", "IPC Mechanisms"] },
-      { id: 2, name: "Threads & Concurrency Control", durationMinutes: 120, importance: 4, subtopics: ["User vs Kernel Threads", "Race Conditions", "Mutex & Semaphores", "Deadlocks"] },
-      { id: 3, name: "Memory Management & Paging", durationMinutes: 150, importance: 5, subtopics: ["Logical vs Physical Address", "Paging Hardware", "TLB Translation", "Segmentation"] },
-      { id: 4, name: "Virtual Memory & Page Replacement", durationMinutes: 150, importance: 5, subtopics: ["Demand Paging", "Page Fault Handling", "FIFO, LRU, Optimal", "Thrashing & Working Set"] },
-      { id: 5, name: "File Systems, I/O & Storage", durationMinutes: 120, importance: 3, subtopics: ["Inodes & Directories", "File Allocation Tables", "Disk Scheduling Algorithms", "RAID Architectures"] },
-    ];
-  }
-
-  if (norm.includes("data struct") || norm.includes("algorithm") || norm.includes("dsa")) {
-    return [
-      { id: 1, name: "Asymptotic Complexity & Arrays", durationMinutes: 120, importance: 4, subtopics: ["Big-O, Omega, Theta", "Amortized Analysis", "Dynamic Arrays", "Memory Locality"] },
-      { id: 2, name: "Linked Lists, Stacks & Queues", durationMinutes: 120, importance: 4, subtopics: ["Singly & Doubly Linked", "LIFO vs FIFO", "Queue Applications", "Deque Structures"] },
-      { id: 3, name: "Hash Tables & Collision Resolution", durationMinutes: 150, importance: 5, subtopics: ["Hash Functions", "Separate Chaining", "Open Addressing & Linear Probing", "Load Factor"] },
-      { id: 4, name: "Trees & Binary Search Trees", durationMinutes: 150, importance: 5, subtopics: ["BST Properties", "In-Order Traversal", "AVL Rotations", "Search and Insert Logarithmic Bounds"] },
-      { id: 5, name: "Graph Algorithms & Shortest Paths", durationMinutes: 180, importance: 5, subtopics: ["BFS & DFS Traversal", "Dijkstra's Algorithm", "Topological Sorting", "Minimum Spanning Trees"] },
-      { id: 6, name: "Dynamic Programming & Greedy", durationMinutes: 180, importance: 4, subtopics: ["Memoization vs Tabulation", "0/1 Knapsack", "Interval Scheduling", "Optimal Substructure"] },
-    ];
-  }
-
-  if (norm.includes("datab") || norm.includes("sql")) {
-    return [
-      { id: 1, name: "Relational Model & Relational Algebra", durationMinutes: 120, importance: 4, subtopics: ["Relations & Tuples", "Selection & Projection", "Natural & Theta Joins", "Integrity Constraints"] },
-      { id: 2, name: "SQL Querying & Aggregations", durationMinutes: 120, importance: 5, subtopics: ["Group By & Having", "Subqueries & Exists", "Window Functions", "Views & CTEs"] },
-      { id: 3, name: "Schema Normalization (1NF to BCNF)", durationMinutes: 150, importance: 5, subtopics: ["Functional Dependencies", "Lossless Join Decomposition", "Dependency Preservation", "Boyce-Codd Normal Form"] },
-      { id: 4, name: "Transactions & Concurrency Control", durationMinutes: 150, importance: 5, subtopics: ["ACID Properties", "Two-Phase Locking (2PL)", "Schedules & Serializability", "Deadlock Detection"] },
-      { id: 5, name: "Indexing & Query Optimization", durationMinutes: 120, importance: 4, subtopics: ["B+ Tree Indexes", "Hash Indexes", "Execution Plans", "Cost-Based Query Planning"] },
-    ];
-  }
-
-  // General 5-chapter academic template
-  return [
-    { id: 1, name: "Foundational Concepts & Principles", durationMinutes: 120, importance: 4, subtopics: ["Core Terminology", "Governing Theories", "Standard Frameworks"] },
-    { id: 2, name: "Core Mechanisms & Methodologies", durationMinutes: 150, importance: 5, subtopics: ["Structural Workflows", "Operational Laws", "Step-by-Step Procedures"] },
-    { id: 3, name: "Analytical Problem Solving", durationMinutes: 150, importance: 5, subtopics: ["Formula Applications", "Case Studies", "Quantitative Modeling"] },
-    { id: 4, name: "Advanced Scenarios & Comparative Analysis", durationMinutes: 120, importance: 4, subtopics: ["Differential Criteria", "Edge Cases", "Trade-Off Analysis"] },
-    { id: 5, name: "Comprehensive Exam Review & Synthesis", durationMinutes: 120, importance: 5, subtopics: ["High-Yield Summaries", "Common Exam Traps", "Integrated Mastery"] },
-  ];
-}
-
-function generateNotebookLMFlashcards(courseName: string, topics: Topic[]) {
-  return [
-    {
-      id: `fc-1-${Date.now()}`,
-      q: `What is the core definition and foundational principle of ${topics[0]?.name || courseName}?`,
-      a: `It establishes the fundamental theoretical framework and structural constraints governing all subsequent mechanisms in ${courseName}.`,
-      chapter: topics[0]?.name || "Core Foundations",
-    },
-    {
-      id: `fc-2-${Date.now()}`,
-      q: `How does the primary mechanism in ${topics[1]?.name || "Core Mechanisms"} operate?`,
-      a: `It executes step-by-step state transitions while preserving system invariants and ensuring deterministic, reproducible outcomes.`,
-      chapter: topics[1]?.name || "Mechanisms",
-    },
-    {
-      id: `fc-3-${Date.now()}`,
-      q: `What is the primary constraint or rate-limiting factor in ${topics[2]?.name || "Analysis"}?`,
-      a: `Resource contention and boundary conditions limit throughput, requiring balanced allocation or logarithmic optimization strategies.`,
-      chapter: topics[2]?.name || "Problem Solving",
-    },
-    {
-      id: `fc-4-${Date.now()}`,
-      q: `How do the trade-offs differ between standard approaches and optimized models in ${courseName}?`,
-      a: `Standard models prioritize simplicity and baseline latency, whereas optimized variants sacrifice space to guarantee worst-case logarithmic efficiency.`,
-      chapter: topics[3]?.name || "Advanced Concepts",
-    },
-    {
-      id: `fc-5-${Date.now()}`,
-      q: `What critical rule must be verified to prevent failure or degraded performance in ${courseName}?`,
-      a: `Always maintain invariant integrity across boundary cases and adhere strictly to transactional concurrency guarantees.`,
-      chapter: topics[4]?.name || "Exam Synthesis",
-    },
-  ];
-}
-
-function generateExamQuizzes(courseName: string, topics: Topic[]) {
-  return [
-    {
-      id: `qz-1-${Date.now()}`,
-      q: `Which principle is fundamental to mastering ${topics[0]?.name || courseName}?`,
-      options: [
-        "Adhering to core invariant properties and structural constraints",
-        "Ignoring boundary conditions during initial execution",
-        "Linear degradation across all operational workflows",
-        "Assuming infinite memory and zero communication overhead",
-      ],
-      correct: 0,
-      explanation: `Maintaining structural invariants ensures predictable, correct execution across all system states.`,
-    },
-    {
-      id: `qz-2-${Date.now()}`,
-      q: `What is the primary objective of ${topics[1]?.name || "Core Workflows"}?`,
-      options: [
-        "Increasing redundant computations arbitrarily",
-        "Maximizing throughput while maintaining consistency guarantees",
-        "Bypassing synchronization mechanisms in concurrent threads",
-        "Eliminating all data structures from memory",
-      ],
-      correct: 1,
-      explanation: `System designs focus on maximizing throughput within safe consistency boundaries.`,
-    },
-    {
-      id: `qz-3-${Date.now()}`,
-      q: `Under which condition does standard performance degrade in ${courseName}?`,
-      options: [
-        "When data distribution is perfectly balanced",
-        "When pathological or sorted edge cases cause unmitigated imbalance",
-        "When logarithmic index structures are properly utilized",
-        "When cached results satisfy all lookups",
-      ],
-      correct: 1,
-      explanation: `Unbalanced inputs degrade tree and list lookups from logarithmic time to linear worst-case time.`,
-    },
-    {
-      id: `qz-4-${Date.now()}`,
-      q: `Why is active recall and spaced repetition recommended for ${courseName}?`,
-      options: [
-        "It eliminates the need to review before finals",
-        "It strengthens neural retrieval pathways and long-term retention",
-        "It only works for multiple choice tests",
-        "It replaces understanding underlying mechanisms",
-      ],
-      correct: 1,
-      explanation: `Active retrieval stimulates deeper memory encoding compared to passive re-reading.`,
-    },
-  ];
-}
-
 function Dashboard() {
   const nav = useNavigate();
   const { user } = useApp();
@@ -356,7 +224,7 @@ function Dashboard() {
     const todayStr = new Date().toISOString().slice(0, 10);
 
     try {
-      // 1. Get or generate syllabus topics for this course
+      // 1. Get real syllabus topics for this course from database
       let topics: Topic[] = [];
       if (ch.courseId) {
         try {
@@ -365,10 +233,6 @@ function Dashboard() {
             topics = remoteTopics;
           }
         } catch {}
-      }
-
-      if (topics.length === 0) {
-        topics = getStructuredChaptersForCourse(ch.courseName, campusInfo.major);
       }
       topics = deduplicateTopics(topics);
 
@@ -380,15 +244,15 @@ function Dashboard() {
           id: ch.courseId || `c-${Date.now()}`,
           name: ch.courseName,
           code: "",
-          status: "ready",
+          status: topics.length > 0 ? "ready" : "none",
           topics,
         };
       } else {
         const mergedTopics = deduplicateTopics([...(courseObj.topics || []), ...topics]);
         courseObj = {
           ...courseObj,
-          status: "ready",
-          topics: mergedTopics.length > 0 ? mergedTopics : courseObj.topics || [],
+          status: mergedTopics.length > 0 ? "ready" : "none",
+          topics: mergedTopics,
         };
       }
 
@@ -426,6 +290,23 @@ function Dashboard() {
       const updatedExams = await fetchAndSyncExams();
       setExams(updatedExams);
       setCurrentExamIndex(0);
+
+      // If course has NO syllabus topics, strictly prevent plan/quiz/card generation and warn user
+      if (topics.length === 0) {
+        setChallenges((prev) =>
+          prev.map((item) =>
+            item.courseName.toLowerCase().trim() === ch.courseName.toLowerCase().trim()
+              ? { ...item, isJoined: true }
+              : item
+          )
+        );
+        toast.warning(
+          `Joined ${ch.courseName}! Syllabus material has not been uploaded yet. Please upload course material to generate your study plan, flashcards, and quizzes.`,
+          { duration: 7000 }
+        );
+        navigate({ to: "/courses" });
+        return;
+      }
 
       // 4. Generate day-by-day study plan
       const now = new Date();
@@ -490,23 +371,16 @@ function Dashboard() {
 
       saveActivePlan(planData);
 
-      // 5. Generate NotebookLM-style active recall flashcards and quiz questions
-      const flashcards = generateNotebookLMFlashcards(ch.courseName, topics);
-      const quizQuestions = generateExamQuizzes(ch.courseName, topics);
-
-      localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(flashcards));
-      if (prefix === "guest") {
-        localStorage.setItem("sg-active-cards", JSON.stringify(flashcards));
-        localStorage.setItem("sg-active-quiz", JSON.stringify(quizQuestions));
-      }
-
+      // 5. Store kit key reference
       const kits = getUserTaskKits();
-      kits[ch.courseName.toLowerCase().trim()] = {
-        kitId: `kit-${Date.now()}`,
-        flashcards,
-        quiz: quizQuestions,
-      };
-      saveUserTaskKits(kits);
+      if (!kits[ch.courseName.toLowerCase().trim()]) {
+        kits[ch.courseName.toLowerCase().trim()] = {
+          kitId: `kit-${Date.now()}`,
+          flashcards: [],
+          quiz: [],
+        };
+        saveUserTaskKits(kits);
+      }
 
       // 6. Update dashboard state
       setChallenges((prev) =>

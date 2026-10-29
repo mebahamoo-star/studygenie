@@ -535,6 +535,10 @@ public class CourseService {
                 ))
                 .collect(Collectors.toList());
 
+        if (topics.isEmpty()) {
+            throw new ResourceNotFoundException("This course has no syllabus chapters or topics yet. Please upload the syllabus first.", "NO_TOPICS");
+        }
+
         // 1. Save StudyPlan first
         StudyPlan studyPlan = StudyPlan.builder()
                 .student(student)
@@ -637,6 +641,10 @@ public class CourseService {
                         1
                 ))
                 .collect(Collectors.toList());
+
+        if (topics.isEmpty()) {
+            throw new ResourceNotFoundException("This course has no syllabus chapters or topics yet. Please upload the syllabus first.", "NO_TOPICS");
+        }
 
         GeneratePlanRequest request = new GeneratePlanRequest(
                 LocalDate.now(),

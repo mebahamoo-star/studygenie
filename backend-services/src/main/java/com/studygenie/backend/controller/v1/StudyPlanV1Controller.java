@@ -31,6 +31,12 @@ public class StudyPlanV1Controller {
     public ResponseEntity<ApiResponse<PlanResponseData>> generatePlan(
             @Valid @RequestBody GeneratePlanRequest request) {
 
+                if (request.topics() == null || request.topics().isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(
+                    "Cannot generate study plan without syllabus topics. Please upload the course syllabus first.",
+                    "NO_SYLLABUS_TOPICS"));
+        }
+
         PlanResponseData data = studyPlanService.generateAndSave(request);
         return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
     }

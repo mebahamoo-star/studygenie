@@ -16,7 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { pageHead } from "@/lib/head";
 import { browseService, syllabusService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, toLocalDateStr, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile } from "@/lib/courses-util";
+import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, toLocalDateStr, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile, isCourseMaterialUploaded } from "@/lib/courses-util";
 import { clearExam, deleteExam, isCourseEnrolled, loadExam, loadExams, saveExam } from "@/lib/exam";
 import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import type { Course, CourseStatus, Topic } from "@/lib/api/types";
@@ -1003,6 +1003,13 @@ function JoinChallenge({
   };
 
   const handleGeneratePlan = async () => {
+    const effectiveTopics = topics.length > 0 ? topics : (course.topics || []);
+    if (!effectiveTopics || effectiveTopics.length === 0) {
+      toast.warning("Cannot generate study plan: Please upload the course syllabus or lecture slides first.");
+      setPlanModalOpen(false);
+      setLoading(false);
+      return;
+    }
     setPlanModalOpen(false);
     setLoading(true);
     const now = new Date();
@@ -1063,11 +1070,10 @@ function JoinChallenge({
       }
 
       if (!planData) {
-        const fallbackTopics: Topic[] = [
-          { id: 1, name: "Core Concepts & Fundamentals", durationMinutes: 120 },
-          { id: 2, name: "Advanced Application & Problem Solving", durationMinutes: 180 },
-        ];
-        const activeTopics: Topic[] = topics.length > 0 ? topics : (course.topics || fallbackTopics);
+        const activeTopics: Topic[] = effectiveTopics;
+        if (!activeTopics || activeTopics.length === 0) {
+          throw new Error("No syllabus topics available to generate a study plan. Please upload course material first.");
+        }
         const topicsPayload = activeTopics.map((t: Topic, idx: number) => ({
           ref: String(t.id || idx + 1),
           topicRef: String(t.id || idx + 1),
@@ -1414,7 +1420,19 @@ function JoinChallenge({
           </div>
         </div>
       </div>
-      <Button variant="magic" size="lg" className="mt-6 w-full gap-2 text-base font-bold shadow-soft" onClick={() => setPlanModalOpen(true)}>
+      <Button
+        variant="magic"
+        size="lg"
+        className="mt-6 w-full gap-2 text-base font-bold shadow-soft"
+        onClick={() => {
+          const effective = topics.length > 0 ? topics : (course.topics || []);
+          if (!effective || effective.length === 0) {
+            toast.warning("Cannot generate study plan: Please upload your syllabus or chapter documents first.");
+            return;
+          }
+          setPlanModalOpen(true);
+        }}
+      >
         <Wand2 className="h-5 w-5" /> Generate My Plan
       </Button>
 
