@@ -182,42 +182,6 @@ public class ExamController {
             }
         }
 
-        List<Course> coursesToInclude = (collegeId != null)
-                ? allCourses.stream().filter(c -> c.getCollege() != null && collegeId.equals(c.getCollege().getId())).collect(Collectors.toList())
-                : allCourses;
-
-        for (Course c : coursesToInclude) {
-            if (c.getName() == null) continue;
-            String key = c.getName().trim().toLowerCase();
-            if (!challengeMap.containsKey(key)) {
-                boolean hasSyl = c.getStatus() == CourseStatus.READY;
-                int chapters = hasSyl ? 5 : 0;
-                boolean isJoined = enrolledCourseNames.contains(key);
-                LocalDate challengeDate = LocalDate.now().plusDays(21);
-
-                String uniName = (c.getCollege() != null && c.getCollege().getUniversity() != null)
-                        ? c.getCollege().getUniversity().getName()
-                        : (student != null && student.getUniversity() != null ? student.getUniversity().getName() : "University");
-
-                CommunityExamChallengeDto dto = new CommunityExamChallengeDto(
-                        null,
-                        c.getId(),
-                        c.getName(),
-                        "Midterm Exam",
-                        challengeDate,
-                        "Department Faculty",
-                        "Campus Classmates",
-                        uniName,
-                        c.getCollege() != null ? c.getCollege().getName() : "College",
-                        hasSyl,
-                        chapters,
-                        3,
-                        isJoined
-                );
-                challengeMap.put(key, dto);
-            }
-        }
-
         List<CommunityExamChallengeDto> result = new ArrayList<>(challengeMap.values());
         result.sort((a, b) -> {
             if (a.isJoined() != b.isJoined()) {

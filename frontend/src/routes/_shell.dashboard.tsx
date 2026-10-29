@@ -116,153 +116,6 @@ function getWeekDays(): WeekDayInfo[] {
   return days;
 }
 
-function getMajorSeeds(majorName: string, uni: string, col: string): CommunityChallenge[] {
-  const norm = (majorName || "").toLowerCase();
-  const dateIn14 = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
-  const dateIn21 = new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10);
-  const dateIn28 = new Date(Date.now() + 28 * 86400000).toISOString().slice(0, 10);
-
-  if (norm.includes("med") || norm.includes("pharm") || norm.includes("dent") || norm.includes("health")) {
-    return [
-      {
-        id: null,
-        courseName: "Human Anatomy & Physiology",
-        examType: "Midterm Exam",
-        examDate: dateIn14,
-        professor: "Prof. Dr. Al-Mansoor",
-        uploaderName: "Reem K. (4th Year)",
-        universityName: uni || "Medical University",
-        collegeName: col || "College of Medicine",
-        hasSyllabus: true,
-        chaptersCount: 7,
-        peerCount: 14,
-        isJoined: false,
-      },
-      {
-        id: null,
-        courseName: "Medical Biochemistry",
-        examType: "Final Exam",
-        examDate: dateIn21,
-        professor: "Dr. Al-Husseini",
-        uploaderName: "Tariq S. (Batch 2026)",
-        universityName: uni || "Medical University",
-        collegeName: col || "College of Medicine",
-        hasSyllabus: true,
-        chaptersCount: 6,
-        peerCount: 9,
-        isJoined: false,
-      },
-      {
-        id: null,
-        courseName: "General Pathology",
-        examType: "Midterm Exam",
-        examDate: dateIn28,
-        professor: "Prof. Dr. Sarah Al-Najjar",
-        uploaderName: "Zaid N.",
-        universityName: uni || "Medical University",
-        collegeName: col || "College of Medicine",
-        hasSyllabus: true,
-        chaptersCount: 5,
-        peerCount: 12,
-        isJoined: false,
-      },
-    ];
-  }
-
-  if (norm.includes("bus") || norm.includes("fin") || norm.includes("acc") || norm.includes("econ") || norm.includes("manage")) {
-    return [
-      {
-        id: null,
-        courseName: "Financial Accounting",
-        examType: "Midterm Exam",
-        examDate: dateIn14,
-        professor: "Dr. Al-Ghamdi",
-        uploaderName: "Hussain B. (Senior)",
-        universityName: uni || "Business School",
-        collegeName: col || "College of Business Administration",
-        hasSyllabus: true,
-        chaptersCount: 6,
-        peerCount: 11,
-        isJoined: false,
-      },
-      {
-        id: null,
-        courseName: "Principles of Marketing",
-        examType: "Final Exam",
-        examDate: dateIn21,
-        professor: "Dr. Noura Al-Otaibi",
-        uploaderName: "Lama M.",
-        universityName: uni || "Business School",
-        collegeName: col || "College of Business Administration",
-        hasSyllabus: true,
-        chaptersCount: 5,
-        peerCount: 16,
-        isJoined: false,
-      },
-      {
-        id: null,
-        courseName: "Corporate Finance",
-        examType: "Midterm Exam",
-        examDate: dateIn28,
-        professor: "Prof. Dr. Henderson",
-        uploaderName: "Fahad K.",
-        universityName: uni || "Business School",
-        collegeName: col || "College of Business Administration",
-        hasSyllabus: true,
-        chaptersCount: 6,
-        peerCount: 8,
-        isJoined: false,
-      },
-    ];
-  }
-
-  // Default / Engineering & Computer Science
-  return [
-    {
-      id: null,
-      courseName: "Data Structures & Algorithms",
-      examType: "Midterm Exam",
-      examDate: dateIn14,
-      professor: "Prof. Dr. Miller",
-      uploaderName: "Sarah K. (Honor Student)",
-      universityName: uni || "University Campus",
-      collegeName: col || "College of Computing",
-      hasSyllabus: true,
-      chaptersCount: 6,
-      peerCount: 18,
-      isJoined: false,
-    },
-    {
-      id: null,
-      courseName: "Operating Systems",
-      examType: "Final Exam",
-      examDate: dateIn21,
-      professor: "Dr. Anderson",
-      uploaderName: "Omar T. (Batch Lead)",
-      universityName: uni || "University Campus",
-      collegeName: col || "College of Computing",
-      hasSyllabus: true,
-      chaptersCount: 5,
-      peerCount: 15,
-      isJoined: false,
-    },
-    {
-      id: null,
-      courseName: "Database Systems",
-      examType: "Midterm Exam",
-      examDate: dateIn28,
-      professor: "Prof. Dr. Al-Harbi",
-      uploaderName: "Khaled W.",
-      universityName: uni || "University Campus",
-      collegeName: col || "College of Computing",
-      hasSyllabus: true,
-      chaptersCount: 5,
-      peerCount: 12,
-      isJoined: false,
-    },
-  ];
-}
-
 function getStructuredChaptersForCourse(courseName: string, major?: string): Topic[] {
   const norm = (courseName || "").toLowerCase();
 
@@ -465,67 +318,17 @@ function Dashboard() {
     });
 
     const enrolledNames = new Set(currentEnrolledCourses.map((c) => c.name.toLowerCase().trim()));
-    const examCourseNames = new Set(currentExams.map((e) => e.course.toLowerCase().trim()));
+    currentExams.forEach((e) => enrolledNames.add(e.course.toLowerCase().trim()));
 
     try {
-      // 1. Fetch remote community challenges from backend
+      // Fetch authentic community challenges from backend
       const remote = await examService.getCommunityChallenges(collegeId);
-
-      // 2. Fetch college catalog courses
-      let catalogCourses: Course[] = [];
-      if (collegeId) {
-        try {
-          catalogCourses = await browseService.getAllCourses(collegeId);
-        } catch {}
-      }
-
-      // 3. Fallback/seed major challenges
-      const fallbackChallenges = getMajorSeeds(majorName, uniName, colName);
-
-      const map = new Map<string, CommunityChallenge>();
-
-      // Populate from remote
-      remote.forEach((item) => {
+      const list = (remote || []).map((item) => {
         const key = item.courseName.toLowerCase().trim();
         const isJoined = enrolledNames.has(key);
-        map.set(key, { ...item, isJoined });
+        return { ...item, isJoined };
       });
 
-      // Populate from catalog courses that have syllabus
-      catalogCourses.forEach((c) => {
-        const key = c.name.toLowerCase().trim();
-        if (!map.has(key)) {
-          const isJoined = enrolledNames.has(key);
-          const hasSyllabus = c.status === "ready" || (c.topics && c.topics.length > 0);
-          const chaptersCount = c.topics?.length || (hasSyllabus ? 5 : 0);
-          map.set(key, {
-            id: null,
-            courseId: typeof c.id === "number" ? c.id : null,
-            courseName: c.name,
-            examType: "Midterm Exam",
-            examDate: new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10),
-            professor: "Department Faculty",
-            uploaderName: "Campus Classmates",
-            universityName: uniName || "University",
-            collegeName: colName || "College",
-            hasSyllabus: !!hasSyllabus,
-            chaptersCount,
-            peerCount: 3,
-            isJoined,
-          });
-        }
-      });
-
-      // Populate seed challenges
-      fallbackChallenges.forEach((item) => {
-        const key = item.courseName.toLowerCase().trim();
-        if (!map.has(key)) {
-          const isJoined = enrolledNames.has(key);
-          map.set(key, { ...item, isJoined });
-        }
-      });
-
-      const list = Array.from(map.values());
       // Sort: unjoined challenges first, then by date
       list.sort((a, b) => {
         if (a.isJoined !== b.isJoined) {
@@ -537,6 +340,7 @@ function Dashboard() {
       setChallenges(list);
     } catch (err) {
       console.warn("Could not load community challenges:", err);
+      setChallenges([]);
     } finally {
       setLoadingChallenges(false);
     }
