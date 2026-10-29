@@ -73,5 +73,10 @@ class InMemoryAuthStoreConfigTest {
         public UserAccount create(String fullName, String normalizedEmail, String passwordHash) {
             return new UserAccount(999L, fullName, normalizedEmail, passwordHash, Instant.now());
         }
+
+        @Override
+        public UserAccount findOrCreateOAuthUser(String fullName, String normalizedEmail, String provider, String providerId, String avatarUrl) {
+            return new UserAccount(999L, fullName, normalizedEmail, "", Instant.now());
+        }
     }
 }

@@ -1,4 +1,6 @@
 import { getUserCourses, getUserStoragePrefix } from "./courses-util";
+import { getStoredAccessToken } from "./api/client";
+import { examService } from "./api/services";
 
 export interface Exam {
   id?: string;
@@ -6,6 +8,8 @@ export interface Exam {
   type: string;
   date: string;
   professor: string;
+  uploaderName?: string;
+  studentId?: number | string;
 }
 
 export function getExamKey(): string {
@@ -24,6 +28,7 @@ export function loadExams(): Exam[] {
         return parsed.map((item: any, idx: number) => ({
           ...item,
           id: item.id || `exam-${idx}-${item.course.toLowerCase().replace(/[^a-z0-9]/g, "-")}`,
+          uploaderName: item.uploaderName || item.uploader_name || "You",
         }));
       }
     }
@@ -90,30 +95,54 @@ export function saveExams(exams: Exam[]): void {
     } else {
       localStorage.removeItem(singleKey);
     }
+    if (prefix === "guest") {
+      localStorage.setItem("sg-exams", JSON.stringify(exams));
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("sg-exams-updated"));
+    }
   } catch {}
 }
 
 export function saveExam(e: Exam): Exam {
   const current = loadExams();
   const id = e.id || `exam-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+  let studentName = e.uploaderName || "";
+  let studentEmail = "";
+  try {
+    const userRaw = localStorage.getItem("sg-user");
+    if (userRaw) {
+      const u = JSON.parse(userRaw);
+      if (!studentName) studentName = u.fullName || u.name || "";
+      studentEmail = u.email || "";
+    }
+  } catch {}
+
   const item: Exam = {
     id,
     course: e.course.trim(),
     type: e.type.trim(),
     date: e.date,
-    professor: e.professor.trim(),
+    professor: (e.professor || "").trim(),
+    uploaderName: studentName || "You",
+    studentId: e.studentId,
   };
 
   const existingIdx = current.findIndex(
     (x) =>
+      (e.id && x.id === e.id) ||
       x.id === id ||
-      (x.course.toLowerCase() === item.course.toLowerCase() &&
-        x.type.toLowerCase() === item.type.toLowerCase() &&
-        x.date === item.date)
+      x.course.toLowerCase().trim() === item.course.toLowerCase().trim()
   );
 
   let updated: Exam[];
   if (existingIdx >= 0) {
+    const existing = current[existingIdx];
+    item.id = existing.id || id;
+    if (!item.professor && existing.professor) item.professor = existing.professor;
+    if (!item.uploaderName && existing.uploaderName) item.uploaderName = existing.uploaderName;
+    if (existing.studentId && !item.studentId) item.studentId = existing.studentId;
     updated = [...current];
     updated[existingIdx] = item;
   } else {
@@ -121,16 +150,103 @@ export function saveExam(e: Exam): Exam {
   }
 
   saveExams(updated);
+
+  // Always sync to database so exams are persisted with student attribution and updated dates
+  if (getStoredAccessToken()) {
+    examService
+      .createExam({
+        course: item.course,
+        type: item.type,
+        date: item.date,
+        professor: item.professor,
+        uploaderName: item.uploaderName,
+        studentEmail,
+      })
+      .then((remote) => {
+        if (remote && remote.id) {
+          item.id = String(remote.id);
+          if (remote.uploaderName || remote.uploader_name) {
+            item.uploaderName = remote.uploaderName || remote.uploader_name;
+          }
+          const fresh = loadExams().map((ex) =>
+            ex.course.toLowerCase().trim() === item.course.toLowerCase().trim()
+              ? {
+                  ...ex,
+                  id: String(remote.id),
+                  date: item.date,
+                  uploaderName: item.uploaderName,
+                  studentId: remote.studentId || remote.student_id,
+                }
+              : ex
+          );
+          saveExams(fresh);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not sync exam to backend:", err);
+      });
+  }
+
   return item;
 }
 
 export function deleteExam(examIdOrCourse: string): void {
   const current = loadExams();
   const target = examIdOrCourse.trim().toLowerCase();
+  const match = current.find(
+    (x) => x.id === examIdOrCourse || x.course.trim().toLowerCase() === target
+  );
+
   const updated = current.filter(
     (x) => x.id !== examIdOrCourse && x.course.trim().toLowerCase() !== target
   );
   saveExams(updated);
+
+  if (match && match.id && !isNaN(Number(match.id)) && getStoredAccessToken()) {
+    examService.deleteExam(Number(match.id)).catch(() => {});
+  }
+}
+
+export async function fetchAndSyncExams(
+  enrolledCourses?: { name: string; code?: string }[]
+): Promise<Exam[]> {
+  const enrolled = enrolledCourses ?? getUserCourses();
+  try {
+    if (getStoredAccessToken()) {
+      const remote = await examService.getExams();
+      if (remote !== null && remote !== undefined) {
+        const mapped: Exam[] = remote.map((re) => ({
+          id: String(re.id),
+          course: re.course,
+          type: re.type,
+          date: re.date,
+          professor: re.professor || "",
+          uploaderName: re.uploaderName || re.uploader_name || "You",
+          studentId: re.studentId || re.student_id,
+        }));
+
+        // For authenticated user: backend exams are authoritative.
+        // We only retain local target exams if they correspond to this user's enrolled courses.
+        const local = loadExams();
+        const mergedMap = new Map<string, Exam>();
+        mapped.forEach((ex) => mergedMap.set(ex.course.toLowerCase().trim(), ex));
+
+        if (enrolled && enrolled.length > 0) {
+          local.forEach((ex) => {
+            const key = ex.course.toLowerCase().trim();
+            if (!mergedMap.has(key) && isCourseEnrolled(ex.course, enrolled)) {
+              mergedMap.set(key, ex);
+            }
+          });
+        }
+
+        const merged = Array.from(mergedMap.values());
+        saveExams(merged);
+        return loadExamsForUser(enrolled);
+      }
+    }
+  } catch {}
+  return loadExamsForUser(enrolled);
 }
 
 export function clearExams(): void {
@@ -169,14 +285,27 @@ export function isCourseEnrolled(
 export function loadExamsForUser(
   enrolledCourses?: { name: string; code?: string }[]
 ): Exam[] {
-  const list = enrolledCourses ?? getUserCourses();
-  if (!list || list.length === 0) return [];
-
   const all = loadExams();
-  const userExams = all.filter((exam) => isCourseEnrolled(exam.course, list));
+  if (all.length === 0) return [];
+
+  const enrolled = enrolledCourses ?? getUserCourses();
+  if (!enrolled || enrolled.length === 0) {
+    return all;
+  }
+
+  const enrolledNames = new Set((enrolled || []).map((c) => c.name.toLowerCase().trim()));
+  const filtered = all.filter((e) => {
+    const target = e.course.toLowerCase().trim();
+    const isEnrolled = enrolled && enrolled.length > 0 && (isCourseEnrolled(target, enrolled) || enrolledNames.has(target));
+    if (isEnrolled) return true;
+    // Keep user's explicit exams or local target exams
+    if (e.uploaderName === "You" || !e.id || e.id.startsWith("exam-")) return true;
+    if (!enrolled || enrolled.length === 0) return true;
+    return false;
+  });
 
   // Sort by date ascending (closest upcoming exam first)
-  return userExams.sort((a, b) => {
+  return filtered.sort((a, b) => {
     const timeA = new Date(a.date + "T00:00:00").getTime();
     const timeB = new Date(b.date + "T00:00:00").getTime();
     return timeA - timeB;

@@ -2,13 +2,13 @@ import type { ApiResponse, AuthResponse, UserSummary } from "./types";
 
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    // When accessed from another device on the local network (e.g. mobile phone, tablet, laptop)
-    if (host && host !== "localhost" && host !== "127.0.0.1") {
-      return `http://${host}:8080`;
-    }
+    // In browser, always use relative path ("") so all API requests go through
+    // Vite's reverse proxy on the same port (5173). This allows mobile devices,
+    // tablets, and WhatsApp in-app browser to access the backend API and parse syllabi
+    // without port 8080 firewall blocking or CORS issues.
+    return "";
   }
-  return (import.meta.env["VITE_API_URL"] as string) || "http://localhost:8080";
+  return (import.meta.env["VITE_API_URL"] as string) || "http://127.0.0.1:8080";
 }
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -46,9 +46,51 @@ export function getStoredUser(): UserSummary | null {
 
 export function saveAuthSession(auth: AuthResponse) {
   try {
+    const prevUserRaw = localStorage.getItem(STORAGE_KEYS.USER);
+    let isDifferentUser = true;
+    if (prevUserRaw) {
+      try {
+        const prev = JSON.parse(prevUserRaw);
+        if (prev?.id && auth.user?.id && String(prev.id) === String(auth.user.id)) {
+          isDifferentUser = false;
+        }
+      } catch {}
+    }
+
+    if (isDifferentUser) {
+      // Purge all shared/legacy un-scoped keys so new/switched user never inherits foreign data
+      const legacyKeys = [
+        "sg-user-courses",
+        "sg-active-cards",
+        "sg-active-plan",
+        "sg-active-course",
+        "sg-active-kit",
+        "sg-active-quiz",
+        "sg-task-kits",
+        "sg-exams",
+        "sg-exam",
+        "sg-user-uni",
+        "sg-user-col",
+        "sg-user-major",
+        "sg-catalog-cache",
+        "sg-challenges-cache",
+        "sg-uploads",
+        "sg-guest-courses",
+        "sg-guest-exams",
+        "sg-guest-exam",
+        "sg-guest-active-course",
+        "sg-guest-active-plan",
+        "sg-guest-task-kits",
+      ];
+      legacyKeys.forEach((k) => localStorage.removeItem(k));
+    }
+
     localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, auth.accessToken);
     localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, auth.refreshToken);
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(auth.user));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("sg-exams-updated"));
+    }
   } catch (err) {
     console.error("Failed to save auth session to localStorage", err);
   }
@@ -56,35 +98,39 @@ export function saveAuthSession(auth: AuthResponse) {
 
 export function clearAuthSession() {
   try {
-    const userRaw = localStorage.getItem(STORAGE_KEYS.USER);
-    let prefix = "guest";
-    if (userRaw) {
-      try {
-        const u = JSON.parse(userRaw);
-        if (u?.id) prefix = `u${u.id}`;
-        else if (u?.email) prefix = `u_${u.email.replace(/[^a-zA-Z0-9]/g, "_")}`;
-      } catch {}
-    }
-
     localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
     localStorage.removeItem(STORAGE_KEYS.USER);
 
-    // Purge user-specific active session state
-    localStorage.removeItem(`sg-${prefix}-exams`);
-    localStorage.removeItem(`sg-${prefix}-exam`);
-    localStorage.removeItem(`sg-${prefix}-active-course`);
-    localStorage.removeItem(`sg-${prefix}-active-plan`);
-    localStorage.removeItem(`sg-${prefix}-active-cards`);
-
-    // Purge legacy un-scoped cache so new users start completely fresh
-    localStorage.removeItem("sg-user-courses");
-    localStorage.removeItem("sg-active-cards");
-    localStorage.removeItem("sg-active-plan");
-    localStorage.removeItem("sg-active-course");
-    localStorage.removeItem("sg-task-kits");
-    localStorage.removeItem("sg-exams");
-    localStorage.removeItem("sg-exam");
+    // Purge legacy un-scoped cache and guest caches so subsequent signups start 100% clean
+    const legacyKeys = [
+      "sg-user-courses",
+      "sg-active-cards",
+      "sg-active-plan",
+      "sg-active-course",
+      "sg-active-kit",
+      "sg-active-quiz",
+      "sg-task-kits",
+      "sg-exams",
+      "sg-exam",
+      "sg-user-uni",
+      "sg-user-col",
+      "sg-user-major",
+      "sg-catalog-cache",
+      "sg-challenges-cache",
+      "sg-uploads",
+      "sg-guest-courses",
+      "sg-guest-exams",
+      "sg-guest-exam",
+      "sg-guest-active-course",
+      "sg-guest-active-plan",
+      "sg-guest-task-kits",
+    ];
+    legacyKeys.forEach((k) => localStorage.removeItem(k));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("sg-exams-updated"));
+      window.dispatchEvent(new Event("sg-session-cleared"));
+    }
   } catch (err) {
     console.error("Failed to clear auth session", err);
   }

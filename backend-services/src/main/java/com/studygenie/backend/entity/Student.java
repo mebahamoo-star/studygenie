@@ -64,6 +64,25 @@ public class Student {
     @Column(name = "last_study_date")
     private LocalDate lastStudyDate;
 
+    @Column(name = "auth_provider", length = 30)
+    @Builder.Default
+    private String authProvider = "LOCAL";
+
+    @Column(name = "provider_id", length = 255)
+    private String providerId;
+
+    @Column(name = "avatar_url", length = 512)
+    private String avatarUrl;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "student_courses",
+        joinColumns = @JoinColumn(name = "student_id"),
+        inverseJoinColumns = @JoinColumn(name = "course_id")
+    )
+    @Builder.Default
+    private java.util.Set<Course> enrolledCourses = new java.util.HashSet<>();
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

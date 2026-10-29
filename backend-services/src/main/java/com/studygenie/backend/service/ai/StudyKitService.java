@@ -29,8 +29,10 @@ public class StudyKitService {
         Long userId = getUserId();
         String kitId = UUID.randomUUID().toString();
         
+        int targetLimit = request.flashcardsPerTopic() > 0 ? request.flashcardsPerTopic() : 10;
         List<StoredTopicKit> storedTopics = data.topics().stream().map(topic -> {
             List<StoredFlashcard> storedCards = topic.flashcards().stream()
+                .limit(targetLimit)
                 .map(fc -> new StoredFlashcard(UUID.randomUUID().toString(), fc.front(), fc.back()))
                 .collect(Collectors.toList());
                 

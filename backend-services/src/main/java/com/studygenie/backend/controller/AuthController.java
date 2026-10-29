@@ -4,6 +4,7 @@ import com.studygenie.backend.dto.ApiResponse;
 import com.studygenie.backend.dto.auth.*;
 import com.studygenie.backend.security.AuthenticatedUser;
 import com.studygenie.backend.service.auth.AuthService;
+import com.studygenie.backend.service.auth.OAuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -12,14 +13,16 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@io.swagger.v3.oas.annotations.tags.Tag(name = "Authentication", description = "Endpoints for registering, logging in, and token refresh")
+@io.swagger.v3.oas.annotations.tags.Tag(name = "Authentication", description = "Endpoints for registering, logging in, token refresh, and OAuth2 social login")
 @RequestMapping("/api/auth")
 public class AuthController {
 
     private final AuthService authService;
+    private final OAuthService oAuthService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, OAuthService oAuthService) {
         this.authService = authService;
+        this.oAuthService = oAuthService;
     }
 
     @PostMapping("/register")
@@ -47,10 +50,22 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
+    @GetMapping("/oauth/info")
+    public ResponseEntity<ApiResponse<OAuthProviderInfo>> getOAuthInfo(@RequestParam(value = "redirectUri", required = false) String redirectUri) {
+        OAuthProviderInfo info = oAuthService.getProviderInfo(redirectUri);
+        return ResponseEntity.ok(ApiResponse.ok(info));
+    }
+
+    @PostMapping("/oauth/login")
+    public ResponseEntity<ApiResponse<AuthResponse>> oauthLogin(@Valid @RequestBody OAuthLoginRequest request) {
+        AuthResponse response = oAuthService.authenticate(request);
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserSummary>> getMe(@AuthenticationPrincipal AuthenticatedUser user) {
         if (user == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build(); // Should be intercepted by entry point usually
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         UserSummary summary = authService.getMe(user.id());
         return ResponseEntity.ok(ApiResponse.ok(summary));

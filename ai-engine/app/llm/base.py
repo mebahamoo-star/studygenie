@@ -32,7 +32,8 @@ class Provider(Protocol):
         model: str,
         temperature: float,
         max_output_tokens: int,
-        schema: type[BaseModel]
+        schema: type[BaseModel],
+        response_schema: dict | None = None,
     ) -> tuple[BaseModel, dict[str, int], str]:
         ...
 
@@ -44,6 +45,7 @@ class Provider(Protocol):
         model: str,
         temperature: float,
         max_output_tokens: int,
-        schema: type[BaseModel]
+        schema: type[BaseModel],
+        response_schema: dict | None = None,
     ) -> tuple[BaseModel, dict[str, int], str]:
         ...

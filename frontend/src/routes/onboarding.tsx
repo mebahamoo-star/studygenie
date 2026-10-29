@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Check, ChevronLeft, GraduationCap, Plus, Search } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, GraduationCap, Landmark, Plus, Search, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Genie, GenieLogo } from "@/components/Genie";
 import { ThemeToggle } from "@/components/AppShell";
@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { browseService } from "@/lib/api/services";
-import type { College, Course, University } from "@/lib/api/types";
-import { saveUserCourses } from "@/lib/courses-util";
+import { saveUserCourses, saveUserAcademicProfile } from "@/lib/courses-util";
+import type { Course, University } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/onboarding")({
@@ -26,6 +26,21 @@ export const Route = createFileRoute("/onboarding")({
 });
 
 const steps = ["University", "College", "Major", "Courses"];
+
+const collegeSuggestions = [
+  "College of Computer and Information Sciences",
+  "College of Engineering",
+  "College of Business Administration",
+  "College of Medicine",
+  "College of Science",
+  "College of Pharmacy",
+  "College of Nursing",
+  "College of Architecture and Planning",
+  "College of Law and Political Science",
+  "College of Humanities and Social Sciences",
+  "College of Education",
+  "College of Applied Medical Sciences",
+];
 
 const majorSuggestions = [
   "Computer Science",
@@ -54,10 +69,12 @@ function Onboarding() {
   const [uniList, setUniList] = useState<{ id?: number | string; name: string }[]>([]);
   const [selectedUni, setSelectedUni] = useState<{ id?: number | string; name: string } | null>(null);
   const [customUni, setCustomUni] = useState("");
+  const [savingUni, setSavingUni] = useState(false);
 
   const [colList, setColList] = useState<{ id?: number | string; name: string }[]>([]);
   const [selectedCol, setSelectedCol] = useState<{ id?: number | string; name: string } | null>(null);
   const [customCol, setCustomCol] = useState("");
+  const [savingCol, setSavingCol] = useState(false);
 
   const [selectedMajor, setSelectedMajor] = useState<string>("");
   const [customMajor, setCustomMajor] = useState("");
@@ -79,30 +96,57 @@ function Onboarding() {
 
   const handleSelectUni = (u: { id?: number | string; name: string }) => {
     setSelectedUni(u);
-    if (u.id) {
+    setCustomUni("");
+    if (u.id && !String(u.id).startsWith("uni-")) {
       browseService
         .getColleges(u.id)
         .then((cols) => {
-          if (cols && cols.length > 0) {
-            setColList(cols);
-          }
+          setColList(cols && cols.length > 0 ? cols : []);
         })
-        .catch(() => {});
+        .catch(() => setColList([]));
     }
   };
 
-  const handleAddCustomUni = () => {
-    const trimmed = customUni.trim();
+  const handleAddCustomUni = async (nameToUse?: string) => {
+    const trimmed = (nameToUse || customUni || q).trim();
     if (!trimmed) return;
-    const item = { id: `uni-${Date.now()}`, name: trimmed };
-    setUniList((prev) => [item, ...prev]);
-    setSelectedUni(item);
-    setCustomUni("");
+
+    // Check if already in list
+    const existing = uniList.find((u) => u.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) {
+      handleSelectUni(existing);
+      setCustomUni("");
+      setQ("");
+      return;
+    }
+
+    setSavingUni(true);
+    try {
+      const created = await browseService.createUniversity(trimmed);
+      setUniList((prev) => [created, ...prev.filter((u) => u.name.toLowerCase() !== created.name.toLowerCase())]);
+      setSelectedUni(created);
+      setCustomUni("");
+      setQ("");
+      toast.success(`University "${created.name}" saved to database! ✨`);
+      if (created.id) {
+        browseService.getColleges(created.id).then((cols) => setColList(cols || [])).catch(() => {});
+      }
+    } catch (err) {
+      console.warn("Could not save university to DB:", err);
+      const fallback = { id: `uni-${Date.now()}`, name: trimmed };
+      setUniList((prev) => [fallback, ...prev]);
+      setSelectedUni(fallback);
+      setCustomUni("");
+      setQ("");
+    } finally {
+      setSavingUni(false);
+    }
   };
 
   const handleSelectCol = (c: { id?: number | string; name: string }) => {
     setSelectedCol(c);
-    if (c.id) {
+    setCustomCol("");
+    if (c.id && !String(c.id).startsWith("col-")) {
       browseService
         .getCourses(c.id)
         .then((cs) => {
@@ -114,13 +158,52 @@ function Onboarding() {
     }
   };
 
-  const handleAddCustomCol = () => {
-    const trimmed = customCol.trim();
+  const handleAddCustomCol = async (nameToUse?: string) => {
+    const trimmed = (nameToUse || customCol).trim();
     if (!trimmed) return;
-    const item = { id: `col-${Date.now()}`, name: trimmed };
-    setColList((prev) => [item, ...prev]);
-    setSelectedCol(item);
+
+    const existing = colList.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) {
+      handleSelectCol(existing);
+      setCustomCol("");
+      return;
+    }
+
+    setSavingCol(true);
+    try {
+      // Ensure university exists in DB first
+      let currentUniId = selectedUni?.id;
+      if (!currentUniId || String(currentUniId).startsWith("uni-")) {
+        if (selectedUni?.name) {
+          const savedUni = await browseService.createUniversity(selectedUni.name);
+          setSelectedUni(savedUni);
+          currentUniId = savedUni.id;
+        }
+      }
+
+      if (currentUniId && !String(currentUniId).startsWith("uni-")) {
+        const created = await browseService.createCollege(currentUniId, trimmed);
+        setColList((prev) => [created, ...prev.filter((c) => c.name.toLowerCase() !== created.name.toLowerCase())]);
+        setSelectedCol(created);
+        setCustomCol("");
+        toast.success(`College "${created.name}" saved to database! ✨`);
+        browseService.getCourses(created.id).then((cs) => setCourseList(cs || [])).catch(() => {});
+        return;
+      }
+    } catch (err) {
+      console.warn("Could not save college to DB:", err);
+    } finally {
+      setSavingCol(false);
+    }
+
+    const fallback = { id: `col-${Date.now()}`, name: trimmed };
+    setColList((prev) => [fallback, ...prev]);
+    setSelectedCol(fallback);
     setCustomCol("");
+  };
+
+  const handlePickCollegeSuggestion = async (name: string) => {
+    await handleAddCustomCol(name);
   };
 
   const handlePickMajor = (major: string) => {
@@ -157,7 +240,7 @@ function Onboarding() {
 
     const fallbackCourse: Course = {
       id: `c-${Date.now()}`,
-      code: "CUSTOM",
+      code: "",
       name: trimmed,
       status: "none",
     };
@@ -166,30 +249,47 @@ function Onboarding() {
     setCustomCourse("");
   };
 
-  const handleFinish = (skipCourses = false) => {
+  const persistSelections = async () => {
     try {
-      if (!skipCourses && picked.length > 0) {
-        const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
-        if (selectedCoursesData.length > 0) {
-          saveUserCourses(selectedCoursesData);
-          localStorage.setItem("sg-user-courses", JSON.stringify(selectedCoursesData));
-        }
+      let finalUni = selectedUni;
+      if (selectedUni && String(selectedUni.id).startsWith("uni-")) {
+        try {
+          finalUni = await browseService.createUniversity(selectedUni.name);
+        } catch {}
       }
-      if (selectedUni) {
-        localStorage.setItem("sg-user-uni", JSON.stringify(selectedUni));
-      }
-      if (selectedCol) {
-        localStorage.setItem("sg-user-col", JSON.stringify(selectedCol));
-      }
-      if (selectedMajor) {
-        localStorage.setItem("sg-user-major", JSON.stringify({ name: selectedMajor }));
-      }
-    } catch {}
 
-    if (picked.length > 0 && !skipCourses) {
+      let finalCol = selectedCol;
+      if (selectedCol && String(selectedCol.id).startsWith("col-") && finalUni?.id && !String(finalUni.id).startsWith("uni-")) {
+        try {
+          finalCol = await browseService.createCollege(finalUni.id, selectedCol.name);
+        } catch {}
+      }
+
+      const selectedCoursesData = courseList.filter((c) => picked.includes(String(c.id)));
+      if (selectedCoursesData.length > 0) {
+        saveUserCourses(selectedCoursesData);
+        await browseService.syncEnrolledCourses(selectedCoursesData.map((c) => c.id || c.name)).catch(() => {});
+      }
+      saveUserAcademicProfile({
+        uni: finalUni || undefined,
+        col: finalCol || undefined,
+        major: selectedMajor ? { name: selectedMajor } : undefined,
+      });
+    } catch {}
+  };
+
+  const handleSkip = async () => {
+    await persistSelections();
+    toast.info("Setup skipped. You can add courses anytime from the Courses page! ✨");
+    nav({ to: "/dashboard" });
+  };
+
+  const handleFinish = async () => {
+    await persistSelections();
+    if (picked.length > 0) {
       toast.success("Profile setup complete! Welcome to StudyGenie ✨");
     } else {
-      toast.success("Welcome to StudyGenie! You can add courses anytime from the Courses tab ✨");
+      toast.info("Welcome to StudyGenie! You can add courses anytime ✨");
     }
     nav({ to: "/dashboard" });
   };
@@ -201,10 +301,10 @@ function Onboarding() {
     );
 
   const isNextDisabled = () => {
-    if (step === 0) return !selectedUni;
-    if (step === 1) return !selectedCol;
+    if (step === 0) return !selectedUni && !customUni.trim();
+    if (step === 1) return !selectedCol && !customCol.trim();
     if (step === 2) return !selectedMajor && !customMajor.trim();
-    // Step 3 (Courses) is optional / skippable
+    if (step === 3) return false;
     return false;
   };
 
@@ -218,11 +318,11 @@ function Onboarding() {
           <Button
             variant="ghost"
             size="sm"
-            type="button"
-            onClick={() => handleFinish(true)}
-            className="text-xs font-semibold text-muted-foreground hover:text-foreground"
+            onClick={handleSkip}
+            className="text-xs font-semibold text-muted-foreground hover:text-foreground border border-border/60 hover:border-border rounded-xl px-3 h-8.5"
           >
-            Skip setup →
+            Skip for now
+            <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
           </Button>
           <ThemeToggle />
         </div>
@@ -249,38 +349,47 @@ function Onboarding() {
           ))}
         </div>
 
-        <div className="relative rounded-3xl border bg-card p-8 shadow-soft">
-          {step === 3 && (
-            <div className="absolute right-6 top-6">
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                onClick={() => handleFinish(true)}
-                className="h-8 rounded-lg px-3 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                Skip for now →
-              </Button>
+        <div className="rounded-3xl border bg-card p-8 shadow-soft">
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Genie pose="mid" className="h-16 w-16 shrink-0" />
+              <div>
+                <h1 className="text-2xl font-semibold">
+                  {
+                    [
+                      "Where do you study?",
+                      "Which college or faculty?",
+                      "What is your major?",
+                      "Pick or add your courses",
+                    ][step]
+                  }
+                </h1>
+                {step < 3 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1.5 mt-1">
+                    <Lock className="h-3 w-3 shrink-0" />
+                    Selections are permanent and cannot be modified after registration.
+                  </p>
+                )}
+              </div>
             </div>
-          )}
-
-          <div className="mb-6 flex items-center gap-4 pr-24">
-            <Genie pose="mid" className="h-16 w-16 shrink-0" />
-            <h1 className="text-2xl font-semibold">
-              {
-                [
-                  "Where do you study?",
-                  "Which college or faculty?",
-                  "What is your major?",
-                  "Pick or add your courses",
-                ][step]
-              }
-            </h1>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSkip}
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground rounded-xl shrink-0 h-8 px-3"
+            >
+              Skip
+              <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
           </div>
 
           {step === 0 && (
-            <>
-              <div className="mb-3 flex gap-2">
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                Search for your university or enter a new one to save it to our database.
+              </p>
+
+              <div className="flex gap-2">
                 <Input
                   value={customUni}
                   onChange={(e) => setCustomUni(e.target.value)}
@@ -292,52 +401,76 @@ function Onboarding() {
                   }}
                   placeholder="Type your university name..."
                   className="h-11 rounded-xl"
+                  disabled={savingUni}
                 />
-                <Button type="button" onClick={handleAddCustomUni} variant="secondary">
-                  Add
+                <Button type="button" onClick={() => handleAddCustomUni()} variant="secondary" disabled={savingUni || !customUni.trim()}>
+                  {savingUni ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add to DB"}
                 </Button>
               </div>
 
-              {uniList.length > 0 ? (
-                <>
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      placeholder="Search universities"
-                      className="h-11 rounded-xl pl-10"
-                    />
-                  </div>
-                  <div className="flex max-h-80 flex-col gap-2 overflow-auto">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search existing universities..."
+                  className="h-11 rounded-xl pl-10"
+                />
+              </div>
+
+              {q.trim() && !uniList.some((u) => u.name.toLowerCase() === q.trim().toLowerCase()) && (
+                <button
+                  type="button"
+                  onClick={() => handleAddCustomUni(q)}
+                  disabled={savingUni}
+                  className="flex items-center gap-2 rounded-xl border border-dashed border-primary/60 bg-primary/5 p-3 text-sm font-semibold text-primary hover:bg-primary/10 transition w-full text-left"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add "<strong>{q.trim()}</strong>" to database</span>
+                </button>
+              )}
+
+              {uniList.length > 0 && (
+                <div>
+                  <Label className="mb-2 block text-xs font-semibold text-muted-foreground">
+                    Universities in database:
+                  </Label>
+                  <div className="flex max-h-72 flex-col gap-2 overflow-auto">
                     {uniList
                       .filter((u) => u.name.toLowerCase().includes(q.toLowerCase()))
                       .map((u) => {
-                        const isSelected = selectedUni?.name === u.name;
+                        const isSelected = selectedUni?.name.toLowerCase() === u.name.toLowerCase();
                         return (
                           <button
                             key={u.name}
+                            type="button"
                             onClick={() => handleSelectUni(u)}
                             className={row(isSelected)}
                           >
-                            {u.name}
+                            <span>{u.name}</span>
                             {isSelected && <Check className="h-5 w-5 text-primary" />}
                           </button>
                         );
                       })}
                   </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Type your university name above and click "Add" to proceed.
-                </p>
+                </div>
               )}
-            </>
+
+              {selectedUni && (
+                <div className="rounded-xl bg-accent/60 p-3 text-sm font-semibold text-accent-foreground">
+                  Selected university: <span className="text-primary">{selectedUni.name}</span>
+                </div>
+              )}
+            </div>
           )}
 
           {step === 1 && (
-            <>
-              <div className="mb-3 flex gap-2">
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                Select your faculty, school, or college (e.g. College of Computer & Information Sciences, College of Engineering). You'll pick your specific major in the next step.
+              </p>
+
+              <div className="flex gap-2">
                 <Input
                   value={customCol}
                   onChange={(e) => setCustomCol(e.target.value)}
@@ -347,40 +480,80 @@ function Onboarding() {
                       handleAddCustomCol();
                     }
                   }}
-                  placeholder="e.g. Computer Science, Engineering, Medicine..."
+                  placeholder="Type college or faculty name (e.g. College of Engineering)..."
                   className="h-11 rounded-xl"
+                  disabled={savingCol}
                 />
-                <Button type="button" onClick={handleAddCustomCol} variant="secondary">
-                  Add
+                <Button type="button" onClick={() => handleAddCustomCol()} variant="secondary" disabled={savingCol || !customCol.trim()}>
+                  {savingCol ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
                 </Button>
               </div>
 
-              {colList.length > 0 ? (
-                <div className="grid max-h-80 grid-cols-2 gap-3 overflow-auto">
-                  {colList.map((c) => {
-                    const isSelected = selectedCol?.name === c.name;
+              {colList.length > 0 && (
+                <div>
+                  <Label className="mb-2 block text-xs font-semibold text-muted-foreground">
+                    Available colleges at {selectedUni?.name || "selected university"}:
+                  </Label>
+                  <div className="grid max-h-64 grid-cols-1 sm:grid-cols-2 gap-2.5 overflow-auto">
+                    {colList.map((c) => {
+                      const isSelected = selectedCol?.name === c.name;
+                      return (
+                        <button
+                          key={c.name}
+                          type="button"
+                          onClick={() => handleSelectCol(c)}
+                          className={row(isSelected)}
+                        >
+                          <span className="truncate">{c.name}</span>
+                          {isSelected && <Check className="h-5 w-5 shrink-0 text-primary" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <Label className="mb-2 block text-xs font-semibold text-muted-foreground">
+                  {colList.length > 0 ? "Or choose a common college or faculty:" : "Common colleges & faculties:"}
+                </Label>
+                <div className="flex max-h-60 flex-wrap gap-2 overflow-auto pt-1">
+                  {collegeSuggestions.map((c) => {
+                    const isChosen = selectedCol?.name.toLowerCase() === c.toLowerCase();
                     return (
                       <button
-                        key={c.name}
-                        onClick={() => handleSelectCol(c)}
-                        className={row(isSelected)}
+                        key={c}
+                        type="button"
+                        onClick={() => handlePickCollegeSuggestion(c)}
+                        className={cn(
+                          "rounded-xl border px-3.5 py-2 text-sm font-semibold transition hover:border-primary text-left",
+                          isChosen
+                            ? "border-primary bg-primary text-primary-foreground shadow-soft"
+                            : "bg-card text-card-foreground hover:bg-accent"
+                        )}
                       >
-                        {c.name}
-                        {isSelected && <Check className="h-5 w-5 text-primary" />}
+                        <Landmark className="mr-1.5 inline h-4 w-4" />
+                        {c}
                       </button>
                     );
                   })}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Type your faculty or college name above and click "Add" to continue.
-                </p>
+              </div>
+
+              {selectedCol && (
+                <div className="rounded-xl bg-accent/60 p-3 text-sm font-semibold text-accent-foreground">
+                  Selected college: <span className="text-primary">{selectedCol.name}</span>
+                </div>
               )}
-            </>
+            </div>
           )}
 
           {step === 2 && (
             <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                Pick your specific degree or major within your college (e.g. Computer Science, Software Engineering, Cybersecurity).
+              </p>
+
               <div className="flex gap-2">
                 <Input
                   value={customMajor}
@@ -439,6 +612,10 @@ function Onboarding() {
 
           {step === 3 && (
             <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Pick courses from your college catalog or type custom course names to add them.
+              </p>
+
               <div className="flex gap-2">
                 <Input
                   value={customCourse}
@@ -464,6 +641,7 @@ function Onboarding() {
                     return (
                       <button
                         key={c.id}
+                        type="button"
                         onClick={() =>
                           setPicked((p) =>
                             on ? p.filter((x) => x !== String(c.id)) : [...p, String(c.id)]
@@ -472,7 +650,9 @@ function Onboarding() {
                         className={row(on)}
                       >
                         <span>
-                          <span className="mr-2 text-xs text-muted-foreground">{c.code}</span>
+                          {c.code && String(c.code).trim().toUpperCase() !== "CUSTOM" && (
+                            <span className="mr-2 text-xs text-muted-foreground">{c.code}</span>
+                          )}
                           {c.name}
                         </span>
                         <StatusBadge status={c.status} />
@@ -482,17 +662,17 @@ function Onboarding() {
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed py-8 text-center text-sm text-muted-foreground">
-                  No courses added yet. Type course names above and click "Add Course", or skip for now.
+                  No courses in college catalog yet. Type course names above and click "Add Course".
                 </div>
               )}
 
               {picked.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Tip: You can add courses now or skip and add them anytime later from the Courses page.
+                <p className="text-xs text-muted-foreground font-medium">
+                  💡 Course addition is optional. You can add courses now or skip and add them anytime from the Courses page.
                 </p>
               ) : (
-                <p className="text-xs text-emerald-600 font-medium">
-                  ✓ {picked.length} course{picked.length > 1 ? "s" : ""} selected.
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  ✓ {picked.length} course{picked.length > 1 ? "s" : ""} selected for your profile.
                 </p>
               )}
             </div>
@@ -502,38 +682,31 @@ function Onboarding() {
             <Button variant="ghost" disabled={step === 0} onClick={() => setStep(step - 1)}>
               <ChevronLeft /> Back
             </Button>
-            <div className="flex items-center gap-2">
-              {step === 3 && (
-                <Button
-                  variant="outline"
-                  type="button"
-                  onClick={() => handleFinish(true)}
-                  className="rounded-xl"
-                >
-                  Skip for now
-                </Button>
-              )}
-              <Button
-                variant="magic"
-                disabled={isNextDisabled()}
-                onClick={() => {
-                  if (step === 2 && !selectedMajor && customMajor.trim()) {
-                    setSelectedMajor(customMajor.trim());
-                  }
-                  if (step < steps.length - 1) {
-                    setStep(step + 1);
-                  } else {
-                    handleFinish(false);
-                  }
-                }}
-              >
-                {step < steps.length - 1
-                  ? "Continue"
-                  : picked.length > 0
-                    ? "Finish & Go to Dashboard"
-                    : "Skip & Go to Dashboard"}
-              </Button>
-            </div>
+            <Button
+              variant="magic"
+              disabled={isNextDisabled()}
+              onClick={async () => {
+                if (step === 0 && !selectedUni && customUni.trim()) {
+                  await handleAddCustomUni(customUni);
+                } else if (step === 1 && !selectedCol && customCol.trim()) {
+                  await handleAddCustomCol(customCol);
+                } else if (step === 2 && !selectedMajor && customMajor.trim()) {
+                  setSelectedMajor(customMajor.trim());
+                }
+
+                if (step < steps.length - 1) {
+                  setStep(step + 1);
+                } else {
+                  handleFinish();
+                }
+              }}
+            >
+              {step < steps.length - 1
+                ? "Continue"
+                : picked.length > 0
+                ? "Finish & Go to Dashboard"
+                : "Skip Courses & Finish"}
+            </Button>
           </div>
         </div>
       </div>

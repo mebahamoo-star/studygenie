@@ -11,5 +11,5 @@ import java.util.List;
 public interface PlanTaskRepository extends JpaRepository<PlanTask, Long> {
     List<PlanTask> findByStudyPlanIdAndScheduledDate(Long studyPlanId, LocalDate scheduledDate);
     List<PlanTask> findByStudyPlanId(Long studyPlanId);
+    List<PlanTask> findByTopicId(Long topicId);
 }
-

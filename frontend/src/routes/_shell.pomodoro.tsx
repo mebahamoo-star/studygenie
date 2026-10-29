@@ -28,10 +28,9 @@ function Pomodoro() {
 
   useEffect(() => {
     try {
-      const active = localStorage.getItem("sg-active-course");
-      if (active) {
-        const c = JSON.parse(active);
-        setCourseName(c.name || "Study Session");
+      const active = getActiveCourse();
+      if (active?.name) {
+        setCourseName(active.name);
       }
     } catch {}
 

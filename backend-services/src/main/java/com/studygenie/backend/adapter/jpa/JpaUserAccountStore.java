@@ -6,11 +6,13 @@ import com.studygenie.backend.repository.StudentRepository;
 import com.studygenie.backend.service.auth.UserAccount;
 import com.studygenie.backend.service.auth.UserAccountStore;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -62,6 +64,7 @@ public class JpaUserAccountStore implements UserAccountStore {
                 .geniePoints(0)
                 .streakCount(0)
                 .lastStudyDate(null)
+                .authProvider("LOCAL")
                 .build();
         try {
             Student saved = studentRepository.saveAndFlush(student);
@@ -69,5 +72,47 @@ public class JpaUserAccountStore implements UserAccountStore {
         } catch (DataIntegrityViolationException e) {
             throw new DuplicateResourceException("Email already exists");
         }
+    }
+
+    @Override
+    public UserAccount findOrCreateOAuthUser(String fullName, String normalizedEmail, String provider, String providerId, String avatarUrl) {
+        Optional<Student> existing = studentRepository.findByEmail(normalizedEmail);
+        if (existing.isPresent()) {
+            Student student = existing.get();
+            boolean changed = false;
+            if (student.getAuthProvider() == null || student.getAuthProvider().equalsIgnoreCase("LOCAL")) {
+                student.setAuthProvider(provider);
+                changed = true;
+            }
+            if (providerId != null && student.getProviderId() == null) {
+                student.setProviderId(providerId);
+                changed = true;
+            }
+            if (avatarUrl != null && student.getAvatarUrl() == null) {
+                student.setAvatarUrl(avatarUrl);
+                changed = true;
+            }
+            if (changed) {
+                student = studentRepository.save(student);
+            }
+            return mapToRecord(student);
+        }
+
+        // Create new student with OAuth provider details
+        String randomPasswordHash = new BCryptPasswordEncoder().encode(UUID.randomUUID().toString());
+        Student newStudent = Student.builder()
+                .fullName((fullName != null && !fullName.isBlank()) ? fullName : normalizedEmail.split("@")[0])
+                .email(normalizedEmail)
+                .password(randomPasswordHash)
+                .authProvider(provider)
+                .providerId(providerId)
+                .avatarUrl(avatarUrl)
+                .geniePoints(0)
+                .streakCount(0)
+                .longestStreakDays(0)
+                .build();
+
+        Student saved = studentRepository.saveAndFlush(newStudent);
+        return mapToRecord(saved);
     }
 }

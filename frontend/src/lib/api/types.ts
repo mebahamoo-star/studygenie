@@ -158,3 +158,14 @@ export interface LeaderboardEntry {
   uni?: string;
   me?: boolean;
 }
+
+export interface CourseReport {
+  id?: number;
+  courseId?: number | string;
+  courseName: string;
+  reason: string;
+  details?: string;
+  reportedBy?: string;
+  status?: string;
+  createdAt?: string;
+}

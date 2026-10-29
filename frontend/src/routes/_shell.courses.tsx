@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { CalendarIcon, Clock, Flame, Plus, RotateCcw, Shield, Trash2, Upload, Wand2 } from "lucide-react";
+import { CalendarIcon, Clock, Flame, Plus, RotateCcw, Shield, Trash2, Upload, Wand2, BookOpen, ChevronDown, ChevronUp, Sparkles, Loader2, Flag, User } from "lucide-react";
+import { ReportCourseDialog } from "@/components/ReportCourseDialog";
 import { toast } from "sonner";
 import { Card, PageTitle } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
@@ -8,15 +9,15 @@ import { MagicLoader } from "@/components/MagicLoader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { pageHead } from "@/lib/head";
 import { browseService, syllabusService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { getUserCourses, saveUserCourses } from "@/lib/courses-util";
-import { clearExam, deleteExam, isCourseEnrolled, loadExam } from "@/lib/exam";
+import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, toLocalDateStr, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile } from "@/lib/courses-util";
+import { clearExam, deleteExam, isCourseEnrolled, loadExam, loadExams, saveExam } from "@/lib/exam";
 import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import type { Course, CourseStatus, Topic } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -44,57 +45,88 @@ function CoursesPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [loadingSelectedTopics, setLoadingSelectedTopics] = useState(false);
 
   const refreshCourses = async () => {
-    // 1. Fetch courses specifically enrolled by THIS user
+    const { col } = getUserAcademicProfile();
+    let colId: any = undefined;
+    if (col?.id && !isNaN(Number(col.id))) colId = Number(col.id);
+
+    // Parallel fetch: user enrolled courses + college catalog simultaneously
+    const [enrolledRes, catalogRes] = await Promise.allSettled([
+      browseService.getEnrolledCourses(),
+      colId !== undefined ? browseService.getAllCourses(colId) : Promise.resolve([]),
+    ]);
+
     let enrolled: Course[] = [];
-    try {
-      enrolled = await browseService.getEnrolledCourses();
-    } catch {}
-
-    const saved = getUserCourses();
-
-    const myMap = new Map<string, Course>();
-    // First, seed with user's saved local courses so their specific topics and status are preserved
-    saved.forEach((c) => myMap.set(c.name.trim().toLowerCase(), c));
-
-    // Merge enrolled courses from backend without overwriting existing local topics
-    enrolled.forEach((c) => {
-      const key = c.name.trim().toLowerCase();
-      const existing = myMap.get(key);
-      if (existing) {
-        myMap.set(key, {
-          ...c,
-          id: existing.id || c.id,
-          topics: existing.topics && existing.topics.length > 0 ? existing.topics : c.topics || [],
-          status: existing.topics && existing.topics.length > 0 ? "ready" : c.status,
-        });
-      } else {
-        myMap.set(key, c);
-      }
-    });
-
-    const myCourses = Array.from(myMap.values());
-    setCourseList(myCourses);
-    if (myCourses.length > 0) {
-      setSel((prev) => (prev && myCourses.some((c) => String(c.id) === String(prev)) ? prev : String(myCourses[0].id)));
-      saveUserCourses(myCourses);
-    } else {
-      setSel("");
+    let isRemoteOnline = false;
+    if (enrolledRes.status === "fulfilled" && Array.isArray(enrolledRes.value)) {
+      enrolled = enrolledRes.value;
+      isRemoteOnline = true;
     }
 
-    // 2. Fetch full college catalog for browsing and 1-click enrolling
-    try {
-      const savedCol = localStorage.getItem("sg-user-col");
-      let colId: any = undefined;
-      if (savedCol) {
-        const parsed = JSON.parse(savedCol);
-        if (parsed?.id && !isNaN(Number(parsed.id))) colId = Number(parsed.id);
-      }
-      const remoteCourses = await browseService.getAllCourses(colId);
-      setCollegeCatalog(remoteCourses);
-    } catch (err) {
-      console.warn("Could not fetch remote college courses:", err);
+    if (catalogRes.status === "fulfilled" && Array.isArray(catalogRes.value)) {
+      setCollegeCatalog(catalogRes.value);
+      try {
+        localStorage.setItem("sg-catalog-cache", JSON.stringify(catalogRes.value));
+      } catch {}
+    }
+
+    const saved = getUserCourses();
+    const savedMap = new Map<string, Course>();
+    saved.forEach((c) => savedMap.set(c.name.trim().toLowerCase(), c));
+
+    let myCourses: Course[] = [];
+    if (isRemoteOnline) {
+      myCourses = enrolled.map((c) => {
+        const local = savedMap.get(c.name.trim().toLowerCase());
+        const hasLocalTopics = local?.topics && local.topics.length > 0;
+        return {
+          ...c,
+          topics: hasLocalTopics ? local.topics : c.topics || [],
+          status: hasLocalTopics || c.status === "ready" ? "ready" : c.status,
+        };
+      });
+    } else {
+      myCourses = saved;
+    }
+
+    setCourseList(myCourses);
+    saveUserCourses(myCourses);
+    if (myCourses.length > 0) {
+      setSel((prev) => (prev && myCourses.some((c) => String(c.id) === String(prev)) ? prev : String(myCourses[0].id)));
+    }
+
+    // Prefetch missing topics concurrently
+    const coursesNeedingTopics = enrolled.filter((c) => {
+      const local = savedMap.get(c.name.trim().toLowerCase());
+      return (!local?.topics || local.topics.length === 0) && c.id && !String(c.id).startsWith("course-") && !String(c.id).startsWith("c-");
+    });
+
+    if (coursesNeedingTopics.length > 0) {
+      Promise.allSettled(
+        coursesNeedingTopics.map(async (c) => {
+          try {
+            const remoteTopics = await browseService.getCourseTopics(c.id);
+            if (remoteTopics && remoteTopics.length > 0) {
+              setCourseList((prev) =>
+                prev.map((pc) =>
+                  String(pc.id) === String(c.id) || pc.name.toLowerCase() === c.name.toLowerCase()
+                    ? { ...pc, topics: remoteTopics, status: "ready" }
+                    : pc
+                )
+              );
+              const currentSaved = getUserCourses();
+              const updatedSaved = currentSaved.map((sc) =>
+                String(sc.id) === String(c.id) || sc.name.toLowerCase() === c.name.toLowerCase()
+                  ? { ...sc, topics: remoteTopics, status: "ready" }
+                  : sc
+              );
+              saveUserCourses(updatedSaved);
+            }
+          } catch {}
+        })
+      );
     }
   };
 
@@ -102,19 +134,45 @@ function CoursesPage() {
     refreshCourses();
   }, []);
 
-  const handleEnrollFromCatalog = (catalogCourse: Course) => {
+    const handleEnrollFromCatalog = async (catalogCourse: Course) => {
     const existing = courseList.find((c) => c.name.toLowerCase() === catalogCourse.name.toLowerCase());
     if (existing) {
       setSel(String(existing.id));
       setOpen(false);
       return;
     }
-    const nextList = [catalogCourse, ...courseList];
+
+    let catalogTopics = catalogCourse.topics || [];
+    if (catalogCourse.id && (!catalogTopics || catalogTopics.length === 0) && !String(catalogCourse.id).startsWith("course-") && !String(catalogCourse.id).startsWith("c-")) {
+      try {
+        const remote = await browseService.getCourseTopics(catalogCourse.id);
+        if (remote && remote.length > 0) {
+          catalogTopics = remote;
+        }
+      } catch {}
+    }
+
+    const courseWithTopics: Course = {
+      ...catalogCourse,
+      topics: catalogTopics,
+      status: catalogTopics.length > 0 ? "ready" : catalogCourse.status,
+    };
+
+    const nextList = [courseWithTopics, ...courseList];
     setCourseList(nextList);
     saveUserCourses(nextList);
-    setSel(String(catalogCourse.id));
+    setSel(String(courseWithTopics.id));
     setOpen(false);
     toast.success(`Enrolled in "${catalogCourse.name}"! ✨`);
+
+    // Persist to Neon PostgreSQL cloud database for this user!
+    try {
+      if (catalogCourse.id && !String(catalogCourse.id).startsWith("c-") && !String(catalogCourse.id).startsWith("course-")) {
+        await browseService.enrollCourse(catalogCourse.id);
+      } else {
+        await browseService.syncEnrolledCourses([catalogCourse.name]);
+      }
+    } catch {}
   };
 
   const handleAddCourse = async (courseName: string, courseCode?: string) => {
@@ -131,22 +189,25 @@ function CoursesPage() {
 
     let newCourse: Course = {
       id: `course-${Date.now()}`,
-      code: courseCode?.trim() || "CUSTOM",
+      code: courseCode?.trim() && courseCode.trim().toUpperCase() !== "CUSTOM" ? courseCode.trim() : "",
       name: trimmed,
       status: "none" as CourseStatus,
     };
 
     try {
-      const savedCol = localStorage.getItem("sg-user-col");
-      let colId = 1;
-      if (savedCol) {
-        try {
-          const parsed = JSON.parse(savedCol);
-          if (parsed?.id && !isNaN(Number(parsed.id))) colId = Number(parsed.id);
-        } catch {}
-      }
+      const { col } = getUserAcademicProfile();
+      let colId = (col?.id && !isNaN(Number(col.id))) ? Number(col.id) : 1;
       const created = await browseService.createCourse(colId, trimmed);
-      if (created) newCourse = created;
+      if (created) {
+        newCourse = {
+          ...created,
+          code: courseCode?.trim() && courseCode.trim().toUpperCase() !== "CUSTOM"
+            ? courseCode.trim()
+            : (created.code && created.code.toUpperCase() !== "CUSTOM" ? created.code : ""),
+        };
+        // Enroll in newly created course on Neon cloud database
+        await browseService.enrollCourse(created.id).catch(() => {});
+      }
     } catch (err) {
       console.warn("Could not create course in backend:", err);
     }
@@ -171,7 +232,8 @@ function CoursesPage() {
 
     try {
       if (courseId && !String(courseId).startsWith("course-") && !String(courseId).startsWith("c-")) {
-        await browseService.deleteCourse(courseId);
+        await browseService.unenrollCourse(courseId).catch(() => {});
+        await browseService.deleteCourse(courseId).catch(() => {});
       }
       const deletedCourse = courseList.find((c) => String(c.id) === String(courseId));
       if (deletedCourse) {
@@ -193,12 +255,48 @@ function CoursesPage() {
 
   const course = courseList.find((c) => String(c.id) === String(sel)) ?? courseList[0];
 
-  const handleCourseStatusUpdate = (updatedStatus: CourseStatus, newTopics?: Topic[]) => {
+  useEffect(() => {
     if (!course) return;
+    const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
+    if (isRealId && (!course.topics || course.topics.length === 0)) {
+      setLoadingSelectedTopics(true);
+      browseService
+        .getCourseTopics(course.id)
+        .then((ts) => {
+          if (ts && ts.length > 0) {
+            handleCourseStatusUpdate("ready", ts, course.id);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setLoadingSelectedTopics(false);
+        });
+    }
+  }, [course?.id]);
+
+  const handleResetChapters = async (courseId?: number | string) => {
+    const targetId = courseId || course?.id;
+    if (!targetId) return;
+    try {
+      const isRealId = targetId && !String(targetId).startsWith("course-") && !String(targetId).startsWith("c-");
+      if (isRealId) {
+        await browseService.resetCourseSyllabus(targetId).catch(() => {});
+      }
+    } catch (err) {
+      console.warn("Could not reset syllabus on backend:", err);
+    }
+    handleCourseStatusUpdate("none", []);
+    toast.success("Syllabus materials reset. You can now upload fresh documents.");
+  };
+
+  const handleCourseStatusUpdate = (updatedStatus: CourseStatus, newTopics?: Topic[], updatedId?: number | string) => {
+    if (!course) return;
+    const finalId = updatedId || course.id;
     const updated = courseList.map((c) =>
       String(c.id) === String(course.id)
         ? {
             ...c,
+            id: finalId,
             status: updatedStatus,
             topics: newTopics !== undefined ? newTopics : c.topics || [],
           }
@@ -206,8 +304,11 @@ function CoursesPage() {
     );
     setCourseList(updated);
     saveUserCourses(updated);
-    const current = updated.find((c) => String(c.id) === String(course.id));
-    if (current) localStorage.setItem("sg-active-course", JSON.stringify(current));
+    if (finalId !== course.id) {
+      setSel(String(finalId));
+    }
+    const current = updated.find((c) => String(c.id) === String(finalId));
+    if (current) saveActiveCourse(current);
   };
 
   return (
@@ -272,7 +373,7 @@ function CoursesPage() {
                               className="rounded-lg border border-primary/30 bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition hover:border-primary hover:bg-primary/10 flex items-center gap-1"
                             >
                               <Plus className="h-3 w-3 text-primary" />
-                              {cc.code || "COURSE"} · {cc.name}
+                              {cc.code && cc.code.toUpperCase() !== "CUSTOM" ? `${cc.code} · ` : ""}{cc.name}
                             </button>
                           ))}
                       </div>
@@ -332,7 +433,9 @@ function CoursesPage() {
               >
                 <div className="flex items-start justify-between gap-1">
                   <div>
-                    <div className="text-xs font-bold text-muted-foreground">{c.code}</div>
+                    {c.code && c.code.toUpperCase() !== "CUSTOM" && (
+                      <div className="text-xs font-bold text-muted-foreground">{c.code}</div>
+                    )}
                     <div className="font-semibold">{c.name}</div>
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
@@ -365,12 +468,20 @@ function CoursesPage() {
               <Plus className="mr-1 h-4 w-4" /> Add Your First Course
             </Button>
           </Card>
-        ) : course && course.status === "ready" && course.topics && course.topics.length > 0 ? (
+        ) : loadingSelectedTopics ? (
+          <Card className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
+            <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
+            <h3 className="text-lg font-semibold text-foreground">Loading Course Syllabus...</h3>
+            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+              Retrieving chapters and topics from your college library.
+            </p>
+          </Card>
+        ) : course && ((course.status === "ready" && course.topics && course.topics.length > 0) || (course.topics && course.topics.length > 0)) ? (
           <JoinChallenge
             key={String(course.id) || course.name}
             course={course}
             onTopicsUpdated={(newTopics) => handleCourseStatusUpdate("ready", newTopics)}
-            onResetChapters={() => handleCourseStatusUpdate("none", [])}
+            onResetChapters={() => handleResetChapters(course.id)}
             onDeleteCourse={() => handleDeleteCourse(course.id)}
           />
         ) : (
@@ -378,7 +489,7 @@ function CoursesPage() {
             key={String(course?.id) || course?.name || "empty"}
             processing={course?.status === "processing"}
             course={course}
-            onReady={(extractedTopics) => handleCourseStatusUpdate("ready", extractedTopics)}
+            onReady={(extractedTopics, realId) => handleCourseStatusUpdate("ready", extractedTopics, realId)}
             onDeleteCourse={() => handleDeleteCourse(course?.id || "")}
           />
         )}
@@ -395,30 +506,82 @@ function EmptyUpload({
 }: {
   processing: boolean;
   course?: Course | undefined;
-  onReady: (newTopics?: Topic[]) => void;
+  onReady: (newTopics?: Topic[], updatedId?: number | string) => void;
   onDeleteCourse?: () => void;
 }) {
   const [drag, setDrag] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [isApiFinished, setIsApiFinished] = useState(false);
   const [fileCount, setFileCount] = useState(0);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+
+  const handleUpdateTargetExamDate = (newDate: Date) => {
+    setDate(newDate);
+    const dateStr = toLocalDateStr(newDate);
+
+    try {
+      saveExam({
+        id: courseExam?.id,
+        course: course.name,
+        type: courseExam?.type || "Final Exam",
+        date: dateStr,
+        professor: courseExam?.professor || "",
+        uploaderName: courseExam?.uploaderName || "You",
+      });
+
+      const curCourses = getUserCourses();
+      const cIdx = curCourses.findIndex(
+        (c) => String(c.id) === String(course.id) || c.name.toLowerCase().trim() === course.name.toLowerCase().trim()
+      );
+      if (cIdx !== -1) {
+        curCourses[cIdx] = { ...curCourses[cIdx], ...course };
+      } else {
+        curCourses.push(course);
+      }
+      saveUserCourses(curCourses);
+
+      toast.success(`Target exam date for ${course.name} set to ${dateStr}`);
+    } catch (e) {
+      console.warn("Could not auto-save exam date:", e);
+    }
+  };
 
   const handleFileUpload = async (fileList?: FileList | File[] | null) => {
     if (!fileList || fileList.length === 0) return;
     const files = Array.from(fileList).filter((f) =>
-      f.name.match(/\.(pdf|pptx|ppt)$/i) ||
+      f.name.match(/\.(pdf|pptx|ppt|txt|md)$/i) ||
       f.type === "application/pdf" ||
       f.type.includes("presentation") ||
-      f.type.includes("powerpoint")
+      f.type.includes("powerpoint") ||
+      f.type.includes("text")
     );
 
     if (files.length === 0) {
-      toast.error("Please select a valid PDF or PowerPoint (.pptx, .ppt) presentation.");
+      toast.error("Please select a PDF, PowerPoint presentation, or document.");
       return;
     }
 
     setFileCount(files.length);
     setAnalyzing(true);
+    setIsApiFinished(false);
+
     try {
+      // 1. Ensure course has a real numeric ID in Neon PostgreSQL so chapters are saved to cloud DB
+      let targetCourseId = course?.id;
+      if (!targetCourseId || String(targetCourseId).startsWith("course-") || String(targetCourseId).startsWith("c-")) {
+        try {
+          const { col } = getUserAcademicProfile();
+      let colId = (col?.id && !isNaN(Number(col.id))) ? Number(col.id) : 1;
+          const created = await browseService.createCourse(colId, course?.name || "My Course");
+          if (created?.id) {
+            targetCourseId = created.id;
+            await browseService.enrollCourse(created.id).catch(() => {});
+          }
+        } catch (err) {
+          console.warn("Could not ensure course in cloud DB:", err);
+        }
+      }
+
       const allExtractedTopics: Topic[] = [];
       const seenTitles = new Set<string>();
 
@@ -427,52 +590,98 @@ function EmptyUpload({
         if (files.length > 1) {
           toast.info(`Analyzing document ${i + 1} of ${files.length}: ${file.name}`);
         }
-        const parsed = await syllabusService.parseSyllabus(file, course?.name, course?.id);
-        if (parsed?.topics && parsed.topics.length > 0) {
-          for (const t of parsed.topics) {
-            let title = (t.chapter_title || "").trim();
+        const parsed = await syllabusService.parseSyllabus(file, course?.name, targetCourseId);
+        const topicsList = parsed?.topics || parsed?.data?.topics || [];
+        if (topicsList.length > 0) {
+          for (const t of topicsList) {
+            let title = (t.categoryTitle || t.category_title || t.chapter_title || t.chapterTitle || t.name || "").trim().replace(/\s*\(Part\s*\d+\)$/i, "").trim();
             if (!title) continue;
-            let part = 2;
-            while (seenTitles.has(title.toLowerCase())) {
-              title = `${t.chapter_title.trim()} (Part ${part})`;
-              part++;
-            }
-            seenTitles.add(title.toLowerCase());
+            const normKey = title.replace(/^chapter\s*\d+[:\s.-]*/i, "").trim().toLowerCase();
+            if (seenTitles.has(normKey)) continue; // Strictly prevent duplicate syllabus chapters
+            seenTitles.add(normKey);
+
+            const subtopicsList = (t.subtopics || []).map((s: any) =>
+              typeof s === "object" && s !== null ? (s.title ? `${s.title}: ${s.summary || ""}`.trim() : JSON.stringify(s)) : String(s)
+            );
+            const excerpt = t.content_excerpt || t.contentExcerpt || (
+              Array.isArray(t.subtopics)
+                ? t.subtopics.map((s: any) => typeof s === "object" && s?.summary ? `${s.title}: ${s.summary}` : "").filter(Boolean).join("\n\n")
+                : ""
+            );
 
             allExtractedTopics.push({
-              id: t.order_index || (allExtractedTopics.length + 1),
+              id: t.order_index || t.orderIndex || (allExtractedTopics.length + 1),
               name: title,
-              durationMinutes: Math.round((t.estimated_hours || 2) * 60),
-              importance: t.importance || 3,
-              subtopics: t.subtopics || [],
+              durationMinutes: Math.round((t.estimated_hours || t.estimatedHours || 2) * 60),
+              importance: t.importance || 4,
+              subtopics: subtopicsList,
+              contentExcerpt: excerpt,
             });
+          }
+        }
+
+        const flashcardsList = (parsed?.flashcards || parsed?.data?.flashcards || []).slice(0, 10);
+        if (flashcardsList.length > 0) {
+          try {
+            const allKits = getUserTaskKits();
+            const kitKey = (course?.name || "course").toLowerCase().trim();
+            const currentKit = allKits[kitKey] || { flashcards: [], quiz: [] };
+            const existing = currentKit.flashcards || [];
+            const mappedNew = flashcardsList.map((fc: any, fIdx: number) => ({
+              id: `fc-${Date.now()}-${fIdx}`,
+              front: fc.question || fc.q || fc.front || "Question",
+              back: fc.answer || fc.a || fc.back || "Answer",
+              q: fc.question || fc.q || fc.front || "Question",
+              a: fc.answer || fc.a || fc.back || "Answer",
+              chapter: fc.topicTag || course?.name || "Key Concepts",
+            }));
+            allKits[kitKey] = {
+              ...currentKit,
+              flashcards: [...mappedNew, ...existing].slice(0, 10),
+            };
+            saveUserTaskKits(allKits);
+            toast.success(`Generated ${flashcardsList.length} high-yield study flashcards! ✨`);
+          } catch (e) {
+            console.warn("Could not save flashcards locally:", e);
           }
         }
       }
 
-      // If registered with backend course ID, query fresh DB topics
-      if (course?.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-")) {
+      // Check remote DB topics if real ID
+      let finalTopics = allExtractedTopics;
+      if (targetCourseId && !String(targetCourseId).startsWith("course-") && !String(targetCourseId).startsWith("c-")) {
         try {
-          const remoteTopics = await browseService.getCourseTopics(course.id);
+          const remoteTopics = await browseService.getCourseTopics(targetCourseId);
           if (remoteTopics && remoteTopics.length > 0) {
-            toast.success(`Parsed ${files.length} document(s)! ${remoteTopics.length} chapters ready ✨`);
-            onReady(remoteTopics);
-            return;
+            finalTopics = remoteTopics.map((rt) => {
+              const matching = allExtractedTopics.find((at) => at.name.toLowerCase() === rt.name.toLowerCase());
+              return {
+                ...rt,
+                subtopics: matching?.subtopics || rt.subtopics || [],
+                contentExcerpt: rt.contentExcerpt || matching?.contentExcerpt || "",
+                importance: matching?.importance || 3,
+              };
+            });
           }
         } catch {}
       }
 
-      toast.success(
-        `Parsed ${files.length} document(s)! ` +
-        (allExtractedTopics.length > 0 ? `${allExtractedTopics.length} chapters ready.` : "") +
-        " +100 XP ✨"
-      );
-      onReady(allExtractedTopics);
+      if (finalTopics.length === 0) {
+        throw new Error("No topics could be extracted from this document. Please ensure it has readable text.");
+      }
+
+      // Signal completion to MagicLoader and smoothly transition
+      setIsApiFinished(true);
+      setTimeout(() => {
+        setAnalyzing(false);
+        toast.success(`Successfully analyzed chapter materials! ${finalTopics.length} chapters ready ✨`);
+        onReady(finalTopics, targetCourseId);
+      }, 600);
     } catch (err: any) {
       console.error("Document parse error:", err);
-      toast.error(err?.message || "Could not parse document. Please make sure it is a valid PDF or PowerPoint presentation.");
-    } finally {
+      toast.error(err?.message || "Could not parse document. Please check the file and try again.");
       setAnalyzing(false);
+      setIsApiFinished(false);
     }
   };
 
@@ -480,11 +689,9 @@ function EmptyUpload({
     return (
       <Card className="py-6">
         <MagicLoader
-          duration={fileCount > 1 ? 7000 : 5000}
-          courseTitle={course?.name || "Uploaded Syllabus & Materials"}
-          onDone={() => {
-            setAnalyzing(false);
-          }}
+          duration={22000}
+          courseTitle={course?.name || "Uploaded Chapter & Materials"}
+          isComplete={isApiFinished}
         />
       </Card>
     );
@@ -495,26 +702,42 @@ function EmptyUpload({
       {course && (
         <div className="mb-4 flex w-full items-center justify-between border-b pb-4">
           <div className="text-left">
-            <span className="text-xs font-bold uppercase text-muted-foreground">{course.code}</span>
+            {course.code && course.code.toUpperCase() !== "CUSTOM" && (
+              <span className="text-xs font-bold uppercase text-muted-foreground">{course.code}</span>
+            )}
             <h3 className="text-lg font-semibold">{course.name}</h3>
           </div>
-          {onDeleteCourse && (
-            <HoldToConfirmButton
-              duration={1500}
-              onConfirm={() => onDeleteCourse()}
-              className="h-8 gap-1.5"
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 h-8 text-xs font-semibold"
+              onClick={() => setReportDialogOpen(true)}
+              title="Report this course if syllabus or details are incorrect"
             >
-              <Trash2 className="h-3.5 w-3.5" /> Hold to Delete
-            </HoldToConfirmButton>
-          )}
+              <Flag className="h-3.5 w-3.5 text-amber-500" /> Report Course
+            </Button>
+            {onDeleteCourse && (
+              <HoldToConfirmButton
+                duration={1500}
+                onConfirm={() => onDeleteCourse()}
+                className="h-8 gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Hold to Delete
+              </HoldToConfirmButton>
+            )}
+          </div>
         </div>
       )}
-      <Genie pose="low" className="h-28 w-28" />
+      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-magic text-primary-foreground shadow-glow">
+        <Upload className="h-8 w-8" />
+      </div>
       <h2 className="mt-4 text-2xl font-semibold">Upload Syllabus or Chapters</h2>
-      <p className="max-w-md text-sm text-muted-foreground">
-        Upload your syllabus or lecture slide decks (PDF, PPTX, PPT) to extract all topics and build your schedule.
+      <p className="mt-1 max-w-md text-sm text-muted-foreground">
+        Upload your syllabus or lecture slide decks (PDF, PPT, PPTX) to extract all topics and build your schedule.
       </p>
-      <label
+
+      <div
         onDragOver={(e) => {
           e.preventDefault();
           setDrag(true);
@@ -523,32 +746,34 @@ function EmptyUpload({
         onDrop={(e) => {
           e.preventDefault();
           setDrag(false);
-          const dropped = e.dataTransfer.files;
-          if (dropped && dropped.length > 0) handleFileUpload(dropped);
+          handleFileUpload(e.dataTransfer.files);
         }}
         className={cn(
-          "mt-8 flex w-full max-w-lg cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-10 transition",
-          drag ? "border-primary bg-accent" : "hover:border-primary"
+          "mt-6 flex w-full max-w-lg cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition",
+          drag ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
         )}
       >
-        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-gradient-magic text-primary-foreground">
-          <Upload />
-        </div>
-        <span className="font-bold">Drop your PDF or PowerPoint files here</span>
-        <span className="text-sm text-muted-foreground">
-          or click to browse · Supports multiple files · PDF, PPTX, PPT
-        </span>
         <input
           type="file"
-          multiple
-          accept=".pdf,.pptx,.ppt,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+          id="course-file-upload"
           className="hidden"
-          onChange={(e) => {
-            const selected = e.target.files;
-            if (selected && selected.length > 0) handleFileUpload(selected);
-          }}
+          multiple
+          accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          onChange={(e) => handleFileUpload(e.target.files)}
         />
-      </label>
+        <label htmlFor="course-file-upload" className="cursor-pointer">
+          <span className="font-semibold text-primary">Click to upload</span> or drag and drop
+          <span className="block text-xs text-muted-foreground">PDF (.pdf) or PowerPoint (.ppt, .pptx) files up to 25MB</span>
+        </label>
+      </div>
+      {course && (
+        <ReportCourseDialog
+          open={reportDialogOpen}
+          onOpenChange={setReportDialogOpen}
+          courseName={course.name}
+          courseId={course.id}
+        />
+      )}
     </Card>
   );
 }
@@ -566,18 +791,31 @@ function JoinChallenge({
 }) {
   const nav = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const courseExam = loadExams().find(
+    (e) => e.course.toLowerCase().trim() === course.name.toLowerCase().trim()
+  );
   const [date, setDate] = useState<Date | undefined>(() => {
+    if (courseExam?.date) {
+      const parsed = new Date(courseExam.date);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
     const d = new Date();
     d.setDate(d.getDate() + 21);
     return d;
   });
   const [mode, setMode] = useState<"normal" | "survival">("normal");
+  const [dailyHours, setDailyHours] = useState<number>(2.5);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploadingMore, setUploadingMore] = useState(false);
+  const [expandedTopicIndex, setExpandedTopicIndex] = useState<number | null>(null);
   const [topics, setTopics] = useState<Topic[]>(() => course.topics || []);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState("");
   const [manualHours, setManualHours] = useState("2");
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+
+
 
   useEffect(() => {
     if (course.topics && course.topics.length > 0) {
@@ -618,32 +856,71 @@ function JoinChallenge({
     setUploadingMore(true);
     try {
       toast.info(`Extracting chapters from ${files.length} document(s)...`);
-      let currentTopics = [...topics];
-      const seenTitles = new Set(currentTopics.map((t) => t.name.trim().toLowerCase()));
+      let currentTopics = deduplicateTopics(topics);
+      const seenTitles = new Set(
+        currentTopics.map((t) =>
+          t.name.replace(/\s*\(Part\s*\d+\)$/i, "").replace(/^chapter\s*\d+[:\s.-]*/i, "").trim().toLowerCase()
+        )
+      );
 
       for (let i = 0; i < files.length; i++) {
         const parsed = await syllabusService.parseSyllabus(files[i], course.name, course.id);
-        if (parsed?.topics && parsed.topics.length > 0) {
-          for (const item of parsed.topics) {
-            let title = (item.chapter_title || "").trim();
+        const topicsList = parsed?.topics || parsed?.data?.topics || [];
+        if (topicsList.length > 0) {
+          for (const item of topicsList) {
+            let title = (item.categoryTitle || item.category_title || item.chapter_title || item.chapterTitle || item.name || "").trim().replace(/\s*\(Part\s*\d+\)$/i, "").trim();
             if (!title) continue;
-            let part = 2;
-            while (seenTitles.has(title.toLowerCase())) {
-              title = `${item.chapter_title.trim()} (Part ${part})`;
-              part++;
-            }
-            seenTitles.add(title.toLowerCase());
+            const normKey = title.replace(/^chapter\s*\d+[:\s.-]*/i, "").trim().toLowerCase();
+            if (seenTitles.has(normKey)) continue; // Strictly prevent duplicate syllabus chapters
+            seenTitles.add(normKey);
+
+            const subtopicsList = (item.subtopics || []).map((s: any) =>
+              typeof s === "object" && s !== null ? (s.title ? `${s.title}: ${s.summary || ""}`.trim() : JSON.stringify(s)) : String(s)
+            );
+            const excerpt = item.content_excerpt || item.contentExcerpt || (
+              Array.isArray(item.subtopics)
+                ? item.subtopics.map((s: any) => typeof s === "object" && s?.summary ? `${s.title}: ${s.summary}` : "").filter(Boolean).join("\n\n")
+                : ""
+            );
+
             currentTopics.push({
-              id: item.order_index || (currentTopics.length + 1),
+              id: item.order_index || item.orderIndex || (currentTopics.length + 1),
               name: title,
-              durationMinutes: Math.round((item.estimated_hours || 2) * 60),
-              importance: item.importance || 3,
-              subtopics: item.subtopics || [],
-              contentExcerpt: item.content_excerpt || item.contentExcerpt,
+              durationMinutes: Math.round((item.estimated_hours || item.estimatedHours || 2) * 60),
+              importance: item.importance || 4,
+              subtopics: subtopicsList,
+              contentExcerpt: excerpt,
             });
           }
         }
+
+        const flashcardsList = (parsed?.flashcards || parsed?.data?.flashcards || []).slice(0, 10);
+        if (flashcardsList.length > 0) {
+          try {
+            const allKits = getUserTaskKits();
+            const kitKey = course.name.toLowerCase().trim();
+            const currentKit = allKits[kitKey] || { flashcards: [], quiz: [] };
+            const existing = currentKit.flashcards || [];
+            const mappedNew = flashcardsList.map((fc: any, fIdx: number) => ({
+              id: `fc-${Date.now()}-${fIdx}`,
+              front: fc.question || fc.q || fc.front || "Question",
+              back: fc.answer || fc.a || fc.back || "Answer",
+              q: fc.question || fc.q || fc.front || "Question",
+              a: fc.answer || fc.a || fc.back || "Answer",
+              chapter: fc.topicTag || course.name || "Key Concepts",
+            }));
+            allKits[kitKey] = {
+              ...currentKit,
+              flashcards: [...mappedNew, ...existing].slice(0, 10),
+            };
+            saveUserTaskKits(allKits);
+            toast.success(`Generated ${flashcardsList.length} study flashcards! ✨`);
+          } catch (e) {
+            console.warn("Could not save flashcards locally:", e);
+          }
+        }
       }
+      currentTopics = deduplicateTopics(currentTopics);
 
       // If real backend course, fetch latest from DB
       const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
@@ -670,6 +947,12 @@ function JoinChallenge({
     e.preventDefault();
     const title = manualTitle.trim();
     if (!title) return;
+    const norm = title.replace(/\s*\(Part\s*\d+\)$/i, "").replace(/^chapter\s*\d+[:\s.-]*/i, "").trim().toLowerCase();
+    if (topics.some((t) => t.name.replace(/\s*\(Part\s*\d+\)$/i, "").replace(/^chapter\s*\d+[:\s.-]*/i, "").trim().toLowerCase() === norm)) {
+      toast.info("This chapter already exists in your syllabus.");
+      setAddDialogOpen(false);
+      return;
+    }
     const hours = parseFloat(manualHours) || 2;
 
     try {
@@ -702,7 +985,9 @@ function JoinChallenge({
     try {
       const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
       if (isRealId && topicId) {
-        await browseService.deleteCourseTopic(course.id, topicId);
+        await browseService.deleteCourseTopic(course.id, topicId).catch((err) => {
+          console.warn("Backend topic delete warning:", err);
+        });
       }
       const updated = topics.filter((_, idx) => idx !== index);
       setTopics(updated);
@@ -710,11 +995,15 @@ function JoinChallenge({
       toast.success("Chapter removed");
     } catch (err: any) {
       console.error("Error deleting chapter:", err);
-      toast.error(err?.message || "Failed to remove chapter");
+      const updated = topics.filter((_, idx) => idx !== index);
+      setTopics(updated);
+      onTopicsUpdated?.(updated);
+      toast.success("Chapter removed");
     }
   };
 
   const handleGeneratePlan = async () => {
+    setPlanModalOpen(false);
     setLoading(true);
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -731,21 +1020,45 @@ function JoinChallenge({
     const dateStr = targetDate.toISOString().slice(0, 10);
     const startDateStr = new Date().toISOString().slice(0, 10);
 
+    // Sync to Exam store & backend so Dashboard upper panel and exam cards reflect target exam immediately
+    try {
+      saveExam({
+        id: courseExam?.id,
+        course: course.name,
+        type: courseExam?.type || "Final Exam",
+        date: dateStr,
+        professor: courseExam?.professor || "",
+        uploaderName: courseExam?.uploaderName,
+      });
+    } catch (examErr) {
+      console.warn("Could not sync exam locally:", examErr);
+    }
+
     const daysUntil = Math.max(1, Math.ceil((targetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
     const bufferDays = daysUntil <= 3 ? 0 : daysUntil <= 7 ? 1 : 2;
+    const effDailyHours = mode === "survival" ? Math.max(3.5, dailyHours) : dailyHours;
 
     try {
       let planData: any = null;
       const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
       if (isRealId) {
         try {
-          planData = await browseService.joinCourse(course.id, {
+          planData = await browseService.generateOrUpdatePlan(course.id, {
             examDate: dateStr,
-            dailyHours: mode === "survival" ? 4.0 : 2.5,
+            dailyHours: effDailyHours,
             mode,
           });
-        } catch (joinErr) {
-          console.warn("Could not join via course ID, attempting direct plan generation", joinErr);
+        } catch (planErr) {
+          console.warn("Could not regenerate via /plan endpoint, trying fallback joinCourse:", planErr);
+          try {
+            planData = await browseService.joinCourse(course.id, {
+              examDate: dateStr,
+              dailyHours: effDailyHours,
+              mode,
+            });
+          } catch (joinErr) {
+            console.warn("Could not join via course ID, attempting direct plan generation", joinErr);
+          }
         }
       }
 
@@ -792,9 +1105,32 @@ function JoinChallenge({
       }
 
       if (planData) {
-        localStorage.setItem("sg-active-plan", JSON.stringify(planData));
+        const prefix = getUserStoragePrefix();
+        try {
+          saveActivePlan(planData);
+          if (course.id) {
+            localStorage.setItem(`sg-${prefix}-plan-${course.id}`, JSON.stringify(planData));
+            if (prefix === "guest") localStorage.setItem(`sg-plan-${course.id}`, JSON.stringify(planData));
+          }
+          localStorage.setItem(`sg-${prefix}-plan-${course.name}`, JSON.stringify(planData));
+          if (prefix === "guest") localStorage.setItem(`sg-plan-${course.name}`, JSON.stringify(planData));
+        } catch {}
       }
-      localStorage.setItem("sg-active-course", JSON.stringify(course));
+      const updatedCourse = {
+        ...course,
+        topics: topics.length > 0 ? topics : course.topics,
+      };
+      saveActiveCourse(updatedCourse);
+      
+      const userCourses = getUserCourses();
+      const cIdx = userCourses.findIndex((c) => String(c.id) === String(course.id) || c.name.toLowerCase().trim() === course.name.toLowerCase().trim());
+      if (cIdx !== -1) {
+        userCourses[cIdx] = updatedCourse;
+      } else {
+        userCourses.push(updatedCourse);
+      }
+      saveUserCourses(userCourses);
+
       toast.success("Study plan successfully generated! ✨");
       nav({ to: "/plan" });
     } catch (err: any) {
@@ -818,16 +1154,23 @@ function JoinChallenge({
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold">{course.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            {topics.length > 0 ? `${topics.length} chapters / topics ready` : "No chapters added yet"}
-          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            <p className="text-sm text-muted-foreground">
+              {topics.length > 0 ? `${topics.length} chapters / topics ready` : "No chapters added yet"}
+            </p>
+            {courseExam?.uploaderName && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                <User className="h-3 w-3" /> Uploaded by: {courseExam.uploaderName}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".pdf,.pptx,.ppt,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+            accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
             className="hidden"
             onChange={(e) => handleUploadMoreChapters(e.target.files)}
           />
@@ -883,15 +1226,24 @@ function JoinChallenge({
             </DialogContent>
           </Dialog>
 
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 font-semibold"
+            onClick={() => setReportDialogOpen(true)}
+            title="Report this course if syllabus or details are incorrect"
+          >
+            <Flag className="h-3.5 w-3.5 text-amber-500" /> Report Course
+          </Button>
+
           {onResetChapters && (
             <Button
               size="sm"
               variant="outline"
               className="gap-1.5 text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                if (window.confirm(`Reset chapters for "${course.name}"? You will be able to upload fresh materials or syllabus.`)) {
-                  onResetChapters();
-                  toast.success(`Chapters cleared for "${course.name}".`);
+              onClick={async () => {
+                if (window.confirm(`Reset syllabus for "${course.name}"? You will be able to upload fresh materials or syllabus.`)) {
+                  await onResetChapters();
                 }
               }}
               title="Reset chapters and upload fresh materials"
@@ -913,29 +1265,92 @@ function JoinChallenge({
       </div>
 
       {topics.length > 0 ? (
-        <div className="grid gap-2">
-          {topics.map((t, i) => (
-            <div key={t.id || t.name + i} className="group flex items-center gap-4 rounded-xl bg-muted/60 px-4 py-3">
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-card font-display font-semibold text-primary">
-                {i + 1}
-              </span>
-              <span className="flex-1 font-semibold">{t.name}</span>
-              {t.durationMinutes && (
-                <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" /> {t.durationMinutes}m
-                </span>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground opacity-60 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                onClick={() => handleDeleteTopic(t.id, i)}
-                title="Remove chapter"
+        <div className="grid gap-3">
+          {topics.map((t, i) => {
+            const isExpanded = expandedTopicIndex === i;
+            return (
+              <div
+                key={t.id || t.name + i}
+                className="rounded-xl border border-border/70 bg-card p-4 shadow-sm transition hover:border-primary/50"
               >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 font-display font-bold text-primary text-sm mt-0.5">
+                      {i + 1}
+                    </span>
+                    <div>
+                      <h4 className="font-semibold text-foreground text-base leading-snug">{t.name}</h4>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        {t.durationMinutes && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 font-medium">
+                            <Clock className="h-3 w-3 text-primary" /> {t.durationMinutes}m est.
+                          </span>
+                        )}
+                        {t.importance && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 font-semibold">
+                            <Sparkles className="h-3 w-3" /> Yield: {t.importance}/5
+                          </span>
+                        )}
+                        {t.subtopics && t.subtopics.length > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 text-primary px-2 py-0.5 font-medium">
+                            <BookOpen className="h-3 w-3" /> {t.subtopics.length} concepts
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {(t.contentExcerpt || (t.subtopics && t.subtopics.length > 0)) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpandedTopicIndex(isExpanded ? null : i)}
+                        className="h-8 gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                      >
+                        {isExpanded ? "Hide Details" : "View Analysis"}
+                        {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground opacity-60 transition hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => handleDeleteTopic(t.id, i)}
+                      title="Remove chapter"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Subtopic chips */}
+                {t.subtopics && t.subtopics.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5 pt-2 border-t border-border/40">
+                    {t.subtopics.map((sub, sIdx) => (
+                      <span
+                        key={sIdx}
+                        className="rounded-lg bg-muted/80 px-2.5 py-1 text-xs font-medium text-foreground/80 border border-border/50"
+                      >
+                        • {sub}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Deep Academic Summary Excerpt */}
+                {isExpanded && t.contentExcerpt && (
+                  <div className="mt-3 rounded-xl bg-accent/40 border border-primary/20 p-3.5 text-xs text-muted-foreground leading-relaxed">
+                    <div className="flex items-center gap-1.5 font-semibold text-primary mb-1.5 text-xs">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>Deep Academic Analysis & Core Principles:</span>
+                    </div>
+                    <p className="whitespace-pre-line text-foreground/90 font-normal leading-normal">{t.contentExcerpt}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-xl bg-muted/40 p-4 text-sm text-muted-foreground">
@@ -964,7 +1379,7 @@ function JoinChallenge({
                       toast.info("Please pick a future date for your exam.");
                       return;
                     }
-                    setDate(newDate);
+                    handleUpdateTargetExamDate(newDate);
                   }
                 }}
                 disabled={(d) => {
@@ -983,7 +1398,7 @@ function JoinChallenge({
             {(["normal", "survival"] as const).map((m) => (
               <button
                 key={m}
-                onClick={() => setMode(m)}
+                onClick={() => setMode((prev) => (prev === m && m === "survival" ? "normal" : m))}
                 className={cn(
                   "flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-bold capitalize transition",
                   mode === m &&
@@ -999,9 +1414,193 @@ function JoinChallenge({
           </div>
         </div>
       </div>
-      <Button variant="magic" size="lg" className="mt-6 w-full" onClick={handleGeneratePlan}>
-        <Wand2 /> Generate My Plan
+      <Button variant="magic" size="lg" className="mt-6 w-full gap-2 text-base font-bold shadow-soft" onClick={() => setPlanModalOpen(true)}>
+        <Wand2 className="h-5 w-5" /> Generate My Plan
       </Button>
+
+      {/* Target Timeline & Exam Schedule Modal Dialog */}
+      <Dialog open={planModalOpen} onOpenChange={setPlanModalOpen}>
+        <DialogContent className="max-w-lg sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5 text-primary" />
+              Set Target Exam Time & Timeline
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              Configure your exam date and target daily study hours for{" "}
+              <span className="font-semibold text-foreground">{course.name}</span> to generate an optimized, day-by-day plan.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Target Exam Date Selection */}
+            <div className="rounded-xl border border-border/70 bg-muted/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+                  <CalendarIcon className="h-3.5 w-3.5 text-primary" /> Target Exam Date
+                </Label>
+                {date && (
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">
+                    {Math.max(1, Math.ceil((date.getTime() - new Date().setHours(0,0,0,0)) / (1000 * 60 * 60 * 24)))} days remaining
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[
+                  { label: "7 Days (Sprint)", days: 7 },
+                  { label: "14 Days (Balanced)", days: 14 },
+                  { label: "21 Days", days: 21 },
+                  { label: "30 Days (Deep Study)", days: 30 },
+                ].map((preset) => {
+                  const pDate = new Date();
+                  pDate.setDate(pDate.getDate() + preset.days);
+                  pDate.setHours(0, 0, 0, 0);
+                  const isSelected = date && date.toDateString() === pDate.toDateString();
+                  return (
+                    <button
+                      key={preset.days}
+                      type="button"
+                      onClick={() => handleUpdateTargetExamDate(pDate)}
+                      className={cn(
+                        "rounded-lg px-2.5 py-1 text-xs font-semibold transition border",
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-background border-border/60 hover:bg-muted text-muted-foreground"
+                      )}
+                    >
+                      +{preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-sm font-medium mt-1">
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    {date ? date.toDateString() : "Pick custom exam date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={date}
+                    onSelect={(newDate) => {
+                      if (newDate) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (newDate.getTime() <= today.getTime()) {
+                          toast.info("Please pick a future date for your exam.");
+                          return;
+                        }
+                        handleUpdateTargetExamDate(newDate);
+                      }
+                    }}
+                    disabled={(d) => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return d.getTime() <= today.getTime();
+                    }}
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Target Daily Study Time */}
+            <div className="rounded-xl border border-border/70 bg-muted/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-primary" /> Target Daily Study Time
+                </Label>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-black text-primary font-mono">{dailyHours}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">hours / day</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {[1.5, 2.0, 2.5, 3.5, 4.0].map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => setDailyHours(h)}
+                    className={cn(
+                      "flex-1 rounded-lg py-1.5 text-xs font-bold transition border",
+                      dailyHours === h
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-background border-border/60 hover:bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {h}h
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Study Mode */}
+            <div className="rounded-xl border border-border/70 bg-muted/40 p-4 space-y-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Pacing & Strategy
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMode("normal")}
+                  className={cn(
+                    "flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition",
+                    mode === "normal"
+                      ? "border-primary bg-primary/10 text-primary shadow-xs"
+                      : "border-border/60 bg-background hover:bg-muted/60 text-muted-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
+                    <Shield className="h-4 w-4" /> Normal Mode
+                  </div>
+                  <span className="text-[11px] leading-tight text-muted-foreground">
+                    Balanced daily rhythm with structured rest & review days.
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMode("survival")}
+                  className={cn(
+                    "flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition",
+                    mode === "survival"
+                      ? "border-destructive bg-destructive/10 text-destructive shadow-xs"
+                      : "border-border/60 bg-background hover:bg-muted/60 text-muted-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-1.5 text-xs font-bold">
+                    <Flame className="h-4 w-4" /> Survival Mode
+                  </div>
+                  <span className="text-[11px] leading-tight text-muted-foreground">
+                    Intense cram sprint designed for upcoming deadlines.
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setPlanModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="magic" className="gap-2" onClick={handleGeneratePlan} disabled={loading}>
+              <Wand2 className="h-4 w-4" />
+              Generate Study Plan ({topics.length} Chapters)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ReportCourseDialog
+        open={reportDialogOpen}
+        onOpenChange={setReportDialogOpen}
+        courseName={course.name}
+        courseId={course.id}
+      />
     </Card>
   );
 }

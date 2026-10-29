@@ -16,11 +16,31 @@ import {
   User,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { GenieLogo } from "./Genie";
+import { Genie } from "./Genie";
 import { useApp } from "@/lib/app-state";
-import { loadExamsForUser, type Exam } from "@/lib/exam";
-import { getUserCourses, hasUserEnrolledCourses } from "@/lib/courses-util";
+import { fetchAndSyncExams, loadExamsForUser, isCourseEnrolled, type Exam } from "@/lib/exam";
+import { hasUserEnrolledCourses, getUserCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
+import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
 
 const nav = [
   { to: "/dashboard", label: "Home", ar: "الرئيسية", icon: Home, match: ["/dashboard"] },
@@ -84,20 +104,74 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [exams, setExams] = useState<Exam[]>([]);
 
   useEffect(() => {
-    const enrolled = getUserCourses();
-    if (enrolled.length === 0) {
-      setExams([]);
-      return;
-    }
-    const userExams = loadExamsForUser(enrolled);
-    setExams(userExams);
+    const updateExams = async () => {
+      try {
+        const userExams = await fetchAndSyncExams();
+        setExams(userExams);
+      } catch {
+        setExams(loadExamsForUser());
+      }
+    };
+    updateExams();
+
+    const handleUpdate = () => {
+      setExams(loadExamsForUser());
+    };
+    window.addEventListener("sg-exams-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("sg-exams-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
   }, [path]);
 
-  const todayDateStr = new Date().toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  // Determine overall exam ticker urgency:
+  // - green: no exams within 30 days (all > 30 days or no exams)
+  // - orange: any exam within 15 to 30 days
+  // - red: any exam less than 15 days away
+  const upcomingExamDays = exams
+    .map((ex) =>
+      Math.ceil(
+        (new Date(ex.date + "T00:00:00").getTime() - new Date().setHours(0, 0, 0, 0)) /
+          (1000 * 60 * 60 * 24)
+      )
+    )
+    .filter((d) => d >= 0);
+
+  const minDays = upcomingExamDays.length > 0 ? Math.min(...upcomingExamDays) : null;
+
+  const tickerStatus: "green" | "orange" | "red" =
+    minDays === null || minDays > 30
+      ? "green"
+      : minDays >= 15
+        ? "orange"
+        : "red";
+
+  const tickerBadgeStyle =
+    tickerStatus === "red"
+      ? "border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400"
+      : tickerStatus === "orange"
+        ? "border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+        : "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+
+  const tickerPointConfig =
+    tickerStatus === "red"
+      ? {
+          pingClass: "animate-ping-fast bg-red-400 opacity-75",
+          dotClass: "animate-flash-fast bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.85)]",
+          showPing: true,
+        }
+      : tickerStatus === "orange"
+        ? {
+            pingClass: "animate-ping-slow bg-amber-400 opacity-60",
+            dotClass: "animate-flash-slow bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]",
+            showPing: true,
+          }
+        : {
+            pingClass: "",
+            dotClass: "bg-emerald-500 shadow-sm",
+            showPing: false,
+          };
 
   const initials = (user?.fullName || "Scholar")
     .split(" ")
@@ -112,81 +186,147 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-4">
-        <Link to="/dashboard" className="mb-8 px-2 pt-1">
-          <GenieLogo />
-        </Link>
-        <nav className="flex flex-1 flex-col gap-1">
-          {nav.map((n) => {
-            const active = n.match.some((m) => path.startsWith(m));
-            return (
-              <div key={n.to}>
-                <Link
-                  to={n.to}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
-                    active
-                      ? "bg-gradient-magic text-primary-foreground shadow-glow"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
-                >
-                  <n.icon className="h-5 w-5" />
-                  {lang === "ar" ? n.ar : n.label}
-                </Link>
-                {n.to === "/plan" && inStudy && (
-                  <div className="ml-6 mt-1 flex flex-col gap-0.5 border-l border-sidebar-border pl-3">
-                    {studySub.map((s) => {
-                      const isLocked = !hasUserEnrolledCourses() && (s.to === "/flashcards" || s.to === "/quiz");
-                      return (
-                        <Link
-                          key={s.to}
-                          to={s.to}
-                          className={cn(
-                            "flex items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground",
-                            isLocked && "opacity-70"
-                          )}
-                          activeProps={{ className: "text-primary" }}
-                        >
-                          <span>{s.label}</span>
-                          {isLocked && <Lock className="h-3 w-3 text-muted-foreground/80" />}
-                        </Link>
-                      );
-                    })}
+    <SidebarProvider defaultOpen={true}>
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" asChild className="hover:bg-transparent data-[state=open]:hover:bg-transparent">
+                <Link to="/dashboard" className="flex items-center gap-2.5">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent shadow-sm">
+                    <Genie className="h-8 w-8" />
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-        <div className="flex flex-col gap-1 border-t border-sidebar-border pt-3">
-          <Link
-            to="/settings"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-sidebar-foreground hover:bg-sidebar-accent"
-            activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-          >
-            <Settings className="h-5 w-5" /> {lang === "ar" ? "الإعدادات" : "Settings"}
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <LogOut className="h-5 w-5" /> Log out
-          </button>
-        </div>
-      </aside>
+                  <div className="flex flex-col truncate group-data-[collapsible=icon]:hidden">
+                    <span className="font-display text-base font-bold text-gradient-magic leading-none">
+                      StudyGenie
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-medium mt-1">
+                      AI Study Partner
+                    </span>
+                  </div>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-6 backdrop-blur">
+        <SidebarContent className="px-2 py-3">
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:hidden">
+              {lang === "ar" ? "التنقل" : "Navigation"}
+            </SidebarGroupLabel>
+            <SidebarMenu className="gap-1.5">
+              {nav.map((n) => {
+                const active = n.match.some((m) => path.startsWith(m));
+                return (
+                  <SidebarMenuItem key={n.to}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={active}
+                      tooltip={lang === "ar" ? n.ar : n.label}
+                      className={cn(
+                        "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                        active
+                          ? "bg-gradient-magic text-primary-foreground shadow-glow data-[active=true]:bg-gradient-magic data-[active=true]:text-primary-foreground hover:text-primary-foreground"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <Link to={n.to}>
+                        <n.icon className="h-5 w-5 shrink-0" />
+                        <span>{lang === "ar" ? n.ar : n.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                    {n.to === "/plan" && inStudy && (
+                      <SidebarMenuSub className="my-1.5 ml-5 border-l-2 border-sidebar-border pl-2.5">
+                        {studySub.map((s) => {
+                          const isLocked =
+                            !hasUserEnrolledCourses() && (s.to === "/flashcards" || s.to === "/quiz");
+                          const subActive = path === s.to;
+                          return (
+                            <SidebarMenuSubItem key={s.to}>
+                              <SidebarMenuSubButton asChild isActive={subActive}>
+                                <Link
+                                  to={s.to}
+                                  className={cn(
+                                    "flex items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors",
+                                    subActive
+                                      ? "text-primary font-bold"
+                                      : "text-muted-foreground hover:text-foreground",
+                                    isLocked && "opacity-70"
+                                  )}
+                                >
+                                  <span>{s.label}</span>
+                                  {isLocked && <Lock className="h-3 w-3 text-muted-foreground/80 shrink-0" />}
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    )}
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+
+        <SidebarFooter className="border-t border-sidebar-border p-2">
+          <SidebarMenu className="gap-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={path.startsWith("/settings")}
+                tooltip={lang === "ar" ? "الإعدادات" : "Settings"}
+                className={cn(
+                  "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                  path.startsWith("/settings")
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+              >
+                <Link to="/settings">
+                  <Settings className="h-5 w-5 shrink-0" />
+                  <span>{lang === "ar" ? "الإعدادات" : "Settings"}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={handleLogout}
+                tooltip="Log out"
+                className="rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              >
+                <LogOut className="h-5 w-5 shrink-0" />
+                <span>Log out</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+
+        <SidebarRail />
+      </Sidebar>
+
+      <SidebarInset>
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-4 md:px-6 backdrop-blur">
           {/* Live Exam News Ticker */}
           <div className="flex min-w-0 flex-1 items-center gap-3 mr-4">
-            <div className="flex shrink-0 items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary shadow-sm">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-1 h-5 hidden sm:block" />
+
+            <div className={cn("flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold shadow-sm transition-colors", tickerBadgeStyle)}>
+              <span className="relative flex h-2 w-2 items-center justify-center">
+                {tickerPointConfig.showPing && (
+                  <span className={cn("absolute inline-flex h-full w-full rounded-full", tickerPointConfig.pingClass)}></span>
+                )}
+                <span className={cn("relative inline-flex h-2 w-2 rounded-full", tickerPointConfig.dotClass)}></span>
               </span>
-              <span className="hidden sm:inline tracking-wider uppercase text-[10px]">EXAM TICKER</span>
-              <span className="sm:hidden text-[10px]">LIVE</span>
+              <span className="hidden sm:inline tracking-wider uppercase text-[10px]">
+                {tickerStatus === "red" ? "EXAM TICKER · DANGER" : tickerStatus === "orange" ? "EXAM TICKER · MODERATE" : "EXAM TICKER · SAFE"}
+              </span>
+              <span className="sm:hidden text-[10px] tracking-wider uppercase font-extrabold">
+                {tickerStatus === "red" ? "DANGER" : tickerStatus === "orange" ? "MODERATE" : "SAFE"}
+              </span>
             </div>
 
             {exams.length > 0 ? (
@@ -217,14 +357,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                         </span>
                         <span
                           className={cn(
-                            "rounded-full px-2 py-0.5 text-[10px] font-bold",
-                            days === 0
-                              ? "bg-destructive/15 text-destructive animate-pulse"
-                              : days === 1
-                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                                : days <= 3
-                                  ? "bg-gold/20 text-gold-foreground dark:text-gold"
-                                  : "bg-primary/10 text-primary"
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold border",
+                            days < 15
+                              ? "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30 animate-pulse-soft"
+                              : days <= 30
+                                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                           )}
                         >
                           {days === 0
@@ -247,11 +385,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             ) : (
               <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
-                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span className="font-semibold text-foreground/80">{todayDateStr}</span>
+                <span className="flex h-2 w-2 rounded-full bg-emerald-500 shadow-sm" />
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">All clear</span>
                 <span className="hidden md:inline text-muted-foreground/50">•</span>
                 <span className="hidden md:inline truncate">
-                  No upcoming exams scheduled. Add exams from Dashboard to show your live ticker!
+                  No exams within 30 days. Add exams from Dashboard to show your live ticker!
                 </span>
               </div>
             )}
@@ -270,11 +408,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             )}
             <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
-              <Flame className="h-4 w-4 text-gold" /> {streak}
+              <Flame className="h-4 w-4 text-gold" /> <CountingNumber number={streak} fromNumber={0} className="tabular-nums" />
               <span className="hidden sm:inline font-normal text-muted-foreground">day streak</span>
             </div>
             <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
-              <Star className="h-4 w-4 fill-gold text-gold" /> {points.toLocaleString()}
+              <Star className="h-4 w-4 fill-gold text-gold" /> <CountingNumber number={points} fromNumber={0} className="tabular-nums" thousandSeparator="," />
             </div>
             <ThemeToggle />
             <Link
@@ -285,9 +423,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </header>
-        <main className="flex-1 p-8">{children}</main>
-      </div>
-    </div>
+
+        <main className="flex-1 p-6 sm:p-8">{children}</main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 

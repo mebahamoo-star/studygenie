@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/universities")
@@ -31,5 +32,13 @@ public class UniversityController {
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<UniversityDto>> getUniversity(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok("University fetched successfully", universityService.getUniversity(id)));
+    }
+
+    @Operation(summary = "Create or find a university by name")
+    @PostMapping
+    public ResponseEntity<ApiResponse<UniversityDto>> createUniversity(@RequestBody Map<String, String> body) {
+        String name = body.get("name");
+        UniversityDto dto = universityService.createUniversity(name);
+        return ResponseEntity.ok(ApiResponse.ok("University created or found successfully", dto));
     }
 }

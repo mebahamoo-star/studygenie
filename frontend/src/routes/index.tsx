@@ -6,6 +6,7 @@ import { Genie, GenieLogo } from "@/components/Genie";
 import { ThemeToggle } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Boxes } from "@/components/ui/background-boxes";
+import { RotatingText, RotatingTextContainer } from "@/components/animate-ui/texts/rotating";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -71,7 +72,16 @@ function Landing() {
               ✨ Your wish: better grades
             </span>
             <h1 className="mt-5 text-6xl font-semibold leading-tight tracking-tight">
-              Study smarter,
+              <RotatingTextContainer
+                text={["Study smarter,", "Think sharper,", "Achieve greater,"]}
+                duration={2200}
+                delay={0}
+                y={-50}
+                align="start"
+                className="inline-block"
+              >
+                <RotatingText />
+              </RotatingTextContainer>
               <br />
               <span className="text-gradient-magic">granted.</span>
             </h1>

@@ -6,6 +6,7 @@ import {
   BookOpen,
   Check,
   Clock,
+  Flame,
   HelpCircle,
   Loader2,
   Siren,
@@ -30,7 +31,7 @@ import { Slider } from "@/components/ui/slider";
 import { pageHead } from "@/lib/head";
 import { browseService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { getUserCourses, getUserTaskKits, saveUserTaskKits } from "@/lib/courses-util";
+import { getUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix } from "@/lib/courses-util";
 import type { Course, PlanResponseData } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +67,7 @@ function Plan() {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [survival, setSurvival] = useState(false);
   const [planDays, setPlanDays] = useState<DayPlan[]>([]);
+  const [fullPlanDays, setFullPlanDays] = useState<DayPlan[]>([]);
   const [courseInfo, setCourseInfo] = useState<{ name: string; code?: string }>({
     name: "Study Plan",
     code: "",
@@ -83,23 +85,31 @@ function Plan() {
     const kits = getUserTaskKits();
     setKitsMap(kits);
 
-    // 2. Load subjects specifically enrolled by this user
+    // 2. Load subjects specifically enrolled by this user from cloud database
     const loadSubjects = async () => {
       let enrolled: Course[] = [];
       try {
-        enrolled = await browseService.getEnrolledCourses();
-      } catch {}
+        const remote = await browseService.getEnrolledCourses();
+        enrolled = remote || [];
+        saveUserCourses(enrolled);
+      } catch {
+        enrolled = getUserCourses();
+      }
+      setCourses(enrolled);
 
-      const saved = getUserCourses();
+      // Auto-select active course if redirected from course configuration
+      const act = getActiveCourse();
+      if (act) {
+        try {
+          const matched = enrolled.find((e) => String(e.id) === String(act.id)) || act;
+          handleSelectSubject(matched);
+          return;
+        } catch {}
+      }
 
-      const map = new Map<string, Course>();
-      enrolled.forEach((c) => map.set(c.name.trim().toLowerCase(), c));
-      saved.forEach((c) => {
-        if (!map.has(c.name.trim().toLowerCase())) map.set(c.name.trim().toLowerCase(), c);
-      });
-
-      const list = Array.from(map.values());
-      setCourses(list);
+      if (enrolled.length > 0) {
+        handleSelectSubject(enrolled[0]);
+      }
     };
 
     loadSubjects();
@@ -109,6 +119,8 @@ function Plan() {
     setSelectedCourse(c);
     setCourseInfo({ name: c.name, code: c.code });
     setPlanDays([]);
+    setFullPlanDays([]);
+    setSurvival(false);
 
     let planData: any = null;
     if (c.id && !String(c.id).startsWith("course-") && !String(c.id).startsWith("c-")) {
@@ -116,20 +128,27 @@ function Plan() {
         const res = await browseService.getCoursePlan(c.id);
         if (res?.tasks && res.tasks.length > 0) {
           planData = res;
+          const prefix = getUserStoragePrefix();
+          try {
+            localStorage.setItem(`sg-${prefix}-plan-${c.id}`, JSON.stringify(res));
+            localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(res));
+            if (c.name) {
+              localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(res));
+              localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(res));
+            }
+          } catch {}
         }
       } catch {}
     }
 
     if (!planData) {
       try {
-        const localPlan = localStorage.getItem(`sg-plan-${c.id}`);
+        const prefix = getUserStoragePrefix();
+        const localPlan = localStorage.getItem(`sg-${prefix}-plan-${c.id}`) || (prefix === "guest" ? localStorage.getItem(`sg-plan-${c.id}`) : null);
         if (localPlan) {
           planData = JSON.parse(localPlan);
         } else {
-          const activePlan = localStorage.getItem("sg-active-plan");
-          if (activePlan) {
-            planData = JSON.parse(activePlan);
-          }
+          planData = getActivePlan();
         }
       } catch {}
     }
@@ -213,18 +232,42 @@ function Plan() {
       date,
       tasks: dayTasks,
     }));
-    if (formatted.length > 0) setPlanDays(formatted);
+    if (formatted.length > 0) {
+      setFullPlanDays(formatted);
+      if (survival) {
+        setPlanDays(computeSurvivalPlan(formatted));
+      } else {
+        setPlanDays(formatted);
+      }
+    }
+  };
+
+  const computeSurvivalPlan = (days: DayPlan[]): DayPlan[] => {
+    const sliceCount = Math.max(1, Math.ceil(days.length * 0.7));
+    return days.slice(0, sliceCount).map((d) => ({
+      ...d,
+      tasks: d.tasks.filter((t, idx) => {
+        if (d.tasks.length <= 1) return true;
+        return t.tag === "STUDY" || idx % 2 === 0;
+      }),
+    })).filter((d) => d.tasks.length > 0);
   };
 
   const handleToggleSurvival = () => {
-    setSurvival(true);
-    toast.error("Survival Mode on — plan compressed to high-yield topics.");
-    setPlanDays((prev) =>
-      prev.slice(0, Math.ceil(prev.length * 0.7)).map((d) => ({
-        ...d,
-        tasks: d.tasks.filter((_, idx) => idx % 2 === 0),
-      }))
-    );
+    if (survival) {
+      setSurvival(false);
+      const restored = fullPlanDays.length > 0 ? fullPlanDays : planDays;
+      setPlanDays(restored);
+      toast.success("Survival Mode deactivated ✨ — full study schedule restored.");
+    } else {
+      setSurvival(true);
+      const base = fullPlanDays.length > 0 ? fullPlanDays : planDays;
+      if (fullPlanDays.length === 0 && planDays.length > 0) {
+        setFullPlanDays(planDays);
+      }
+      setPlanDays(computeSurvivalPlan(base));
+      toast.error("Survival Mode activated ⚡ — plan compressed to high-yield topics.");
+    }
   };
 
   // Open modal asking how many cards the user wants (max 25)
@@ -297,7 +340,7 @@ function Plan() {
           kitId = res.data.kitId || kitId;
           const topicKit = res.data.topics?.[0];
           if (topicKit?.flashcards?.length) {
-            flashcards = topicKit.flashcards.map((f: any, idx: number) => ({
+            flashcards = topicKit.flashcards.slice(0, sanitizedCardCount).map((f: any, idx: number) => ({
               id: f.cardId || f.id || String(idx + 1),
               q: f.front || f.question || f.q,
               a: f.back || f.answer || f.a,
@@ -383,6 +426,7 @@ function Plan() {
         ];
       }
 
+      flashcards = flashcards.slice(0, sanitizedCardCount);
       const kitObj: StoredTaskKit = { kitId, flashcards, quiz };
       const nextMap = {
         ...kitsMap,
@@ -481,7 +525,7 @@ function Plan() {
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        {c.code || "SUBJECT"}
+                        {c.code && c.code.toUpperCase() !== "CUSTOM" ? c.code : ""}
                       </span>
                       <StatusBadge status={c.status} />
                     </div>
@@ -538,22 +582,58 @@ function Plan() {
       <PageTitle
         title={selectedCourse.name}
         sub={
-          selectedCourse.code
+          selectedCourse.code && selectedCourse.code.toUpperCase() !== "CUSTOM"
             ? `${selectedCourse.code} · Day-by-day study and review timeline`
             : "Day-by-day study and review timeline"
         }
         right={
-          planDays.length > 0 ? (
-            <Button variant="survival" size="lg" onClick={handleToggleSurvival}>
-              <Siren /> Survival Mode
+          planDays.length > 0 || fullPlanDays.length > 0 ? (
+            <Button
+              variant={survival ? "survival" : "outline"}
+              size="lg"
+              onClick={handleToggleSurvival}
+              className={cn(
+                "gap-2 font-bold transition-all shadow-sm",
+                survival
+                  ? "bg-destructive text-destructive-foreground hover:brightness-110 shadow-survival animate-pulse-soft"
+                  : "border-destructive/40 text-destructive hover:bg-destructive/10"
+              )}
+            >
+              {survival ? (
+                <>
+                  <Siren className="h-4 w-4" />
+                  <span>Survival Mode: ON</span>
+                  <span className="ml-1 rounded-full bg-destructive-foreground/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                    Click to disable
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Flame className="h-4 w-4" />
+                  <span>Survival Mode: OFF</span>
+                </>
+              )}
             </Button>
           ) : undefined
         }
       />
 
       {survival && (
-        <div className="mb-6 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 font-bold text-destructive">
-          Survival Mode active: focusing on high-yield chapters only.
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 font-semibold text-destructive shadow-sm">
+          <div className="flex items-center gap-2.5">
+            <Flame className="h-5 w-5 animate-pulse shrink-0" />
+            <div>
+              <span className="font-bold">Survival Mode Active:</span> plan compressed to essential, high-yield chapters only.
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToggleSurvival}
+            className="border-destructive/30 bg-background/90 text-destructive hover:bg-destructive hover:text-destructive-foreground text-xs font-bold shadow-xs"
+          >
+            Turn Off Survival Mode
+          </Button>
         </div>
       )}
 

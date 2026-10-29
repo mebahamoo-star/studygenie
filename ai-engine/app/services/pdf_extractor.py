@@ -9,7 +9,7 @@ from app.errors import AppError
 
 
 def _clean_structured_text(raw_text: str) -> str:
-    """Cleans up document text while carefully preserving headings, slide boundaries, and paragraphs."""
+    """Cleans up document text while preserving headings, slide boundaries, and paragraphs."""
     if not raw_text:
         return ""
     lines = []
@@ -29,7 +29,8 @@ def extract_document_content(file_bytes: bytes, filename: str | None = None) -> 
     Returns (extracted_text, num_pages_or_slides, extraction_method).
     Raises AppError on validation failures.
     """
-    max_bytes = max(settings.max_pdf_mb, 25) * 1024 * 1024
+    max_mb = settings.max_pdf_mb if settings.max_pdf_mb > 0 else 0
+    max_bytes = max_mb * 1024 * 1024
     if len(file_bytes) > max_bytes:
         raise AppError(status_code=413, error_code="FILE_TOO_LARGE", message=f"File exceeds limit of {settings.max_pdf_mb}MB")
 
@@ -47,33 +48,40 @@ def extract_document_content(file_bytes: bytes, filename: str | None = None) -> 
             text_parts = []
             for idx, slide in enumerate(prs.slides):
                 slide_texts = []
+                # Slide Title
                 if slide.shapes.title and slide.shapes.title.text:
-                    slide_texts.append(f"--- Slide {idx+1}: {slide.shapes.title.text.strip()} ---")
+                    title_text = slide.shapes.title.text.strip()
+                    if title_text:
+                        slide_texts.append(f"--- Slide {idx+1}: {title_text} ---")
                 else:
                     slide_texts.append(f"--- Slide {idx+1} ---")
 
+                # Slide Body Text & Tables
                 for shape in slide.shapes:
                     if shape.has_text_frame and shape != slide.shapes.title:
                         for paragraph in shape.text_frame.paragraphs:
                             p_text = paragraph.text.strip()
+                            # Ignore empty or duplicate title text
                             if p_text and p_text not in slide_texts:
                                 slide_texts.append(p_text)
+
                     if shape.has_table:
                         for row in shape.table.rows:
                             row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
                             if row_text:
                                 slide_texts.append(" | ".join(row_text))
 
+                # Speaker Notes
                 if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
                     notes = slide.notes_slide.notes_text_frame.text.strip()
                     if notes:
-                        slide_texts.append(f"Notes: {notes}")
+                        slide_texts.append(f"Speaker Notes: {notes}")
 
                 text_parts.append("\n".join(slide_texts))
 
             full_text = _clean_structured_text("\n\n".join(text_parts))
             if len(full_text) < 20:
-                full_text = f"Presentation with {num_slides} slides."
+                full_text = f"PowerPoint presentation with {num_slides} slides."
             return full_text, max(1, num_slides), "pptx_text"
         except AppError:
             raise
@@ -111,11 +119,9 @@ def extract_document_content(file_bytes: bytes, filename: str | None = None) -> 
                         text_parts.append(extracted)
 
                 text = _clean_structured_text("\n\n".join(text_parts))
-
                 if len(text) < settings.min_text_chars_for_text_mode:
                     return text, num_pages, "pdf_vision"
-
-                return text, num_pages, "text"
+                return text, num_pages, "pdf"
         except AppError:
             raise
         except Exception as e:

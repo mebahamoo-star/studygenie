@@ -57,4 +57,17 @@ public class InMemoryUserAccountStore implements UserAccountStore {
         usersById.put(id, user);
         return user;
     }
+
+    @Override
+    public UserAccount findOrCreateOAuthUser(String fullName, String normalizedEmail, String provider, String providerId, String avatarUrl) {
+        UserAccount existing = usersByEmail.get(normalizedEmail);
+        if (existing != null) {
+            return existing;
+        }
+        long id = idGenerator.getAndIncrement();
+        UserAccount user = new UserAccount(id, fullName != null ? fullName : "User", normalizedEmail, "oauth-hash", clock.instant());
+        usersByEmail.put(normalizedEmail, user);
+        usersById.put(id, user);
+        return user;
+    }
 }

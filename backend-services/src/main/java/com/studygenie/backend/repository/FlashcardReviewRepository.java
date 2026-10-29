@@ -12,4 +12,5 @@ import java.util.Optional;
 public interface FlashcardReviewRepository extends JpaRepository<FlashcardReview, Long> {
     List<FlashcardReview> findByStudentIdAndNextReviewDateLessThanEqual(Long studentId, LocalDate date);
     Optional<FlashcardReview> findByStudentIdAndFlashcardId(Long studentId, Long flashcardId);
+    List<FlashcardReview> findByFlashcardId(Long flashcardId);
 }

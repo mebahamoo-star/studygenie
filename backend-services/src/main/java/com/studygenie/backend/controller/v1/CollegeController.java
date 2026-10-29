@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/universities")
@@ -25,5 +26,15 @@ public class CollegeController {
     @GetMapping("/{universityId}/colleges")
     public ResponseEntity<ApiResponse<List<CollegeDto>>> getCollegesByUniversity(@PathVariable Long universityId) {
         return ResponseEntity.ok(ApiResponse.ok("Colleges fetched successfully", collegeService.getCollegesByUniversity(universityId)));
+    }
+
+    @Operation(summary = "Create or find a college under a university")
+    @PostMapping("/{universityId}/colleges")
+    public ResponseEntity<ApiResponse<CollegeDto>> createCollege(
+            @PathVariable Long universityId,
+            @RequestBody Map<String, String> body) {
+        String name = body.get("name");
+        CollegeDto dto = collegeService.createCollege(universityId, name);
+        return ResponseEntity.ok(ApiResponse.ok("College created or found successfully", dto));
     }
 }
