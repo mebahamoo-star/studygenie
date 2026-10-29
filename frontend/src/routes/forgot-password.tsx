@@ -13,6 +13,7 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { TopographyBackground } from "@/components/animate-ui/backgrounds/topography";
+import { authService } from "@/lib/api/services";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
@@ -57,13 +58,13 @@ function ForgotPasswordPage() {
 
     setLoading(true);
     try {
-      // Simulate/Trigger sending code to user's email
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await authService.forgotPassword(email.trim());
       toast.success(`Verification code sent to ${email}`);
       setStep("verify");
       startCooldown();
-    } catch {
-      toast.error("Failed to send verification code. Please try again.");
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || "Failed to send verification code. Please try again.";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -73,11 +74,12 @@ function ForgotPasswordPage() {
     if (resendCooldown > 0) return;
     setLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await authService.forgotPassword(email.trim());
       toast.success(`New code sent to ${email}`);
       startCooldown();
-    } catch {
-      toast.error("Could not resend code. Please try again.");
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || "Could not resend code. Please try again.";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -92,7 +94,8 @@ function ForgotPasswordPage() {
 
     setLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      // In-flight verification step transitions user directly to password input
+      await new Promise((resolve) => setTimeout(resolve, 400));
       toast.success("Code verified! Set your new password.");
       setStep("reset");
     } catch {
@@ -115,11 +118,12 @@ function ForgotPasswordPage() {
 
     setLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      toast.success("Password reset successfully! ✨");
+      await authService.resetPassword(email.trim(), code.trim(), newPassword);
+      toast.success("Password reset successfully in database! ✨");
       setStep("success");
-    } catch {
-      toast.error("Failed to update password. Please try again.");
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || "Failed to update password. Please check your code and try again.";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

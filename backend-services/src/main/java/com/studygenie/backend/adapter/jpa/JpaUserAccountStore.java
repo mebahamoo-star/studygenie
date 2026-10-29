@@ -115,4 +115,12 @@ public class JpaUserAccountStore implements UserAccountStore {
         Student saved = studentRepository.saveAndFlush(newStudent);
         return mapToRecord(saved);
     }
+
+    @Override
+    public void updatePassword(String normalizedEmail, String newPasswordHash) {
+        studentRepository.findByEmail(normalizedEmail).ifPresent(student -> {
+            student.setPassword(newPasswordHash);
+            studentRepository.save(student);
+        });
+    }
 }

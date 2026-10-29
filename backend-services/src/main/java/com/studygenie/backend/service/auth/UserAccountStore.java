@@ -10,4 +10,5 @@ public interface UserAccountStore {
     List<UserAccount> findAll();
     UserAccount create(String fullName, String normalizedEmail, String passwordHash);
     UserAccount findOrCreateOAuthUser(String fullName, String normalizedEmail, String provider, String providerId, String avatarUrl);
+    void updatePassword(String normalizedEmail, String newPasswordHash);
 }

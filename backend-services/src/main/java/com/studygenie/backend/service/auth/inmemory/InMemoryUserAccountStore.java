@@ -70,4 +70,20 @@ public class InMemoryUserAccountStore implements UserAccountStore {
         usersById.put(id, user);
         return user;
     }
+
+    @Override
+    public void updatePassword(String normalizedEmail, String newPasswordHash) {
+        UserAccount existing = usersByEmail.get(normalizedEmail);
+        if (existing != null) {
+            UserAccount updated = new UserAccount(
+                    existing.id(),
+                    existing.fullName(),
+                    existing.email(),
+                    newPasswordHash,
+                    existing.createdAt()
+            );
+            usersByEmail.put(normalizedEmail, updated);
+            usersById.put(existing.id(), updated);
+        }
+    }
 }

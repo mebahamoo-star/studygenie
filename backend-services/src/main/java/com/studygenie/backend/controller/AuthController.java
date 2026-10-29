@@ -50,6 +50,18 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
     @GetMapping("/oauth/info")
     public ResponseEntity<ApiResponse<OAuthProviderInfo>> getOAuthInfo(@RequestParam(value = "redirectUri", required = false) String redirectUri) {
         OAuthProviderInfo info = oAuthService.getProviderInfo(redirectUri);

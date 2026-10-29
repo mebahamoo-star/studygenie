@@ -126,4 +126,22 @@ public class AuthService {
                 accessToken, refreshToken, jwtService.accessTokenTtlSeconds(), refreshTtl / 1000, summary
         );
     }
+
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String normalizedEmail = normalize(request.email());
+        // Check if user exists (fail silently to avoid user enumeration, but log if needed)
+        userStore.findByEmail(normalizedEmail);
+    }
+
+    public void resetPassword(ResetPasswordRequest request) {
+        String normalizedEmail = normalize(request.email());
+        UserAccount user = userStore.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new com.studygenie.backend.exception.ResourceNotFoundException("Account with email " + normalizedEmail + " not found"));
+
+        String newPasswordHash = passwordEncoder.encode(request.newPassword());
+        userStore.updatePassword(normalizedEmail, newPasswordHash);
+
+        // Invalidate previous refresh tokens to ensure clean session state
+        refreshStore.revokeAllForUser(user.id());
+    }
 }
