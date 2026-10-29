@@ -291,6 +291,19 @@ export function saveUserTaskKits(kits: Record<string, any>): void {
   } catch {}
 }
 
+export function isCourseMaterialUploaded(course: Course | null | undefined): boolean {
+  if (!course) return false;
+  return Boolean(
+    (course.status === "ready" && course.topics && course.topics.length > 0) ||
+    (course.topics && course.topics.length > 0)
+  );
+}
+
+export function hasUserUploadedMaterial(): boolean {
+  const courses = getUserCourses();
+  return courses.some((c) => isCourseMaterialUploaded(c));
+}
+
 export function hasUserEnrolledCourses(): boolean {
   return getUserCourses().length > 0;
 }

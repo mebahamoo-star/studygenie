@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   BookOpen,
   Brain,
@@ -19,6 +20,8 @@ import {
   ShieldCheck,
   Sparkles,
   Timer,
+  Upload,
+  UploadCloud,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -35,7 +38,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useApp } from "@/lib/app-state";
 import { pageHead } from "@/lib/head";
-import { deduplicateTopics, getUserCourses, getUserStoragePrefix, getUserTaskKits, saveUserCourses, saveUserTaskKits, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile } from "@/lib/courses-util";
+import { deduplicateTopics, getUserCourses, getUserStoragePrefix, getUserTaskKits, saveUserCourses, saveUserTaskKits, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile, isCourseMaterialUploaded, hasUserUploadedMaterial } from "@/lib/courses-util";
 import { browseService, examService, type CommunityChallenge } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
 import type { Course, Topic } from "@/lib/api/types";
@@ -261,6 +264,7 @@ function Dashboard() {
   const [progress, setProgress] = useState(0);
   const [courseName, setCourseName] = useState<string>("No active course");
   const [hasPlans, setHasPlans] = useState<boolean | null>(null);
+  const [hasMaterials, setHasMaterials] = useState<boolean>(false);
   const [checklistDateLabel, setChecklistDateLabel] = useState<string>("Today");
   const [enrolledCount, setEnrolledCount] = useState<number>(0);
   const [open, setOpen] = useState(false);
@@ -651,6 +655,18 @@ function Dashboard() {
         ? `${activeCourse.code} · ${activeCourse.name}`
         : activeCourse.name;
       setCourseName(displayName);
+
+      // Verify whether the student has uploaded material (syllabus / slides / notes)
+      const userHasUploaded = enrolled.some((c) => isCourseMaterialUploaded(c));
+      setHasMaterials(userHasUploaded);
+
+      if (!userHasUploaded) {
+        setHasPlans(false);
+        setTasks([]);
+        setProgress(0);
+        setDiscoveredPlans([]);
+        return;
+      }
 
       // Pre-fetch any missing plans in parallel
       const missingPlanCourses = enrolled.filter((c) => {
@@ -1104,6 +1120,36 @@ function Dashboard() {
         </Card>
       )}
 
+      {!hasMaterials && (
+        <Card className="lg:col-span-3 border-amber-500/40 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-5 shadow-soft">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 ring-4 ring-amber-500/10">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-display text-base font-bold text-foreground">
+                    Action Required: Upload Course Material
+                  </h3>
+                  <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                    Notice
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed max-w-2xl">
+                  Your personalized <strong>Study Plan</strong>, active-recall <strong>Flashcards</strong>, and practice <strong>Quizzes</strong> are currently locked. Upload your course syllabus, lecture slides, or PDF notes to activate them.
+                </p>
+              </div>
+            </div>
+            <Button variant="magic" size="default" asChild className="shrink-0 gap-2 font-bold shadow-soft">
+              <Link to="/courses">
+                <Upload className="h-4 w-4" /> Upload Material
+              </Link>
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <Card className="lg:col-span-2">
         <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -1201,9 +1247,11 @@ function Dashboard() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              {hasPlans && activeChecklistTasks.length > 0
-                ? `Active courses: ${courseName}`
-                : "Personalized tasks appear here once you generate a study plan."}
+              {!hasMaterials
+                ? "Upload your course material to generate your daily plan, flashcards, and quizzes."
+                : hasPlans && activeChecklistTasks.length > 0
+                  ? `Active courses: ${courseName}`
+                  : "Personalized tasks appear here once you generate a study plan."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1225,7 +1273,7 @@ function Dashboard() {
             >
               <Pencil className="h-3.5 w-3.5" /> Adjust
             </Button>
-            {hasPlans && (
+            {hasPlans && hasMaterials && (
               <Button size="sm" variant="secondary" asChild className="text-xs font-semibold">
                 <Link to="/plan">View Full Plan</Link>
               </Button>
@@ -1233,7 +1281,29 @@ function Dashboard() {
           </div>
         </div>
 
-        {activeChecklistTasks.length > 0 ? (
+        {!hasMaterials ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-amber-500/40 bg-amber-500/5 py-12 px-6 text-center">
+            <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-4 ring-amber-500/10">
+              <UploadCloud className="h-7 w-7" />
+            </div>
+            <h3 className="font-display text-lg font-bold text-foreground">
+              {courseName && courseName !== "No active course"
+                ? `Course Material Not Uploaded for ${courseName}`
+                : "Course Material Not Uploaded Yet"}
+            </h3>
+            <p className="mt-2 max-w-md text-xs text-muted-foreground leading-relaxed">
+              Your personalized <strong>Study Plan</strong>, active-recall <strong>Flashcards</strong>, and practice <strong>Quizzes</strong> are locked until you upload the course material. Upload your syllabus or lecture slides to automatically extract chapters and activate your study workflow.
+            </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <Button variant="magic" size="default" asChild className="gap-2 font-bold shadow-soft">
+                <Link to="/courses">
+                  <Upload className="h-4 w-4" />
+                  Upload Course Material
+                </Link>
+              </Button>
+            </div>
+          </div>
+        ) : activeChecklistTasks.length > 0 ? (
           <div className="space-y-2">
             {activeChecklistTasks.map((task) => {
               const isDone = activeChecklistDone.includes(task.id);
@@ -1351,7 +1421,7 @@ function Dashboard() {
           </div>
         )}
 
-        {hasPlans && activeChecklistTasks.length > 0 && (
+        {hasPlans && hasMaterials && activeChecklistTasks.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
             <span className="text-xs text-muted-foreground">
               Total: {activeChecklistTasks.reduce((acc, t) => acc + t.min, 0)} minutes of scheduled study
