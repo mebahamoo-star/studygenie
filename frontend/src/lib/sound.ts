@@ -381,3 +381,75 @@ export function playPointEarnedSound(
     }
   }
 }
+
+
+/**
+ * Organic acoustic water drop sound ("bloop" / droplet plop).
+ * Synthesized using a sine oscillator with a rapid upward frequency sweep,
+ * natural exponential volume decay, and subtle ±12% pitch variance for a realistic droplet feel.
+ */
+export function playWaterDropSound(options?: { baseFreq?: number; volume?: number }): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    const baseFreq = options?.baseFreq || 520;
+    const volume = options?.volume || 0.16;
+
+    // Organic random pitch fluctuation (each droplet is uniquely tuned)
+    const pitchOffset = Math.random() * 0.24 - 0.12; // -12% to +12%
+    const startPitch = baseFreq * (1 + pitchOffset);
+    const endPitch = startPitch * 2.85; // sweeps up ~2.85x ("bloop")
+
+    // 1. Primary droplet sine oscillator
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(startPitch, now);
+    osc.frequency.exponentialRampToValueAtTime(endPitch, now + 0.08);
+
+    // Fast attack (4ms) and natural exponential decay (160ms)
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(volume, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+
+    // 2. Secondary subtle water surface tension pop
+    const popOsc = ctx.createOscillator();
+    const popGain = ctx.createGain();
+
+    popOsc.type = "triangle";
+    popOsc.frequency.setValueAtTime(endPitch * 1.25, now);
+    popOsc.frequency.exponentialRampToValueAtTime(endPitch * 0.8, now + 0.05);
+
+    popGain.gain.setValueAtTime(0.0001, now);
+    popGain.gain.linearRampToValueAtTime(volume * 0.35, now + 0.003);
+    popGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+
+    // Lowpass filter to keep sound warm and smooth
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(3200, now);
+
+    // Connect audio graph
+    osc.connect(gain);
+    gain.connect(filter);
+
+    popOsc.connect(popGain);
+    popGain.connect(filter);
+
+    filter.connect(ctx.destination);
+
+    // Schedule audio playback
+    osc.start(now);
+    osc.stop(now + 0.18);
+
+    popOsc.start(now);
+    popOsc.stop(now + 0.09);
+
+    setTimeout(() => ctx.close().catch(() => {}), 400);
+  } catch (err) {
+    console.warn("Could not play water drop sound:", err);
+  }
+}

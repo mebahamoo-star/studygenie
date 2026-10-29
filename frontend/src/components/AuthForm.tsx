@@ -10,6 +10,7 @@ import { Label } from "./ui/label";
 import { useApp } from "@/lib/app-state";
 import { authService } from "@/lib/api/services";
 import { fetchAndSyncExams, loadExams } from "@/lib/exam";
+import { playWaterDropSound } from "@/lib/sound";
 import { TopographyBackground } from "@/components/animate-ui/backgrounds/topography";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -176,7 +177,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   return (
     <div className="grid min-h-screen md:grid-cols-2">
-      <div className="relative hidden flex-col items-center justify-center gap-6 bg-gradient-magic p-12 text-primary-foreground md:flex overflow-hidden">
+      <div
+        className="relative hidden flex-col items-center justify-center gap-6 bg-gradient-magic p-12 text-primary-foreground md:flex overflow-hidden cursor-pointer select-none"
+        onPointerDown={(e) => {
+          // Play organic water drop sound when clicking the background
+          playWaterDropSound();
+        }}
+      >
         <TopographyBackground
           className="absolute inset-0 pointer-events-auto"
           lineColor="rgba(255, 255, 255, 0.45)"
@@ -185,10 +192,23 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           scale={1}
           peak={1}
           interactive={true}
+          onPointerDown={() => playWaterDropSound()}
         />
-        <div className="relative z-10 flex flex-col items-center justify-center gap-6 pointer-events-none">
-          <Genie pose={signup ? "high" : "mid"} className="h-72 w-72 animate-float drop-shadow-2xl" />
+        <div
+          className="relative z-10 flex flex-col items-center justify-center gap-6 pointer-events-auto cursor-pointer"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            playWaterDropSound();
+          }}
+        >
+          <Genie
+            pose={signup ? "high" : "mid"}
+            className="h-72 w-72 animate-float drop-shadow-2xl active:scale-95 transition-transform"
+          />
           <h2 className="text-3xl font-semibold text-center">{signup ? "Make your first wish." : "Welcome back, scholar."}</h2>
+          <span className="text-xs opacity-75 font-medium flex items-center gap-1.5 bg-black/15 dark:bg-white/15 px-3 py-1 rounded-full backdrop-blur-xs">
+            💧 Tap background or Genie for water drop
+          </span>
         </div>
       </div>
       <div className="flex flex-col bg-background p-8">
