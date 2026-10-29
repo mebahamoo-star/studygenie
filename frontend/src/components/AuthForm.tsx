@@ -9,6 +9,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { useApp } from "@/lib/app-state";
 import { authService } from "@/lib/api/services";
+import { fetchAndSyncExams, loadExams } from "@/lib/exam";
 import { TopographyBackground } from "@/components/animate-ui/backgrounds/topography";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -59,6 +60,20 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   // Modal state when keys are not configured yet
   const [missingConfigModal, setMissingConfigModal] = useState<"google" | "microsoft" | null>(null);
 
+  const navigateAfterLogin = async () => {
+    try {
+      const userExams = await fetchAndSyncExams().catch(() => loadExams());
+      if (userExams && userExams.length > 0) {
+        navigate({ to: "/dashboard" });
+      } else {
+        navigate({ to: "/exam-checkin" });
+      }
+    } catch {
+      navigate({ to: "/dashboard" });
+    }
+  };
+
+
   // Check for OAuth callback code in URL search parameters
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -70,9 +85,9 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       setOauthLoading(provider);
       const redirectUri = window.location.origin + window.location.pathname;
       loginWithOAuth(provider, code, undefined, redirectUri)
-        .then(() => {
+        .then(async () => {
           toast.success(`Successfully logged in with ${provider === "google" ? "Google" : "Windows"}! ✨`);
-          navigate({ to: "/exam-checkin" });
+          await navigateAfterLogin();
         })
         .catch((err: any) => {
           const msg = err?.data?.message || err?.message || "OAuth login failed";
@@ -117,7 +132,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     try {
       await loginWithOAuth(provider, `demo_${provider}_code`);
       toast.success(`Signed in as demo ${provider === "google" ? "Google" : "Windows"} account! ✨`);
-      navigate({ to: "/exam-checkin" });
+      await navigateAfterLogin();
     } catch (err: any) {
       toast.error(err?.message || "Demo sign in failed");
     } finally {
@@ -149,7 +164,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       } else {
         await login(email, password);
         toast.success("Welcome back! ✨");
-        navigate({ to: "/exam-checkin" });
+        await navigateAfterLogin();
       }
     } catch (err: any) {
       const msg = err?.data?.message || err?.message || "Authentication failed";

@@ -290,7 +290,7 @@ export function loadExamsForUser(
 
   const enrolled = enrolledCourses ?? getUserCourses();
   if (!enrolled || enrolled.length === 0) {
-    return [];
+    return all;
   }
 
   const enrolledNames = new Set((enrolled || []).map((c) => c.name.toLowerCase().trim()));
