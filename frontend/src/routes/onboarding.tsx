@@ -678,7 +678,7 @@ function Onboarding() {
             </div>
           )}
 
-          <div className="mt-8 flex justify-between">
+          <div className="mt-8 flex items-center justify-between">
             <Button variant="ghost" disabled={step === 0} onClick={() => setStep(step - 1)}>
               <ChevronLeft /> Back
             </Button>
