@@ -103,7 +103,24 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             />
           </div>
           <div className="grid gap-2">
-            <Label>Password</Label>
+            <div className="flex items-center justify-between">
+              <Label>Password</Label>
+              {!signup && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    toast.info(
+                      email
+                        ? `Password reset link sent to ${email} (if registered).`
+                        : "Please enter your email above to receive password reset instructions."
+                    )
+                  }
+                  className="text-xs font-medium text-muted-foreground transition-colors hover:text-primary hover:underline cursor-pointer"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
             <Input
               className="h-11 rounded-xl"
               type="password"
