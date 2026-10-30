@@ -227,7 +227,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       className={cn(
                         "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
                         active
-                          ? "bg-gradient-magic text-primary-foreground shadow-glow data-[active=true]:bg-gradient-magic data-[active=true]:text-primary-foreground hover:text-primary-foreground"
+                          ? "bg-primary bg-gradient-magic text-white shadow-glow hover:bg-primary hover:text-white hover:brightness-105 data-[active=true]:bg-primary data-[active=true]:bg-gradient-magic data-[active=true]:text-white data-[active=true]:hover:bg-primary data-[active=true]:hover:text-white"
                           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
                     >
@@ -250,8 +250,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                                   className={cn(
                                     "flex items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors",
                                     subActive
-                                      ? "text-primary font-bold"
-                                      : "text-muted-foreground hover:text-foreground",
+                                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-bold data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                                      : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
                                     isLocked && "opacity-70"
                                   )}
                                 >
@@ -281,7 +281,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className={cn(
                   "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
                   path.startsWith("/settings")
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    ? "bg-primary bg-gradient-magic text-white shadow-glow hover:bg-primary hover:text-white hover:brightness-105 data-[active=true]:bg-primary data-[active=true]:bg-gradient-magic data-[active=true]:text-white data-[active=true]:hover:bg-primary data-[active=true]:hover:text-white"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
               >

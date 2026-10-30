@@ -136,7 +136,10 @@
   --shadow-glow: 0 0 32px -4px oklch(0.6 0.24 285 / 0.7);
 }
 
-@utility bg-gradient-magic { background-image: var(--gradient-magic); }
+@utility bg-gradient-magic {
+  background-color: var(--primary);
+  background-image: var(--gradient-magic);
+}
 @utility bg-gradient-gold { background-image: var(--gradient-gold); }
 @utility bg-gradient-hero { background-image: var(--gradient-hero); }
 @utility text-gradient-magic {
