@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Lock, Plus, RotateCcw, Upload, XCircle } from "lucide-react";
 import { Card, PageTitle } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
@@ -46,6 +46,7 @@ function Quiz() {
   const [answers, setAnswers] = useState<{ questionId: string; selectedOptionIndex: number }[]>([]);
   const [pastScores, setPastScores] = useState<SavedQuizScore[]>([]);
   const [lastSavedScore, setLastSavedScore] = useState<SavedQuizScore | null>(null);
+  const isFinishingRef = useRef(false);
 
   useEffect(() => {
     const enrolled = hasUserEnrolledCourses();
@@ -87,6 +88,8 @@ function Quiz() {
   }, []);
 
   const handleFinish = async (finalScore: number) => {
+    if (finished || isFinishingRef.current) return;
+    isFinishingRef.current = true;
     // 1. Compute exact score from verified answers to prevent stale state desync
     let computedCorrect = 0;
     questions.forEach((qItem, idx) => {

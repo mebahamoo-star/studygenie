@@ -88,19 +88,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const profile = await gamificationService.getProfile();
       if (profile) {
-        setPoints((localPoints) => {
-          const best = Math.max(profile.currentXp || 0, localPoints || 0);
-          try {
-            const prefix = getUserStoragePrefix();
-            localStorage.setItem(`sg-${prefix}-points`, String(best));
-            localStorage.setItem("sg-points", String(best));
-          } catch {}
-          return best;
-        });
+        const prefix = getUserStoragePrefix();
+        const raw =
+          localStorage.getItem(`sg-${prefix}-points`) ||
+          localStorage.getItem("sg-points");
+        const currentLocal = raw !== null ? Number(raw) : 0;
+        const safeLocal = isNaN(currentLocal) ? 0 : currentLocal;
+        const best = Math.max(profile.currentXp || 0, safeLocal);
+
+        try {
+          localStorage.setItem(`sg-${prefix}-points`, String(best));
+          localStorage.setItem("sg-points", String(best));
+        } catch {}
+        setPoints(best);
+
         const currentStreak = profile.currentStreakDays || 1;
         setStreak(currentStreak);
         try {
-          const prefix = getUserStoragePrefix();
           localStorage.setItem(`sg-${prefix}-streak`, String(currentStreak));
           localStorage.setItem("sg-streak", String(currentStreak));
         } catch {}
@@ -120,14 +124,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    const handlePointsUpdate = () => {
+    const handlePointsUpdate = (e: any) => {
       try {
+        if (e && typeof e.detail === "number" && !isNaN(e.detail)) {
+          setPoints(e.detail);
+          return;
+        }
         const prefix = getUserStoragePrefix();
         const saved =
           localStorage.getItem(`sg-${prefix}-points`) ||
           localStorage.getItem("sg-points");
         if (saved !== null) {
-          setPoints(Number(saved));
+          const val = Number(saved);
+          if (!isNaN(val)) {
+            setPoints(val);
+          }
         }
       } catch {}
     };
@@ -221,18 +232,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         lang,
         setLang,
         points,
-        addPoints: (n) => {
-          setPoints((prev) => {
-            const next = prev + n;
-            try {
-              const prefix = getUserStoragePrefix();
-              localStorage.setItem(`sg-${prefix}-points`, String(next));
-              localStorage.setItem("sg-points", String(next));
-              window.dispatchEvent(new Event("sg-points-updated"));
-              window.dispatchEvent(new Event("storage"));
-            } catch {}
-            return next;
-          });
+        addPoints: (n: number) => {
+          if (!n || typeof n !== "number" || isNaN(n) || n <= 0) return;
+          try {
+            const prefix = getUserStoragePrefix();
+            const raw =
+              localStorage.getItem(`sg-${prefix}-points`) ||
+              localStorage.getItem("sg-points");
+            const current = raw !== null ? Number(raw) : 0;
+            const safeCurrent = isNaN(current) ? 0 : current;
+            const next = safeCurrent + n;
+
+            localStorage.setItem(`sg-${prefix}-points`, String(next));
+            localStorage.setItem("sg-points", String(next));
+            setPoints(next);
+
+            window.dispatchEvent(new CustomEvent("sg-points-updated", { detail: next }));
+          } catch {
+            setPoints((prev) => prev + n);
+          }
         },
         streak,
         user,
