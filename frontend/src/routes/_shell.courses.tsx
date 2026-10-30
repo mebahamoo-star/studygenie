@@ -1999,11 +1999,13 @@ function JoinChallenge({
       };
 
       let generatedQuestions: any[] = [];
+      let kitId: string | null = null;
       try {
         const res = await fetchApi<any>("/api/v1/study-kits/generate", {
           method: "POST",
           body: JSON.stringify(payload),
         });
+        kitId = res?.data?.id || res?.data?.kitId || null;
         if (res?.data?.topics) {
           res.data.topics.forEach((tk: any) => {
             (tk.quiz || []).forEach((q: any, qIdx: number) => {
@@ -2058,7 +2060,18 @@ function JoinChallenge({
         return;
       }
 
+      const prefix = getUserStoragePrefix();
+      saveActiveCourse(course);
+      localStorage.setItem("sg-active-course-id", course.id);
+      localStorage.setItem("sg-active-course-name", course.name);
+      localStorage.setItem(`sg-${prefix}-active-course-id`, course.id);
+      localStorage.setItem(`sg-${prefix}-active-course-name`, course.name);
       localStorage.setItem("sg-active-quiz", JSON.stringify(generatedQuestions));
+      localStorage.setItem(`sg-${prefix}-active-quiz`, JSON.stringify(generatedQuestions));
+      if (kitId) {
+        localStorage.setItem("sg-active-kit", kitId);
+        localStorage.setItem(`sg-${prefix}-active-kit`, kitId);
+      }
       toast.success(`Generated ${generatedQuestions.length} quiz questions from ${selectedTopics.length} chapters! ✨`);
       nav({ to: "/quiz" });
     } catch (err: any) {

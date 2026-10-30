@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { authService, gamificationService } from "./api/services";
 import { getStoredAccessToken, getStoredUser, fetchApi } from "./api/client";
+import { getUserStoragePrefix } from "./courses-util";
 import type { UserSummary } from "./api/types";
 
 type Lang = "en" | "ar";
@@ -28,8 +29,28 @@ const AppCtx = createContext<Ctx | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [dark, setDark] = useState(false);
   const [lang, setLang] = useState<Lang>("en");
-  const [points, setPoints] = useState(0);
-  const [streak, setStreak] = useState(0);
+  const [points, setPoints] = useState<number>(() => {
+    try {
+      const prefix = getUserStoragePrefix();
+      const saved =
+        localStorage.getItem(`sg-${prefix}-points`) ||
+        localStorage.getItem("sg-points");
+      return saved ? Number(saved) : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [streak, setStreak] = useState<number>(() => {
+    try {
+      const prefix = getUserStoragePrefix();
+      const saved =
+        localStorage.getItem(`sg-${prefix}-streak`) ||
+        localStorage.getItem("sg-streak");
+      return saved ? Number(saved) : 1;
+    } catch {
+      return 1;
+    }
+  });
   const [user, setUser] = useState<UserSummary | null>(() => getStoredUser());
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getStoredAccessToken());
   const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
@@ -67,8 +88,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const profile = await gamificationService.getProfile();
       if (profile) {
-        setPoints(profile.currentXp);
-        setStreak(profile.currentStreakDays || 1);
+        setPoints((localPoints) => {
+          const best = Math.max(profile.currentXp || 0, localPoints || 0);
+          try {
+            const prefix = getUserStoragePrefix();
+            localStorage.setItem(`sg-${prefix}-points`, String(best));
+            localStorage.setItem("sg-points", String(best));
+          } catch {}
+          return best;
+        });
+        const currentStreak = profile.currentStreakDays || 1;
+        setStreak(currentStreak);
+        try {
+          const prefix = getUserStoragePrefix();
+          localStorage.setItem(`sg-${prefix}-streak`, String(currentStreak));
+          localStorage.setItem("sg-streak", String(currentStreak));
+        } catch {}
         setIsBackendOnline(true);
       }
     } catch (err: any) {
@@ -83,6 +118,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshGamification();
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    const handlePointsUpdate = () => {
+      try {
+        const prefix = getUserStoragePrefix();
+        const saved =
+          localStorage.getItem(`sg-${prefix}-points`) ||
+          localStorage.getItem("sg-points");
+        if (saved !== null) {
+          setPoints(Number(saved));
+        }
+      } catch {}
+    };
+    window.addEventListener("sg-points-updated", handlePointsUpdate);
+    window.addEventListener("storage", handlePointsUpdate);
+    return () => {
+      window.removeEventListener("sg-points-updated", handlePointsUpdate);
+      window.removeEventListener("storage", handlePointsUpdate);
+    };
+  }, [user]);
 
   const login = async (email: string, password: string) => {
     try {
@@ -166,7 +221,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         lang,
         setLang,
         points,
-        addPoints: (n) => setPoints((p) => p + n),
+        addPoints: (n) => {
+          setPoints((prev) => {
+            const next = prev + n;
+            try {
+              const prefix = getUserStoragePrefix();
+              localStorage.setItem(`sg-${prefix}-points`, String(next));
+              localStorage.setItem("sg-points", String(next));
+              window.dispatchEvent(new Event("sg-points-updated"));
+              window.dispatchEvent(new Event("storage"));
+            } catch {}
+            return next;
+          });
+        },
         streak,
         user,
         isAuthenticated,

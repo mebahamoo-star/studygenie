@@ -313,3 +313,77 @@ export function toLocalDateStr(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+export interface SavedQuizScore {
+  id: string;
+  date: string;
+  courseName?: string;
+  score: number;
+  total: number;
+  percentage: number;
+  xpAwarded: number;
+}
+
+export function saveQuizScore(record: SavedQuizScore): void {
+  try {
+    const prefix = getUserStoragePrefix();
+    // 1. Save last quiz result
+    localStorage.setItem(`sg-${prefix}-quiz-last-result`, JSON.stringify(record));
+    localStorage.setItem("sg-quiz-last-result", JSON.stringify(record));
+
+    // 2. Append to all quiz scores history
+    const historyRaw =
+      localStorage.getItem(`sg-${prefix}-quiz-scores`) ||
+      localStorage.getItem("sg-quiz-scores") ||
+      "[]";
+    const history: SavedQuizScore[] = JSON.parse(historyRaw);
+    history.unshift(record);
+    const trimmed = history.slice(0, 50);
+    localStorage.setItem(`sg-${prefix}-quiz-scores`, JSON.stringify(trimmed));
+    localStorage.setItem("sg-quiz-scores", JSON.stringify(trimmed));
+
+    // 3. Save per-course quiz score if courseName exists
+    if (record.courseName) {
+      const courseKey = `sg-${prefix}-quiz-course-${record.courseName.toLowerCase().trim()}`;
+      localStorage.setItem(courseKey, JSON.stringify(record));
+    }
+
+    window.dispatchEvent(new Event("sg-quiz-scores-updated"));
+    window.dispatchEvent(new Event("storage"));
+  } catch {}
+}
+
+export function getQuizScores(): SavedQuizScore[] {
+  try {
+    const prefix = getUserStoragePrefix();
+    const raw =
+      localStorage.getItem(`sg-${prefix}-quiz-scores`) ||
+      localStorage.getItem("sg-quiz-scores");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function getLastQuizScore(): SavedQuizScore | null {
+  try {
+    const prefix = getUserStoragePrefix();
+    const raw =
+      localStorage.getItem(`sg-${prefix}-quiz-last-result`) ||
+      localStorage.getItem("sg-quiz-last-result");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+export function getCourseQuizScore(courseName: string): SavedQuizScore | null {
+  try {
+    const prefix = getUserStoragePrefix();
+    const courseKey = `sg-${prefix}-quiz-course-${courseName.toLowerCase().trim()}`;
+    const raw = localStorage.getItem(courseKey);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}

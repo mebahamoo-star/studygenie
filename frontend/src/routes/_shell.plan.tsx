@@ -33,7 +33,7 @@ import { Slider } from "@/components/ui/slider";
 import { pageHead } from "@/lib/head";
 import { browseService } from "@/lib/api/services";
 import { fetchApi } from "@/lib/api/client";
-import { getUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, isCourseMaterialUploaded } from "@/lib/courses-util";
+import { getUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, isCourseMaterialUploaded, saveActiveCourse } from "@/lib/courses-util";
 import type { Course, PlanResponseData } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -431,9 +431,21 @@ function Plan() {
     if (!q || q.length === 0) return;
 
     try {
+      const prefix = getUserStoragePrefix();
       localStorage.setItem("sg-active-quiz", JSON.stringify(q));
+      localStorage.setItem(`sg-${prefix}-active-quiz`, JSON.stringify(q));
+      if (selectedCourse) {
+        saveActiveCourse(selectedCourse);
+        localStorage.setItem("sg-active-course-id", selectedCourse.id);
+        localStorage.setItem("sg-active-course-name", selectedCourse.name);
+        localStorage.setItem(`sg-${prefix}-active-course-id`, selectedCourse.id);
+        localStorage.setItem(`sg-${prefix}-active-course-name`, selectedCourse.name);
+      }
       const k = kitIdParam || kitsMap[taskKey]?.kitId;
-      if (k) localStorage.setItem("sg-active-kit", k);
+      if (k) {
+        localStorage.setItem("sg-active-kit", k);
+        localStorage.setItem(`sg-${prefix}-active-kit`, k);
+      }
     } catch {}
 
     toast.success(`Starting practice quiz for ${task.title} ✨`);
