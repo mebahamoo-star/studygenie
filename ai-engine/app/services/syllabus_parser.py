@@ -114,6 +114,7 @@ async def parse_syllabus(
 
         sub_titles = []
         sub_summaries = []
+        sub_objects = []
         for s in subtopics_objs:
             if isinstance(s, dict):
                 st_title = str(s.get("title") or "").strip()[:200]
@@ -129,10 +130,13 @@ async def parse_syllabus(
                 sub_titles.append(st_title)
                 if st_summary:
                     sub_summaries.append(f"{st_title}: {st_summary}")
+                    sub_objects.append({"title": st_title, "summary": st_summary})
                 else:
                     sub_summaries.append(st_title)
+                    sub_objects.append({"title": st_title, "summary": ""})
 
         sub_titles = sub_titles[:15]
+        sub_objects = sub_objects[:15]
         content_excerpt = "\n\n".join(sub_summaries)[:15000]
 
         given_hours = 0.0
@@ -154,7 +158,7 @@ async def parse_syllabus(
                 category_title=category_title,
                 estimated_hours=computed_hours,
                 importance=4,
-                subtopics=sub_titles,
+                subtopics=sub_objects if sub_objects else sub_titles,
                 content_excerpt=content_excerpt,
             )
         )

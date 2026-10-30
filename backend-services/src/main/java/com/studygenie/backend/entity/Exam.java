@@ -50,6 +50,9 @@ public class Exam {
     @Column(name = "uploader_name", length = 120)
     private String uploaderName;
 
+    @Column(name = "course_id")
+    private Long courseId;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

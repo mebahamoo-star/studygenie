@@ -10,9 +10,10 @@ public record ExamDto(
     @JsonProperty("date") LocalDate date,
     @JsonProperty("professor") String professor,
     @JsonProperty("uploader_name") String uploaderName,
-    @JsonProperty("student_id") Long studentId
+    @JsonProperty("student_id") Long studentId,
+    @JsonProperty("course_id") Long courseId
 ) {
     public ExamDto(Long id, String course, String type, LocalDate date, String professor) {
-        this(id, course, type, date, professor, null, null);
+        this(id, course, type, date, professor, null, null, null);
     }
 }

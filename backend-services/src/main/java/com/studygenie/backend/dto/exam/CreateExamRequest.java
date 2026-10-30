@@ -21,9 +21,12 @@ public record CreateExamRequest(
     String uploaderName,
 
     @JsonProperty("student_email")
-    String studentEmail
+    String studentEmail,
+
+    @JsonProperty("course_id")
+    Long courseId
 ) {
     public CreateExamRequest(String course, String type, LocalDate date, String professor) {
-        this(course, type, date, professor, null, null);
+        this(course, type, date, professor, null, null, null);
     }
 }

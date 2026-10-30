@@ -48,8 +48,10 @@ export interface Topic {
   weekNumber?: number;
   importance?: number;
   durationMinutes?: number;
-  subtopics?: string[];
+  subtopics?: string[] | any[];
   contentExcerpt?: string;
+  fileName?: string;
+  fileIndex?: number;
 }
 
 export interface PlanTask {

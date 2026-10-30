@@ -508,6 +508,11 @@ public class CourseService {
 
     @Transactional
     public PlanResponseData joinChallenge(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode) {
+        return joinChallenge(courseId, userId, examDate, dailyHours, mode, null);
+    }
+
+    @Transactional
+    public PlanResponseData joinChallenge(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
 
@@ -526,6 +531,7 @@ public class CourseService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
 
         List<TopicPlanInput> topics = topicRepository.findBySyllabusId(course.getSyllabus().getId()).stream()
+                .filter(t -> selectedTopicIds == null || selectedTopicIds.isEmpty() || selectedTopicIds.contains(t.getId()))
                 .map(t -> new TopicPlanInput(
                         String.valueOf(t.getId()),
                         t.getChapterTitle(),
@@ -596,6 +602,11 @@ public class CourseService {
 
     @Transactional
     public PlanResponseData regeneratePlan(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode) {
+        return regeneratePlan(courseId, userId, examDate, dailyHours, mode, null);
+    }
+
+    @Transactional
+    public PlanResponseData regeneratePlan(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
 
@@ -633,6 +644,7 @@ public class CourseService {
 
         // Fetch all current syllabus topics (including newly added chapters!)
         List<TopicPlanInput> topics = topicRepository.findBySyllabusId(course.getSyllabus().getId()).stream()
+                .filter(t -> selectedTopicIds == null || selectedTopicIds.isEmpty() || selectedTopicIds.contains(t.getId()))
                 .map(t -> new TopicPlanInput(
                         String.valueOf(t.getId()),
                         t.getChapterTitle(),

@@ -24,17 +24,17 @@ export function deduplicateTopics(topics: Topic[]): Topic[] {
   for (const t of topics) {
     if (!t || !t.name) continue;
     const cleanName = t.name.replace(/\s*\(Part\s*\d+\)$/i, "").trim();
-    const normKey = cleanName
+    const fileQualifier = t.fileIndex ? `f${t.fileIndex}` : (t.fileName ? t.fileName.toLowerCase() : "f1");
+    const normKey = `${fileQualifier}::${cleanName
       .replace(/^chapter\s*\d+[:\s.-]*/i, "")
       .trim()
-      .toLowerCase();
+      .toLowerCase()}`;
 
     if (!normKey || seen.has(normKey)) continue;
     seen.add(normKey);
 
     clean.push({
       ...t,
-      id: clean.length + 1,
       name: cleanName,
     });
   }
