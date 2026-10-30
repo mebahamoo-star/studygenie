@@ -40,8 +40,10 @@ async def parse_syllabus(
     if is_pdf:
         # Step 1: For PDFs, send directly to Gemini using inlineData / File API
         user_prompt = (
-            "Analyze this course material / syllabus PDF. Extract the logical module topics with detailed "
-            "subtopics (title and summary) and generate EXACTLY 10 high-yield study flashcards according to the required schema (strict limit: exactly 10 flashcards in total)."
+            "Deeply and thoroughly analyze this course material / lecture slides PDF. "
+            "Extract EVERY distinct topic and section covered throughout the entire document into its own topic entry "
+            "(do NOT consolidate everything into only 1 or 2 high-level topics; extract all individual sections, protocols, configuration steps, and core concepts with rich subtopics and detailed summaries). "
+            "Generate EXACTLY 10 high-yield study flashcards according to the required schema (strict limit: exactly 10 flashcards in total)."
         )
         if filename:
             user_prompt += f" Document filename is '{filename}'."
@@ -153,7 +155,7 @@ async def parse_syllabus(
 
         normalized_topics.append(
             TopicItem(
-                order_index=0,
+                order_index=len(normalized_topics) + 1,
                 chapter_title=category_title,
                 category_title=category_title,
                 estimated_hours=computed_hours,

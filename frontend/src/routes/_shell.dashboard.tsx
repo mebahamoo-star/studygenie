@@ -1553,7 +1553,7 @@ function Dashboard() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                        Uploaded by {ch.uploaderName || "Classmate"} · {ch.peerCount || 3} studying
+                        Uploaded by {ch.uploaderName || "Classmate"} · {ch.peerCount === 1 ? "1 student studying" : `${ch.peerCount || 1} studying`}
                       </div>
                     </div>
                   </div>

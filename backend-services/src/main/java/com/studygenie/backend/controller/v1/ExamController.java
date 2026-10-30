@@ -19,6 +19,7 @@ import com.studygenie.backend.entity.Exam;
 import com.studygenie.backend.entity.Student;
 
 import com.studygenie.backend.entity.StudyPlan;
+import com.studygenie.backend.entity.Syllabus;
 
 import com.studygenie.backend.repository.StudyPlanRepository;
 
@@ -270,6 +271,23 @@ public class ExamController {
 
 
 
+        // Preload student enrollment pairs for all courses to calculate authentic studying counts
+        Map<Long, Set<Long>> enrollmentsByCourseId = new HashMap<>();
+        try {
+            List<Object[]> enrollmentPairs = studentRepository.findAllEnrollmentPairs();
+            if (enrollmentPairs != null) {
+                for (Object[] pair : enrollmentPairs) {
+                    if (pair != null && pair.length >= 2 && pair[0] != null && pair[1] != null) {
+                        Long cId = ((Number) pair[0]).longValue();
+                        Long sId = ((Number) pair[1]).longValue();
+                        enrollmentsByCourseId.computeIfAbsent(cId, k -> new HashSet<>()).add(sId);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not prefetch enrollment pairs: {}", e.getMessage());
+        }
+
         // Group exams by normalized course name
 
         Map<String, List<Exam>> examsByCourse = new LinkedHashMap<>();
@@ -356,13 +374,39 @@ public class ExamController {
 
 
 
-            boolean hasSyllabus = matchedCourse != null && matchedCourse.getStatus() == CourseStatus.READY;
-
-            int chaptersCount = hasSyllabus ? 5 : 0;
-
-
+                        int chaptersCount = 0;
+            if (matchedCourseId != null) {
+                Syllabus syl = syllabusRepository.findByCourseId(matchedCourseId).orElse(null);
+                if (syl != null) {
+                    chaptersCount = topicRepository.findBySyllabusId(syl.getId()).size();
+                }
+            }
+            boolean hasSyllabus = chaptersCount > 0 || (matchedCourse != null && matchedCourse.getStatus() == CourseStatus.READY);
 
             boolean isJoined = enrolledCourseNames.contains(key) || myExamCourses.contains(key);
+
+            // Calculate authentic count of distinct students studying this course
+            Set<Long> studyingStudentIds = new HashSet<>();
+            for (Exam e : courseExams) {
+                if (e.getStudent() != null && e.getStudent().getId() != null) {
+                    studyingStudentIds.add(e.getStudent().getId());
+                }
+            }
+            if (matchedCourseId != null) {
+                List<StudyPlan> plans = studyPlanRepository.findByCourseId(matchedCourseId);
+                if (plans != null) {
+                    for (StudyPlan sp : plans) {
+                        if (sp.getStudent() != null && sp.getStudent().getId() != null) {
+                            studyingStudentIds.add(sp.getStudent().getId());
+                        }
+                    }
+                }
+                Set<Long> enrolledStudentIds = enrollmentsByCourseId.get(matchedCourseId);
+                if (enrolledStudentIds != null) {
+                    studyingStudentIds.addAll(enrolledStudentIds);
+                }
+            }
+            int realStudyingCount = Math.max(1, studyingStudentIds.size());
 
 
 
@@ -418,7 +462,7 @@ public class ExamController {
 
                     chaptersCount,
 
-                    Math.max(1, (int)(rep.getId() % 8) + 2),
+                    realStudyingCount,
 
                     isJoined
 
