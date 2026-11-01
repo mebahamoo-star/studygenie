@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, redirect, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { CalendarCheck, Layers, Trophy } from "lucide-react";
 import { Branches, Plot, Riffle } from "@lucasmarkes/hairline/react";
@@ -8,8 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Boxes } from "@/components/ui/background-boxes";
 import { RotatingText, RotatingTextContainer } from "@/components/animate-ui/texts/rotating";
 import { useApp } from "@/lib/app-state";
+import { getStoredAccessToken } from "@/lib/api/client";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const token = getStoredAccessToken();
+      if (token) {
+        throw redirect({ to: "/dashboard" });
+      }
+    }
+  },
   head: () => ({
     meta: [
       { title: "StudyGenie — Study smarter, with a little magic" },
@@ -44,6 +54,31 @@ const features = [
 
 function Landing() {
   const { isAuthenticated } = useApp();
+  const navigate = useNavigate();
+
+  const hasStoredSession =
+    isAuthenticated ||
+    (typeof window !== "undefined" && Boolean(getStoredAccessToken()));
+
+  useEffect(() => {
+    if (hasStoredSession) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [hasStoredSession, navigate]);
+
+  if (hasStoredSession) {
+    return (
+      <div className="min-h-screen w-full grid place-items-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-3">
+          <Genie pose="high" className="h-20 w-20 animate-bounce" />
+          <p className="text-sm font-semibold text-muted-foreground animate-pulse">
+            Opening your dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       {/* Background Interactive Boxes (Theme-adapted for Light and Dark modes) */}

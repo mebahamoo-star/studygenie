@@ -212,6 +212,19 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     }
   };
 
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full grid place-items-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Genie pose="mid" className="h-20 w-20 animate-bounce" />
+          <p className="text-sm font-semibold text-muted-foreground animate-pulse">
+            Opening your dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid min-h-screen md:grid-cols-2">
       <div
