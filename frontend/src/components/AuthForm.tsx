@@ -50,7 +50,7 @@ function MicrosoftIcon({ className }: { className?: string }) {
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const navigate = useNavigate();
-  const { login, register, loginWithOAuth, isBackendOnline } = useApp();
+  const { login, register, loginWithOAuth, isBackendOnline, isAuthenticated } = useApp();
   const signup = mode === "signup";
 
   const [fullName, setFullName] = useState("");
@@ -71,6 +71,10 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   });
 
   useEffect(() => {
+    if (isAuthenticated) {
+      navigate({ to: "/dashboard" });
+      return;
+    }
     try {
       const savedRemember = localStorage.getItem("sg-remember-me");
       if (savedRemember !== null) {
@@ -83,7 +87,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         }
       }
     } catch {}
-  }, [signup]);
+  }, [signup, isAuthenticated, navigate]);
 
   const navigateAfterLogin = async () => {
     try {

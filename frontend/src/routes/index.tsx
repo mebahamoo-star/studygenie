@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Boxes } from "@/components/ui/background-boxes";
 import { RotatingText, RotatingTextContainer } from "@/components/animate-ui/texts/rotating";
+import { useApp } from "@/lib/app-state";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -42,6 +43,7 @@ const features = [
 ];
 
 function Landing() {
+  const { isAuthenticated } = useApp();
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       {/* Background Interactive Boxes (Theme-adapted for Light and Dark modes) */}
@@ -55,9 +57,15 @@ function Landing() {
         <header className="mx-auto flex max-w-6xl items-center justify-between px-8 py-6 pointer-events-auto">
           <GenieLogo />
           <div className="flex items-center gap-3">
-            <Button variant="ghost" asChild>
-              <Link to="/login">Log in</Link>
-            </Button>
+            {isAuthenticated ? (
+              <Button variant="magic" asChild>
+                <Link to="/dashboard">Go to Dashboard →</Link>
+              </Button>
+            ) : (
+              <Button variant="ghost" asChild>
+                <Link to="/login">Log in</Link>
+              </Button>
+            )}
             <ThemeToggle />
           </div>
         </header>
@@ -88,9 +96,15 @@ function Landing() {
             <p className="mt-5 max-w-md text-lg text-muted-foreground">
               Your genie turns any syllabus into a daily plan you'll actually finish.
             </p>
-            <Button variant="magic" size="lg" className="mt-8 shadow-glow" asChild>
-              <Link to="/signup">Get Started</Link>
-            </Button>
+            {isAuthenticated ? (
+              <Button variant="magic" size="lg" className="mt-8 shadow-glow" asChild>
+                <Link to="/dashboard">Open Dashboard →</Link>
+              </Button>
+            ) : (
+              <Button variant="magic" size="lg" className="mt-8 shadow-glow" asChild>
+                <Link to="/signup">Get Started</Link>
+              </Button>
+            )}
           </motion.div>
 
           <motion.div
