@@ -17,7 +17,7 @@ type Ctx = {
   user: UserSummary | null;
   isAuthenticated: boolean;
   isBackendOnline: boolean | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (fullName: string, email: string, password: string) => Promise<void>;
   loginWithOAuth: (provider: "google" | "microsoft", code?: string, idToken?: string, redirectUri?: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -150,9 +150,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, rememberMe = false) => {
     try {
-      const res = await authService.login(email, password);
+      const res = await authService.login(email, password, rememberMe);
       setUser(res.user);
       setIsAuthenticated(true);
       setIsBackendOnline(true);

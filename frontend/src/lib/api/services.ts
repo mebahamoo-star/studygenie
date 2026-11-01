@@ -58,13 +58,13 @@ export const authService = {
 
 
 
-  async login(email: string, password: string): Promise<AuthResponse> {
+  async login(email: string, password: string, rememberMe = false): Promise<AuthResponse> {
 
     const res = await fetchApi<AuthResponse>("/api/auth/login", {
 
       method: "POST",
 
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, rememberMe }),
 
     });
 
