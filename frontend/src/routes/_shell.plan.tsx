@@ -13,6 +13,7 @@ import {
   Siren,
   Sliders,
   Sparkles,
+  RefreshCw,
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ import { fetchApi } from "@/lib/api/client";
 import { getUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, isCourseMaterialUploaded, saveActiveCourse } from "@/lib/courses-util";
 import type { Course, PlanResponseData } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+import { useApp } from "@/lib/app-state";
 
 export const Route = createFileRoute("/_shell/plan")({
   head: pageHead("Study plan", "Your day-by-day study and review timeline."),
@@ -65,6 +67,9 @@ interface StoredTaskKit {
 
 function Plan() {
   const nav = useNavigate();
+  const { addPoints } = useApp();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [doneMap, setDoneMap] = useState<Record<string, string[]>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [survival, setSurvival] = useState(false);
@@ -116,6 +121,86 @@ function Plan() {
 
     loadSubjects();
   }, []);
+
+  useEffect(() => {
+    const prefix = getUserStoragePrefix();
+    const loadDoneState = () => {
+      const map: Record<string, string[]> = {};
+      planDays.forEach((d) => {
+        const raw = localStorage.getItem(`sg-${prefix}-checklist-done-${d.date}`);
+        if (raw) {
+          try {
+            map[d.date] = JSON.parse(raw);
+          } catch {}
+        }
+      });
+      setDoneMap(map);
+    };
+    loadDoneState();
+
+    const handleSync = (e: any) => {
+      if (e?.detail?.date) {
+        setDoneMap((prev) => ({ ...prev, [e.detail.date]: e.detail.list }));
+      } else {
+        loadDoneState();
+      }
+    };
+    window.addEventListener("sg-checklist-updated", handleSync);
+    return () => window.removeEventListener("sg-checklist-updated", handleSync);
+  }, [planDays]);
+
+  const isTaskDone = (dateStr: string, t: DayTask) => {
+    const prefix = getUserStoragePrefix();
+    const taskId = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
+    const list = doneMap[dateStr] || [];
+    return list.includes(taskId) || list.includes(t.ref) || list.includes(t.title);
+  };
+
+  const togglePlanTaskDone = (dateStr: string, t: DayTask) => {
+    const prefix = getUserStoragePrefix();
+    const taskId = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
+    const currentList = doneMap[dateStr] || [];
+    const isDone = currentList.includes(taskId) || currentList.includes(t.ref) || currentList.includes(t.title);
+    const nextList = isDone ? currentList.filter((id) => id !== taskId && id !== t.ref && id !== t.title) : [...currentList, taskId];
+
+    setDoneMap((prev) => ({ ...prev, [dateStr]: nextList }));
+    try {
+      localStorage.setItem(`sg-${prefix}-checklist-done-${dateStr}`, JSON.stringify(nextList));
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (dateStr === todayStr) {
+        localStorage.setItem(`sg-${prefix}-checklist-done`, JSON.stringify(nextList));
+      }
+      window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateStr, list: nextList } }));
+    } catch {}
+
+    if (!isDone) {
+      addPoints(15);
+      toast.success("+15 XP! Topic marked as completed 🎉");
+    }
+  };
+
+  const handleRefreshFromServer = async () => {
+    if (!selectedCourse) return;
+    setIsRefreshing(true);
+    try {
+      if (selectedCourse.id && !String(selectedCourse.id).startsWith("course-") && !String(selectedCourse.id).startsWith("c-")) {
+        const remote = await browseService.getCoursePlan(selectedCourse.id);
+        if (remote?.tasks && remote.tasks.length > 0) {
+          const prefix = getUserStoragePrefix();
+          localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.id}`, JSON.stringify(remote));
+          localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.name}`, JSON.stringify(remote));
+          formatAndSetTasks(remote.tasks, selectedCourse);
+          toast.success("Plan refreshed successfully from server!");
+          return;
+        }
+      }
+      toast.info("Plan is already up to date.");
+    } catch (err: any) {
+      toast.error(err?.message || "Could not refresh plan from server.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleSelectSubject = async (c: Course) => {
     if (!isCourseMaterialUploaded(c)) {
@@ -638,7 +723,56 @@ function Plan() {
         </Card>
       ) : (
         <div className="relative flex flex-col gap-6 pl-8 before:absolute before:left-3 before:top-2 before:h-full before:w-0.5 before:bg-border">
-          {planDays.map((day, i) => (
+          {/* Smart Adaptive Progress & Daily Hours Card */}
+      {planDays.length > 0 && (() => {
+        const allTasks = planDays.flatMap((d) => d.tasks.map((t) => ({ ...t, date: d.date })));
+        const totalTasksCount = allTasks.length;
+        const completedTasksCount = allTasks.filter((t) => isTaskDone(t.date, t)).length;
+        const totalPlannedMinutes = allTasks.reduce((sum, t) => sum + (t.min || 30), 0);
+        const completedMinutes = allTasks.filter((t) => isTaskDone(t.date, t)).reduce((sum, t) => sum + (t.min || 30), 0);
+        const progressPct = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
+        const totalPlannedHours = (totalPlannedMinutes / 60).toFixed(1);
+        const completedHours = (completedMinutes / 60).toFixed(1);
+
+        return (
+          <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 via-card to-gold/5 p-4 shadow-sm">
+            <div className="flex flex-col justify-center">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Course Completion</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-2xl font-bold text-foreground">{completedTasksCount} / {totalTasksCount}</span>
+                <span className="text-xs font-semibold text-primary font-bold">({progressPct}% finished)</span>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="h-full bg-primary transition-all duration-500 rounded-full" style={{ width: `${progressPct}%` }} />
+              </div>
+            </div>
+            <div className="flex flex-col justify-center border-t sm:border-t-0 sm:border-l border-border/60 sm:pl-4 pt-2 sm:pt-0">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Study Time Progress</div>
+              <div className="mt-1 flex items-baseline gap-1.5 font-display text-2xl font-bold text-foreground">
+                <span>{completedHours}h</span>
+                <span className="text-xs font-medium text-muted-foreground">/ {totalPlannedHours}h total</span>
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground font-medium">
+                ⏱️ Daily Target: {(totalPlannedMinutes / Math.max(1, planDays.length * 60)).toFixed(1)} hrs/day across {planDays.length} days
+              </div>
+            </div>
+            <div className="flex items-center justify-end border-t sm:border-t-0 sm:border-l border-border/60 sm:pl-4 pt-2 sm:pt-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshFromServer}
+                disabled={isRefreshing}
+                className="w-full sm:w-auto gap-2 font-semibold text-xs border-primary/30 hover:bg-primary/10 hover:text-primary shadow-xs"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-primary")} />
+                {isRefreshing ? "Syncing..." : "Refresh Plan"}
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {planDays.map((day, i) => (
             <div key={day.date + i} className="relative">
               <span
                 className={cn(
@@ -677,7 +811,23 @@ function Plan() {
                             {t.tag === "STUDY" ? <BookOpen className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
                             {t.tag}
                           </span>
-                          <span className="font-semibold text-foreground text-sm sm:text-base">
+                          <button
+                            type="button"
+                            aria-label="Toggle completed"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePlanTaskDone(day.date, t);
+                            }}
+                            className={cn(
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all cursor-pointer",
+                              isTaskDone(day.date, t)
+                                ? "border-emerald-500 bg-emerald-500 text-white shadow-xs"
+                                : "border-border hover:border-primary"
+                            )}
+                          >
+                            {isTaskDone(day.date, t) && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                          </button>
+                          <span className={cn("font-semibold text-sm sm:text-base transition-all", isTaskDone(day.date, t) ? "line-through text-muted-foreground opacity-60" : "text-foreground")}>
                             {t.title}
                           </span>
                         </div>

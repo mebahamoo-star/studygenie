@@ -142,16 +142,26 @@ async def parse_syllabus(
         content_excerpt = "\n\n".join(sub_summaries)[:15000]
 
         given_hours = 0.0
+        given_minutes = 0.0
+        given_imp = 3
         if isinstance(t, dict):
+            given_minutes = float(t.get("estimated_minutes") or t.get("minutes") or 0.0)
             given_hours = float(t.get("estimated_hours") or t.get("hours") or 0.0)
+            given_imp = int(t.get("importance") or 3)
         else:
+            given_minutes = float(getattr(t, "estimated_minutes", 0.0) or 0.0)
             given_hours = float(getattr(t, "estimated_hours", 0.0) or 0.0)
+            given_imp = int(getattr(t, "importance", 3) or 3)
 
-        if given_hours > 0:
-            computed_hours = max(0.5, min(40.0, given_hours))
-            computed_hours = round(computed_hours * 2) / 2
+        if given_minutes > 0:
+            computed_hours = max(0.08, min(40.0, round(given_minutes / 60.0, 2)))
+        elif given_hours > 0:
+            computed_hours = max(0.08, min(40.0, round(given_hours, 2)))
         else:
-            computed_hours = max(1.0, min(25.0, float(len(sub_titles))))
+            # Fallback based on subtopic depth: brief topic = 0.17h (10 mins), standard = 0.35h-0.5h
+            computed_hours = max(0.17, min(3.0, round(max(1, len(sub_titles)) * 0.25, 2)))
+
+        final_importance = max(1, min(5, given_imp))
 
         normalized_topics.append(
             TopicItem(
@@ -159,7 +169,7 @@ async def parse_syllabus(
                 chapter_title=category_title,
                 category_title=category_title,
                 estimated_hours=computed_hours,
-                importance=4,
+                importance=final_importance,
                 subtopics=sub_objects if sub_objects else sub_titles,
                 content_excerpt=content_excerpt,
             )

@@ -536,8 +536,8 @@ public class CourseService {
                         String.valueOf(t.getId()),
                         t.getChapterTitle(),
                         t.getOrderIndex(),
-                        t.getEstimatedHours(),
-                        1 // default importance
+                        t.getEstimatedHours() != null && t.getEstimatedHours() > 0 ? t.getEstimatedHours() : 0.5,
+                        t.getImportance() != null && t.getImportance() > 0 ? t.getImportance() : 3
                 ))
                 .collect(Collectors.toList());
 
@@ -649,8 +649,8 @@ public class CourseService {
                         String.valueOf(t.getId()),
                         t.getChapterTitle(),
                         t.getOrderIndex(),
-                        t.getEstimatedHours(),
-                        1
+                        t.getEstimatedHours() != null && t.getEstimatedHours() > 0 ? t.getEstimatedHours() : 0.5,
+                        t.getImportance() != null && t.getImportance() > 0 ? t.getImportance() : 3
                 ))
                 .collect(Collectors.toList());
 

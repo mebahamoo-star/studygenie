@@ -39,6 +39,10 @@ public class Topic {
     @Column(name = "estimated_hours", nullable = false)
     private Double estimatedHours;
 
+    @Column(name = "importance")
+    @Builder.Default
+    private Integer importance = 3;
+
     @Column(name = "content_excerpt", columnDefinition = "TEXT")
     private String contentExcerpt;
 

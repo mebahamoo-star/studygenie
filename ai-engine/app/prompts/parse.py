@@ -9,7 +9,7 @@ SYSTEM_INSTRUCTION = (
     "distinct concepts into just 1 or 2 vague high-level modules. Every major concept, procedure, or section must be its own "
     "distinct topic entry with detailed, rich subtopics (including step-by-step procedures, formulas, definitions, and "
     "academic explanations displayed in the expandable Accordion). Generate EXACTLY 10 high-yield study flashcards that test "
-    "definitions, comparisons, formulas, and practical applications."
+    "definitions, comparisons, formulas, and practical applications. For EVERY topic, evaluate its realistic study time based on actual content depth and provide estimated_minutes (e.g. 5-15 min for short introductory concepts, logistics, or basic definitions; 20-40 min for standard concepts; 60-90 min for complex multi-step algorithms, math proofs, or dense technical theory; NEVER assign 60+ minutes to brief or trivial topics) and an importance rating from 1 (minor/introductory) to 5 (critical core exam concept)."
 )
 
 # Backward compatibility alias
@@ -38,6 +38,14 @@ COURSE_ANALYSIS_SCHEMA = {
                     "categoryTitle": {
                         "type": "STRING",
                         "description": "Precise name of the specific topic, mechanism, or section."
+                    },
+                    "estimated_minutes": {
+                        "type": "NUMBER",
+                        "description": "Realistic active study time in minutes to learn this topic thoroughly (5-15 min for quick overview/intro/definitions, 20-40 min for standard concepts, 60-90 min for dense algorithms/math/complex mechanisms). Do NOT give 60+ min to trivial or introductory topics."
+                    },
+                    "importance": {
+                        "type": "INTEGER",
+                        "description": "Exam weight and difficulty rating from 1 (introductory/trivial/logistics) to 5 (critical core exam concept)."
                     },
                     "subtopics": {
                         "type": "ARRAY",
