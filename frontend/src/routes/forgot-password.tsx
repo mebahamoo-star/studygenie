@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Capacitor } from "@capacitor/core";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, CheckCircle2, KeyRound, Mail, RefreshCw, ShieldCheck } from "lucide-react";
@@ -146,7 +147,7 @@ function ForgotPasswordPage() {
       {/* Main Form View */}
       <div className="flex flex-col justify-between p-6 sm:p-8 md:p-12">
         <header className="flex items-center justify-between">
-          <Link to="/">
+          <Link to={Capacitor.isNativePlatform() ? "/login" : "/"}>
             <GenieLogo />
           </Link>
           <div className="flex items-center gap-3">

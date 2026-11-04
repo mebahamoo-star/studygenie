@@ -1,5 +1,6 @@
 import { createFileRoute, redirect, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
 import { motion } from "framer-motion";
 import { CalendarCheck, Layers, Trophy } from "lucide-react";
 import { Branches, Plot, Riffle } from "@lucasmarkes/hairline/react";
@@ -17,6 +18,9 @@ export const Route = createFileRoute("/")({
       const token = getStoredAccessToken();
       if (token) {
         throw redirect({ to: "/dashboard" });
+      }
+      if (Capacitor.isNativePlatform()) {
+        throw redirect({ to: "/login" });
       }
     }
   },
@@ -56,6 +60,8 @@ function Landing() {
   const { isAuthenticated } = useApp();
   const navigate = useNavigate();
 
+  const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform();
+
   const hasStoredSession =
     isAuthenticated ||
     (typeof window !== "undefined" && Boolean(getStoredAccessToken()));
@@ -63,8 +69,10 @@ function Landing() {
   useEffect(() => {
     if (hasStoredSession) {
       navigate({ to: "/dashboard", replace: true });
+    } else if (isNative) {
+      navigate({ to: "/login", replace: true });
     }
-  }, [hasStoredSession, navigate]);
+  }, [hasStoredSession, isNative, navigate]);
 
   if (hasStoredSession) {
     return (
@@ -77,6 +85,10 @@ function Landing() {
         </div>
       </div>
     );
+  }
+
+  if (isNative) {
+    return null;
   }
 
   return (

@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { Capacitor } from "@capacitor/core";
 import { AlertCircle, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -263,7 +264,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       </div>
       <div className="flex flex-col bg-background p-8">
         <div className="flex items-center justify-between">
-          <Link to="/">
+          <Link to={Capacitor.isNativePlatform() ? "/login" : "/"}>
             <GenieLogo />
           </Link>
           <div className="flex items-center gap-3">

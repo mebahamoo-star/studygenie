@@ -9,6 +9,7 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { type ReactNode } from "react";
+import { Capacitor } from "@capacitor/core";
 
 import appCss from "../styles.css?url";
 import { AppProvider, themeInitScript } from "../lib/app-state";
@@ -25,10 +26,10 @@ function NotFoundComponent() {
         </p>
         <div className="mt-6">
           <Link
-            to="/"
+            to={Capacitor.isNativePlatform() ? "/login" : "/"}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            {Capacitor.isNativePlatform() ? "Go to login" : "Go home"}
           </Link>
         </div>
       </div>
