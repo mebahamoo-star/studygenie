@@ -1,6 +1,10 @@
+import { Capacitor } from "@capacitor/core";
 import type { ApiResponse, AuthResponse, UserSummary } from "./types";
 
 export function getApiBaseUrl(): string {
+  if (Capacitor.isNativePlatform()) {
+    return (import.meta.env["VITE_API_URL"] as string) || "http://10.0.2.2:8080";
+  }
   if (typeof window !== "undefined") {
     // In browser, always use relative path ("") so all API requests go through
     // Vite's reverse proxy on the same port (5173). This allows mobile devices,

@@ -22,6 +22,7 @@ import { fetchAndSyncExams, loadExamsForUser, isCourseEnrolled, type Exam } from
 import { hasUserEnrolledCourses, getUserCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
 import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
+import { MobileBottomNav } from "./MobileBottomNav";
 import {
   Sidebar,
   SidebarContent,
@@ -311,7 +312,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-4 md:px-6 backdrop-blur">
           {/* Live Exam News Ticker */}
           <div className="flex min-w-0 flex-1 items-center gap-3 mr-4">
-            <SidebarTrigger className="-ml-1" />
+            <SidebarTrigger className="-ml-1 hidden md:flex" />
+            <Link to="/dashboard" className="flex md:hidden items-center shrink-0 mr-1">
+              <Genie className="h-7 w-7" />
+            </Link>
             <Separator orientation="vertical" className="mr-1 h-5 hidden sm:block" />
 
             <div className={cn("flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold shadow-sm transition-colors", tickerBadgeStyle)}>
@@ -424,7 +428,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 p-6 sm:p-8">{children}</main>
+        <main className="flex-1 p-4 pb-28 sm:p-8 sm:pb-8">{children}</main>
+        <MobileBottomNav />
       </SidebarInset>
     </SidebarProvider>
   );

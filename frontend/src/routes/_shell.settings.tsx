@@ -31,7 +31,7 @@ export const Route = createFileRoute("/_shell/settings")({
 
 function Settings() {
   const nav = useNavigate();
-  const { lang, setLang, user } = useApp();
+  const { lang, setLang, user, logout } = useApp();
   const ar = lang === "ar";
   const [selectedSound, setSelectedSound] = useState<CelebrationSoundType>("magic");
   const [uniName, setUniName] = useState("");
@@ -287,7 +287,14 @@ function Settings() {
         <Button variant="outline" size="lg" onClick={handleResetLocalData}>
           <Trash2 className="h-4 w-4" /> Clear Local Data
         </Button>
-        <Button variant="destructive" size="lg" onClick={() => nav({ to: "/" })}>
+        <Button
+          variant="destructive"
+          size="lg"
+          onClick={async () => {
+            await logout();
+            nav({ to: "/login" });
+          }}
+        >
           <LogOut className="h-4 w-4" /> {ar ? "تسجيل الخروج" : "Log out"}
         </Button>
       </div>

@@ -28,5 +28,10 @@ export default defineConfig({
   },
   tanstackStart: {
     server: { entry: "server" },
+    prerender: {
+      enabled: true,
+      autoSubfolderIndex: true,
+      crawlLinks: true,
+    },
   },
 });
