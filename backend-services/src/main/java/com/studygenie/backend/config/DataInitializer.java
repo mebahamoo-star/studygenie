@@ -25,6 +25,9 @@ public class DataInitializer implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
+    @org.springframework.beans.factory.annotation.Value("${app.data-initializer.enabled:true}")
+    private boolean enabled;
+
     private final UniversityRepository universityRepository;
     private final CollegeRepository collegeRepository;
     private final CourseRepository courseRepository;
@@ -46,6 +49,10 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        if (!enabled) {
+            log.info("DataInitializer disabled by config. Skipping data initialization.");
+            return;
+        }
         if (universityRepository.count() > 0) {
             log.info("Database already seeded with universities. Skipping data initialization.");
             return;
