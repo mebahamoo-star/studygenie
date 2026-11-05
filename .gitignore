@@ -9,6 +9,7 @@ target/
 HELP.md
 
 ### IDE ###
+.metals/
 .idea/
 *.iml
 *.iws
@@ -24,7 +25,6 @@ __pycache__/
 *$py.class
 *.egg-info/
 .eggs/
-.env
 .venv
 venv/
 env/
@@ -50,8 +50,10 @@ coverage/
 
 ### Environment & Secrets ###
 .env
+.env.*
 .env.local
 .env.*.local
+.env.neon_backup
 *.pem
 *.key
 application-local.yml

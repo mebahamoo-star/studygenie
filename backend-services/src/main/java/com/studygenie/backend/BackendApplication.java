@@ -83,7 +83,11 @@ public class BackendApplication {
 						System.setProperty("spring.datasource.username", parts[0]);
 					}
 					if (System.getProperty("spring.datasource.password") == null && System.getenv("SPRING_DATASOURCE_PASSWORD") == null) {
-						System.setProperty("spring.datasource.password", parts[1]);
+						String pass = parts[1];
+						try {
+							pass = java.net.URLDecoder.decode(pass, java.nio.charset.StandardCharsets.UTF_8.name());
+						} catch (Exception ignored) {}
+						System.setProperty("spring.datasource.password", pass);
 					}
 				}
 				String host = uri.getHost();
@@ -97,7 +101,7 @@ public class BackendApplication {
 				}
 				System.setProperty("spring.datasource.driver-class-name", "org.postgresql.Driver");
 				System.setProperty("spring.jpa.properties.hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
-				log.info("Configured Neon PostgreSQL JDBC DataSource from DATABASE_URL: jdbc:postgresql://{}:{}/{}", host, port, dbName);
+				log.info("Configured PostgreSQL / Supabase JDBC DataSource from DATABASE_URL: jdbc:postgresql://{}:{}/{}", host, port, dbName);
 			} catch (Exception e) {
 				log.warn("Failed to parse DATABASE_URL for Neon PostgreSQL: {}", e.getMessage());
 			}
