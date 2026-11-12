@@ -7,6 +7,7 @@ import { Genie, GenieLogo } from "./Genie";
 import { ThemeToggle } from "./AppShell";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { PasswordInput } from "./ui/password-input";
 import { Label } from "./ui/label";
 import { Checkbox } from "./ui/checkbox";
 import { useApp } from "@/lib/app-state";
@@ -368,9 +369,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             </div>
             <div className="grid gap-2">
               <Label>Password</Label>
-              <Input
+              <PasswordInput
                 className="h-11 rounded-xl"
-                type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

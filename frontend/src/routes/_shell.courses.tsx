@@ -2,7 +2,9 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { CalendarIcon, Clock, Flame, Plus, RotateCcw, Shield, Trash2, Upload, Wand2, BookOpen, ChevronDown, ChevronUp, Sparkles, Loader2, Flag, User, Brain, HelpCircle, Check, Pencil } from "lucide-react";
+import { CalendarIcon, Clock, Flame, Plus, RotateCcw, Shield, Trash2, Upload, Wand2, BookOpen, ChevronDown, ChevronUp, Sparkles, Loader2, Flag, User, Brain, HelpCircle, Check, Pencil, MoreHorizontal } from "lucide-react";
+
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 import { ReportCourseDialog } from "@/components/ReportCourseDialog";
 
@@ -626,388 +628,295 @@ function CoursesPage() {
 
 
 
+  const MAX_VISIBLE_TABS = 5;
+
+  const { visibleCourses, overflowCourses } = useMemo(() => {
+    if (courseList.length <= MAX_VISIBLE_TABS) {
+      return { visibleCourses: courseList, overflowCourses: [] };
+    }
+    const selIdx = courseList.findIndex((c) => String(c.id) === String(sel));
+    if (selIdx >= MAX_VISIBLE_TABS) {
+      const visible = [
+        ...courseList.slice(0, MAX_VISIBLE_TABS - 1),
+        courseList[selIdx],
+      ];
+      const overflow = courseList.filter(
+        (c) => !visible.some((vc) => String(vc.id) === String(c.id))
+      );
+      return { visibleCourses: visible, overflowCourses: overflow };
+    }
+    return {
+      visibleCourses: courseList.slice(0, MAX_VISIBLE_TABS),
+      overflowCourses: courseList.slice(MAX_VISIBLE_TABS),
+    };
+  }, [courseList, sel]);
+
   return (
-
-    <div>
-
-      <PageTitle title="My Courses" sub="Manage your courses and study materials" />
-
-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-
-        <div className="flex flex-col gap-2">
-
-          <div className="mb-1 flex items-center justify-between">
-
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">College Courses</span>
-
-            <Dialog open={open} onOpenChange={setOpen}>
-
-              <DialogTrigger asChild>
-
-                <Button size="sm" variant="outline" className="h-8 gap-1 rounded-lg text-xs font-semibold">
-
-                  <Plus className="h-3.5 w-3.5" /> Add Course
-
-                </Button>
-
-              </DialogTrigger>
-
-              <DialogContent className="sm:max-w-md">
-
-                <DialogHeader>
-
-                  <DialogTitle>Add Course</DialogTitle>
-
-                </DialogHeader>
-
-                <form
-
-                  onSubmit={(e) => {
-
-                    e.preventDefault();
-
-                    handleAddCourse(name, code);
-
-                  }}
-
-                  className="mt-2 flex flex-col gap-4"
-
-                >
-
-                  <div className="grid gap-2">
-
-                    <Label htmlFor="c-name">Course name</Label>
-
-                    <Input
-
-                      id="c-name"
-
-                      placeholder="e.g. Software Engineering"
-
-                      value={name}
-
-                      onChange={(e) => setName(e.target.value)}
-
-                      className="h-10 rounded-xl"
-
-                      required
-
-                    />
-
-                  </div>
-
-                  <div className="grid gap-2">
-
-                    <Label htmlFor="c-code">Course code (optional)</Label>
-
-                    <Input
-
-                      id="c-code"
-
-                      placeholder="e.g. CS 380"
-
-                      value={code}
-
-                      onChange={(e) => setCode(e.target.value)}
-
-                      className="h-10 rounded-xl"
-
-                    />
-
-                  </div>
-
-                  {collegeCatalog.filter((cc) => !courseList.some((my) => my.name.toLowerCase() === cc.name.toLowerCase())).length > 0 && (
-
-                    <div className="grid gap-1.5 rounded-xl border border-primary/20 bg-primary/5 p-3">
-
-                      <Label className="text-xs font-bold text-primary flex items-center gap-1.5">
-
-                        <Shield className="h-3.5 w-3.5" />
-
-                        Available in your College (1-Click Enroll):
-
-                      </Label>
-
-                      <div className="flex max-h-36 flex-wrap gap-1.5 overflow-auto pt-1">
-
-                        {collegeCatalog
-
-                          .filter((cc) => !courseList.some((my) => my.name.toLowerCase() === cc.name.toLowerCase()))
-
-                          .map((cc) => (
-
-                            <button
-
-                              key={cc.id || cc.name}
-
-                              type="button"
-
-                              onClick={() => handleEnrollFromCatalog(cc)}
-
-                              className="rounded-lg border border-primary/30 bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition hover:border-primary hover:bg-primary/10 flex items-center gap-1"
-
-                            >
-
-                              <Plus className="h-3 w-3 text-primary" />
-
-                              {cc.code && cc.code.toUpperCase() !== "CUSTOM" ? `${cc.code} · ` : ""}{cc.name}
-
-                            </button>
-
-                          ))}
-
-                      </div>
-
-                    </div>
-
-                  )}
-
-
-
-                  <div className="grid gap-1.5">
-
-                    <Label className="text-xs text-muted-foreground">Suggestions:</Label>
-
-                    <div className="flex max-h-36 flex-wrap gap-1.5 overflow-auto pt-1">
-
-                      {catalogSuggestions.map((s) => (
-
-                        <button
-
-                          key={s.name}
-
-                          type="button"
-
-                          onClick={() => {
-
-                            setName(s.name);
-
-                            setCode(s.code);
-
-                          }}
-
-                          className={cn(
-
-                            "rounded-lg border px-2.5 py-1 text-xs font-semibold transition hover:bg-accent",
-
-                            name === s.name && "border-primary bg-primary text-primary-foreground hover:bg-primary"
-
-                          )}
-
-                        >
-
-                          {s.code} · {s.name}
-
-                        </button>
-
-                      ))}
-
-                    </div>
-
-                  </div>
-
-                  <Button type="submit" variant="magic" className="mt-2" disabled={!name.trim()}>
-
-                    Add to My Courses
-
-                  </Button>
-
-                </form>
-
-              </DialogContent>
-
-            </Dialog>
-
-          </div>
-
-
-
-          {courseList.length === 0 ? (
-
-            <div className="rounded-xl border border-dashed bg-card/50 p-6 text-center text-sm text-muted-foreground">
-
-              No courses added yet.
-
-              <Button
-
-                size="sm"
-
-                variant="outline"
-
-                className="mt-3 w-full"
-
-                onClick={() => setOpen(true)}
-
-              >
-
-                <Plus className="mr-1 h-3.5 w-3.5" /> Add Course
-
-              </Button>
-
-            </div>
-
-          ) : (
-
-            courseList.map((c) => (
-
-              <div
-
-                key={c.id}
-
-                onClick={() => setSel(String(c.id))}
-
-                className={cn(
-
-                  "group relative cursor-pointer rounded-xl border bg-card p-4 text-left shadow-soft transition hover:border-primary/50",
-
-                  String(sel) === String(c.id) && "border-primary ring-2 ring-primary/30"
-
-                )}
-
-              >
-
-                <div className="flex items-start justify-between gap-1">
-
-                  <div>
-
-                    {c.code && c.code.toUpperCase() !== "CUSTOM" && (
-
-                      <div className="text-xs font-bold text-muted-foreground">{c.code}</div>
-
-                    )}
-
-                    <div className="font-semibold">{c.name}</div>
-
-                  </div>
-
-                  <div onClick={(e) => e.stopPropagation()}>
-
-                    <HoldToConfirmButton
-
-                      duration={1300}
-
-                      onConfirm={() => handleDeleteCourse(c.id, undefined, true)}
-
-                      className="h-7 min-w-0 px-2 py-0 text-xs font-semibold gap-1 opacity-50 transition hover:opacity-100 group-hover:opacity-100"
-
-                      title="Hold to delete course"
-
-                    >
-
-                      <Trash2 className="h-3 w-3" />
-
-                    </HoldToConfirmButton>
-
-                  </div>
-
-                </div>
-
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-1">
-                  <StatusBadge status={c.status} />
-                  {(() => {
-                    const cExam = loadExams().find(
-                      (e) => (c.id && e.courseId && String(e.courseId) === String(c.id)) ||
-                             e.course.toLowerCase().trim() === c.name.toLowerCase().trim()
-                    );
-                    if (!cExam) return null;
-                    const dLeft = Math.max(0, daysUntil(cExam.date));
-                    return (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary/80" title={`${cExam.type}: ${cExam.date}`}>
-                        <CalendarIcon className="h-3 w-3" />
-                        <span>{dLeft}d to {cExam.type.split(" ")[0]}</span>
-                      </span>
-                    );
-                  })()}
-                </div>
-
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PageTitle title="My Courses" sub="Manage your courses and study materials" />
+
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" className="h-9 gap-1.5 rounded-xl text-xs font-semibold">
+              <Plus className="h-4 w-4" /> Add Course
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Course</DialogTitle>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAddCourse(name, code);
+              }}
+              className="mt-2 flex flex-col gap-4"
+            >
+              <div className="grid gap-2">
+                <Label htmlFor="c-name">Course name</Label>
+                <Input
+                  id="c-name"
+                  placeholder="e.g. Software Engineering"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-10 rounded-xl"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="c-code">Course code (optional)</Label>
+                <Input
+                  id="c-code"
+                  placeholder="e.g. CS 380"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="h-10 rounded-xl"
+                />
               </div>
 
-            ))
+              {collegeCatalog.filter((cc) => !courseList.some((my) => my.name.toLowerCase() === cc.name.toLowerCase())).length > 0 && (
+                <div className="grid gap-1.5 rounded-xl border border-primary/20 bg-primary/5 p-3">
+                  <Label className="text-xs font-bold text-primary flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5" />
+                    Available in your College (1-Click Enroll):
+                  </Label>
+                  <div className="flex max-h-36 flex-wrap gap-1.5 overflow-auto pt-1">
+                    {collegeCatalog
+                      .filter((cc) => !courseList.some((my) => my.name.toLowerCase() === cc.name.toLowerCase()))
+                      .map((cc) => (
+                        <button
+                          key={cc.id || cc.name}
+                          type="button"
+                          onClick={() => handleEnrollFromCatalog(cc)}
+                          className="rounded-lg border border-primary/30 bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition hover:border-primary hover:bg-primary/10 flex items-center gap-1"
+                        >
+                          <Plus className="h-3 w-3 text-primary" />
+                          {cc.code && cc.code.toUpperCase() !== "CUSTOM" ? `${cc.code} · ` : ""}{cc.name}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
 
-          )}
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Suggestions:</Label>
+                <div className="flex max-h-36 flex-wrap gap-1.5 overflow-auto pt-1">
+                  {catalogSuggestions.map((s) => (
+                    <button
+                      key={s.name}
+                      type="button"
+                      onClick={() => {
+                        setName(s.name);
+                        setCode(s.code);
+                      }}
+                      className={cn(
+                        "rounded-lg border px-2.5 py-1 text-xs font-semibold transition hover:bg-accent",
+                        name === s.name && "border-primary bg-primary text-primary-foreground hover:bg-primary"
+                      )}
+                    >
+                      {s.code} · {s.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-        </div>
-
-
-
-        {courseList.length === 0 ? (
-
-          <Card className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
-
-            <Genie pose="low" className="mb-4 h-24 w-24" />
-
-            <h2 className="text-xl font-semibold text-foreground">Welcome to College Courses</h2>
-
-            <p className="mt-1 max-w-sm text-sm">
-
-              Add a course you are taking this semester to upload its syllabus and create tailored study plans.
-
-            </p>
-
-            <Button onClick={() => setOpen(true)} variant="magic" className="mt-6">
-
-              <Plus className="mr-1 h-4 w-4" /> Add Your First Course
-
-            </Button>
-
-          </Card>
-
-        ) : loadingSelectedTopics ? (
-
-          <Card className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
-
-            <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
-
-            <h3 className="text-lg font-semibold text-foreground">Loading Course Syllabus...</h3>
-
-            <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-
-              Retrieving chapters and topics from your college library.
-
-            </p>
-
-          </Card>
-
-        ) : course && ((course.status === "ready" && course.topics && course.topics.length > 0) || (course.topics && course.topics.length > 0)) ? (
-
-          <JoinChallenge
-
-            key={String(course.id) || course.name}
-
-            course={course}
-
-            onTopicsUpdated={(newTopics) => handleCourseStatusUpdate("ready", newTopics)}
-
-            onResetChapters={() => handleResetChapters(course.id)}
-
-            onDeleteCourse={() => handleDeleteCourse(course.id)}
-
-          />
-
-        ) : (
-
-          <EmptyUpload
-
-            key={String(course?.id) || course?.name || "empty"}
-
-            processing={course?.status === "processing"}
-
-            course={course}
-
-            onReady={(extractedTopics, realId) => handleCourseStatusUpdate("ready", extractedTopics, realId)}
-
-            onDeleteCourse={() => handleDeleteCourse(course?.id || "")}
-
-          />
-
-        )}
-
+              <Button type="submit" variant="magic" className="mt-2" disabled={!name.trim()}>
+                Add to My Courses
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
+      {/* Horizontal Course Tabs Bar */}
+      {courseList.length > 0 && (
+        <div className="flex items-center gap-2 border-b border-border/70 pb-3 overflow-x-auto no-scrollbar">
+          {visibleCourses.map((c) => {
+            const isSelected = String(sel) === String(c.id);
+            return (
+              <div key={c.id} className="relative group shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSel(String(c.id))}
+                  className={cn(
+                    "flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-semibold transition border pr-8",
+                    isSelected
+                      ? "border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary/30 font-bold"
+                      : "border-border/60 bg-card hover:border-primary/40 hover:bg-accent/40 text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-2 w-2 rounded-full shrink-0",
+                      c.status === "ready"
+                        ? "bg-emerald-500 shadow-xs shadow-emerald-500/50"
+                        : c.status === "processing"
+                          ? "bg-amber-500 animate-pulse"
+                          : "bg-muted-foreground/40"
+                    )}
+                    title={c.status === "ready" ? "Syllabus ready" : c.status === "processing" ? "Processing" : "No syllabus uploaded"}
+                  />
+                  {c.code && c.code.toUpperCase() !== "CUSTOM" && (
+                    <span className="font-mono text-[11px] opacity-75">{c.code}</span>
+                  )}
+                  <span className="truncate max-w-[120px] sm:max-w-[170px]">{c.name}</span>
+                </button>
+
+                {/* Tab More Menu (Delete Course) */}
+                <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-6 w-6 rounded-md hover:bg-background/80 flex items-center justify-center text-muted-foreground/60 hover:text-foreground opacity-60 group-hover:opacity-100 transition"
+                        title="Course actions"
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCourse(c.id);
+                        }}
+                        className="text-destructive focus:text-destructive cursor-pointer gap-2 text-xs font-semibold"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete Course
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Overflow courses dropdown if > 5 */}
+          {overflowCourses.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5 rounded-xl text-xs font-semibold shrink-0">
+                  <span>+{overflowCourses.length} more</span>
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-60 max-h-72 overflow-y-auto">
+                {overflowCourses.map((oc) => {
+                  const isSelected = String(sel) === String(oc.id);
+                  return (
+                    <DropdownMenuItem
+                      key={oc.id}
+                      onClick={() => setSel(String(oc.id))}
+                      className={cn(
+                        "flex items-center justify-between text-xs cursor-pointer py-2",
+                        isSelected && "font-bold text-primary bg-primary/5"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 truncate pr-2">
+                        <span
+                          className={cn(
+                            "h-2 w-2 rounded-full shrink-0",
+                            oc.status === "ready"
+                              ? "bg-emerald-500"
+                              : oc.status === "processing"
+                                ? "bg-amber-500"
+                                : "bg-muted-foreground/40"
+                          )}
+                        />
+                        <span className="truncate">{oc.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="h-6 w-6 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCourse(oc.id);
+                        }}
+                        title="Delete course"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* Quick Add Course Button in Tab Row */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 w-9 p-0 rounded-xl border-dashed border-border/80 hover:border-primary text-muted-foreground hover:text-primary shrink-0"
+            onClick={() => setOpen(true)}
+            title="Add another course"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Main Content Area (Full width) */}
+      {courseList.length === 0 ? (
+        <Card className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+          <Genie pose="low" className="mb-4 h-24 w-24" />
+          <h2 className="text-xl font-semibold text-foreground">Welcome to College Courses</h2>
+          <p className="mt-1 max-w-sm text-sm">
+            Add a course you are taking this semester to upload its syllabus and create tailored study plans.
+          </p>
+          <Button onClick={() => setOpen(true)} variant="magic" className="mt-6">
+            <Plus className="mr-1 h-4 w-4" /> Add Your First Course
+          </Button>
+        </Card>
+      ) : loadingSelectedTopics ? (
+        <Card className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
+          <Loader2 className="mb-4 h-8 w-8 animate-spin text-primary" />
+          <h3 className="text-lg font-semibold text-foreground">Loading Course Syllabus...</h3>
+          <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+            Retrieving chapters and topics from your college library.
+          </p>
+        </Card>
+      ) : course && ((course.status === "ready" && course.topics && course.topics.length > 0) || (course.topics && course.topics.length > 0)) ? (
+        <JoinChallenge
+          key={String(course.id) || course.name}
+          course={course}
+          onTopicsUpdated={(newTopics) => handleCourseStatusUpdate("ready", newTopics)}
+          onResetChapters={() => handleResetChapters(course.id)}
+          onDeleteCourse={() => handleDeleteCourse(course.id)}
+        />
+      ) : (
+        <EmptyUpload
+          key={String(course?.id) || course?.name || "empty"}
+          processing={course?.status === "processing"}
+          course={course}
+          onReady={(extractedTopics, realId) => handleCourseStatusUpdate("ready", extractedTopics, realId)}
+          onDeleteCourse={() => handleDeleteCourse(course?.id || "")}
+        />
+      )}
     </div>
-
   );
-
 }
 
 
@@ -1784,6 +1693,7 @@ function JoinChallenge({
   const [mode, setMode] = useState<"normal" | "survival">("normal");
   const [dailyHours, setDailyHours] = useState<number>(2.5);
   const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [isExamExpanded, setIsExamExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploadingMore, setUploadingMore] = useState(false);
   // Topics state declared before any usage
@@ -3013,25 +2923,26 @@ function JoinChallenge({
 
 
 
-      {/* Associated Exam Banner / Details */}
-      <div className="mb-5 rounded-2xl border bg-card p-4 shadow-sm transition hover:border-primary/40">
+      {/* Associated Exam Banner - Compact 1-line by default, Expandable */}
+      <div className="mb-4 rounded-xl border bg-card/90 shadow-xs transition hover:border-primary/40">
         {courseExam ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                <CalendarIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Associated Exam:
-                  </span>
-                  <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-bold text-primary">
-                    {courseExam.type || "Final Exam"}
-                  </span>
+          <div>
+            {/* 1-Line Collapsed Header */}
+            <div
+              onClick={() => setIsExamExpanded((prev) => !prev)}
+              className="flex cursor-pointer items-center justify-between gap-3 p-3 text-xs transition hover:bg-accent/30 rounded-xl"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <CalendarIcon className="h-4 w-4" />
+                </div>
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <span className="font-bold text-foreground truncate">{courseExam.type || "Final Exam"}</span>
+                  <span className="text-muted-foreground">•</span>
+                  <span className="font-semibold text-primary">{courseExam.date}</span>
                   <span
                     className={cn(
-                      "rounded-full px-2.5 py-0.5 text-xs font-bold",
+                      "rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0",
                       daysUntil(courseExam.date) < 15
                         ? "border border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400"
                         : daysUntil(courseExam.date) <= 30
@@ -3039,71 +2950,77 @@ function JoinChallenge({
                           : "border border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                     )}
                   >
-                    {Math.max(0, daysUntil(courseExam.date))} days left
+                    {Math.max(0, daysUntil(courseExam.date))}d left
                   </span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span>Exam Date: <strong className="text-foreground">{courseExam.date}</strong></span>
                   {courseExam.professor && (
-                    <>
-                      <span>•</span>
-                      <span>Prof. <strong className="text-foreground">{courseExam.professor}</strong></span>
-                    </>
+                    <span className="text-muted-foreground hidden md:inline">• Prof. {courseExam.professor}</span>
                   )}
                 </div>
               </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-medium text-muted-foreground hidden sm:inline">
+                  {isExamExpanded ? "Hide details" : "Exam details"}
+                </span>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform duration-200", isExamExpanded && "rotate-180")} />
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 gap-1.5 text-xs font-semibold"
-                onClick={() => {
-                  setExamFormType(courseExam.type || "Final Exam");
-                  setExamFormDate(courseExam.date || "");
-                  setExamFormProf(courseExam.professor || "");
-                  setExamModalOpen(true);
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" /> Edit Exam
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => nav({ to: "/exam-checkin" })}
-              >
-                View in Exam Hub
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 px-2 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                onClick={handleRemoveCourseExam}
-                title="Unlink exam reminder"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            {/* Expandable Details Area */}
+            {isExamExpanded && (
+              <div className="border-t border-border/50 px-3.5 py-3 flex flex-wrap items-center justify-between gap-3 bg-muted/20 rounded-b-xl">
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <div>Exam Type: <strong className="text-foreground">{courseExam.type || "Final Exam"}</strong></div>
+                  <div>Scheduled Date: <strong className="text-foreground">{courseExam.date}</strong></div>
+                  {courseExam.professor && (
+                    <div>Professor: <strong className="text-foreground">{courseExam.professor}</strong></div>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-xs font-semibold"
+                    onClick={() => {
+                      setExamFormType(courseExam.type || "Final Exam");
+                      setExamFormDate(courseExam.date || "");
+                      setExamFormProf(courseExam.professor || "");
+                      setExamModalOpen(true);
+                    }}
+                  >
+                    <Pencil className="h-3 w-3" /> Edit Exam
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => nav({ to: "/exam-checkin" })}
+                  >
+                    View in Exam Hub
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    onClick={handleRemoveCourseExam}
+                    title="Unlink exam reminder"
+                  >
+                    <Trash2 className="h-3 w-3" /> Unlink
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
-                <CalendarIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-foreground">No Exam Scheduled for this Course</div>
-                <p className="text-xs text-muted-foreground">
-                  Connect an exam date and professor to enable study countdowns and personalized revision schedules.
-                </p>
-              </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 text-xs">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <CalendarIcon className="h-4 w-4 text-muted-foreground/80" />
+              <span>No Exam Scheduled for this Course</span>
             </div>
             <Button
               size="sm"
-              variant="outline"
-              className="gap-1.5 font-semibold text-primary border-primary/30 hover:bg-primary/10 shadow-sm"
+              variant="ghost"
+              className="h-7 gap-1 text-xs font-semibold text-primary hover:bg-primary/10 hover:text-primary"
               onClick={() => {
                 setExamFormType("Final Exam");
                 setExamFormDate(date ? toLocalDateStr(date) : "");
@@ -3111,14 +3028,14 @@ function JoinChallenge({
                 setExamModalOpen(true);
               }}
             >
-              <Plus className="h-3.5 w-3.5" /> + Schedule Exam for this Course
+              <Plus className="h-3 w-3" /> + Schedule Exam
             </Button>
           </div>
         )}
       </div>
 
-      {/* Chapter Selection & Batch Generation Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-muted/40 p-3 shadow-xs">
+      {/* Chapter Selection & Batch Generation Toolbar (Sticky) */}
+      <div className="sticky top-2 z-20 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/95 backdrop-blur-md p-3 shadow-md">
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-foreground hover:text-primary transition">
             <input
