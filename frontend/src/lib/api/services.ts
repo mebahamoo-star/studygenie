@@ -30,112 +30,72 @@ import type {
   UserSummary,
 } from "./types";
 
-
-
 export const authService = {
-
   async register(fullName: string, email: string, password: string): Promise<AuthResponse> {
-
     const res = await fetchApi<AuthResponse>("/api/auth/register", {
-
       method: "POST",
 
       body: JSON.stringify({ fullName, email, password }),
-
     });
 
     if (res.data) saveAuthSession(res.data);
 
     return res.data!;
-
   },
 
-
-
   async login(email: string, password: string, rememberMe = false): Promise<AuthResponse> {
-
     const res = await fetchApi<AuthResponse>("/api/auth/login", {
-
       method: "POST",
 
       body: JSON.stringify({ email, password, rememberMe }),
-
     });
 
     if (res.data) saveAuthSession(res.data);
 
     return res.data!;
-
   },
 
   async forgotPassword(email: string): Promise<void> {
-
     await fetchApi("/api/auth/forgot-password", {
-
       method: "POST",
 
       body: JSON.stringify({ email }),
-
     });
-
   },
 
   async resetPassword(email: string, code: string, newPassword: string): Promise<void> {
-
     await fetchApi("/api/auth/reset-password", {
-
       method: "POST",
 
       body: JSON.stringify({ email, code, newPassword }),
-
     });
-
   },
 
-
-
   async logout(): Promise<void> {
-
     const refreshToken = getStoredRefreshToken();
 
     if (refreshToken) {
-
       try {
-
         await fetchApi("/api/auth/logout", {
-
           method: "POST",
 
           body: JSON.stringify({ refreshToken }),
-
         });
-
       } catch {
-
         // Ignore logout network errors
-
       }
-
     }
 
     clearAuthSession();
-
   },
 
-
-
   async getMe(): Promise<UserSummary> {
-
     const res = await fetchApi<UserSummary>("/api/auth/me");
 
     return res.data!;
-
   },
 
-
-
   async getOAuthInfo(redirectUri?: string): Promise<{
-
     googleConfigured: boolean;
 
     microsoftConfigured: boolean;
@@ -143,13 +103,12 @@ export const authService = {
     googleAuthUrl: string;
 
     microsoftAuthUrl: string;
-
   }> {
-
-    const url = redirectUri ? `/api/auth/oauth/info?redirectUri=${encodeURIComponent(redirectUri)}` : "/api/auth/oauth/info";
+    const url = redirectUri
+      ? `/api/auth/oauth/info?redirectUri=${encodeURIComponent(redirectUri)}`
+      : "/api/auth/oauth/info";
 
     const res = await fetchApi<{
-
       googleConfigured: boolean;
 
       microsoftConfigured: boolean;
@@ -157,47 +116,44 @@ export const authService = {
       googleAuthUrl: string;
 
       microsoftAuthUrl: string;
-
     }>(url);
 
-    return res.data || { googleConfigured: false, microsoftConfigured: false, googleAuthUrl: "", microsoftAuthUrl: "" };
-
+    return (
+      res.data || {
+        googleConfigured: false,
+        microsoftConfigured: false,
+        googleAuthUrl: "",
+        microsoftAuthUrl: "",
+      }
+    );
   },
 
-
-
-  async oauthLogin(provider: "google" | "microsoft", code?: string, idToken?: string, redirectUri?: string): Promise<AuthResponse> {
-
+  async oauthLogin(
+    provider: "google" | "microsoft",
+    code?: string,
+    idToken?: string,
+    redirectUri?: string,
+  ): Promise<AuthResponse> {
     const res = await fetchApi<AuthResponse>("/api/auth/oauth/login", {
-
       method: "POST",
 
       body: JSON.stringify({ provider, code, idToken, redirectUri }),
-
     });
 
     if (res.data) saveAuthSession(res.data);
 
     return res.data!;
-
   },
-
 };
 
-
-
 function mapBackendCourseStatus(raw: string): CourseStatus {
-
   switch (raw?.toUpperCase()) {
-
     case "READY":
-
       return "ready";
 
     case "PENDING_PARSE":
 
     case "PARSING":
-
       return "processing";
 
     case "NO_SYLLABUS":
@@ -205,81 +161,52 @@ function mapBackendCourseStatus(raw: string): CourseStatus {
     case "FAILED":
 
     default:
-
       return "none";
-
   }
-
 }
 
-
-
 export const browseService = {
-
   async getUniversities(): Promise<University[]> {
-
     const res = await fetchApi<University[]>("/api/v1/universities");
 
     return res.data || [];
-
   },
-
-
 
   async createUniversity(name: string): Promise<University> {
-
     const res = await fetchApi<University>("/api/v1/universities", {
-
       method: "POST",
 
       body: JSON.stringify({ name }),
-
     });
 
     return res.data!;
-
   },
-
-
 
   async createCollege(universityId: number | string, name: string): Promise<College> {
-
     const res = await fetchApi<College>(`/api/v1/universities/${universityId}/colleges`, {
-
       method: "POST",
 
       body: JSON.stringify({ name }),
-
     });
 
     return res.data!;
-
   },
 
-
-
   async getColleges(universityId: number | string): Promise<College[]> {
-
     const res = await fetchApi<College[]>(`/api/v1/universities/${universityId}/colleges`);
 
     return res.data || [];
-
   },
 
-
-
   async getAllCourses(collegeId?: number | string): Promise<Course[]> {
-
     const isNum = collegeId && !isNaN(Number(collegeId));
 
     const url = isNum ? `/api/v1/courses?collegeId=${collegeId}` : `/api/v1/courses`;
 
     try {
-
       const res = await fetchApi<any[]>(url);
 
       return (res.data || []).map((c) => ({
-
         id: c.id,
 
         name: c.name,
@@ -289,27 +216,17 @@ export const browseService = {
         collegeId: c.collegeId,
 
         status: mapBackendCourseStatus(c.status),
-
       }));
-
     } catch {
-
       return [];
-
     }
-
   },
 
-
-
   async getEnrolledCourses(): Promise<Course[]> {
-
     try {
-
       const res = await fetchApi<any[]>("/api/v1/courses/enrolled");
 
       return (res.data || []).map((c) => ({
-
         id: c.id,
 
         name: c.name,
@@ -319,40 +236,23 @@ export const browseService = {
         collegeId: c.collegeId,
 
         status: mapBackendCourseStatus(c.status),
-
       }));
-
     } catch {
-
       return [];
-
     }
-
   },
 
-
-
   async deleteCourse(courseId: number | string): Promise<void> {
-
     await fetchApi<void>(`/api/v1/courses/${courseId}`, {
-
       method: "DELETE",
-
     });
-
   },
 
   async resetCourseSyllabus(courseId: number | string): Promise<void> {
-
     await fetchApi<void>(`/api/v1/courses/${courseId}/syllabus`, {
-
       method: "DELETE",
-
     });
-
   },
-
-
 
   async reportCourse(data: {
     courseId?: number | string | null;
@@ -365,17 +265,13 @@ export const browseService = {
   },
 
   async enrollCourse(courseId: number | string): Promise<Course> {
-
     const res = await fetchApi<any>(`/api/v1/courses/${courseId}/enroll`, {
-
       method: "POST",
-
     });
 
     const c = res.data!;
 
     return {
-
       id: c.id,
 
       name: c.name,
@@ -385,37 +281,23 @@ export const browseService = {
       collegeId: c.collegeId,
 
       status: mapBackendCourseStatus(c.status),
-
     };
-
   },
-
-
 
   async unenrollCourse(courseId: number | string): Promise<void> {
-
     await fetchApi<void>(`/api/v1/courses/${courseId}/enroll`, {
-
       method: "DELETE",
-
     });
-
   },
 
-
-
   async syncEnrolledCourses(courseIdentifiers: (number | string)[]): Promise<Course[]> {
-
     const res = await fetchApi<any[]>("/api/v1/courses/sync-enrolled", {
-
       method: "POST",
 
       body: JSON.stringify(courseIdentifiers.map(String)),
-
     });
 
     return (res.data || []).map((c: any) => ({
-
       id: c.id,
 
       name: c.name,
@@ -425,25 +307,18 @@ export const browseService = {
       collegeId: c.collegeId,
 
       status: mapBackendCourseStatus(c.status),
-
     }));
-
   },
 
-
-
   async getCourses(collegeId: number | string): Promise<Course[]> {
-
     const isNum = collegeId && !isNaN(Number(collegeId));
 
     const url = isNum ? `/api/v1/colleges/${collegeId}/courses` : `/api/v1/courses`;
 
     try {
-
       const res = await fetchApi<any[]>(url);
 
       return (res.data || []).map((c) => ({
-
         id: c.id,
 
         name: c.name,
@@ -453,27 +328,18 @@ export const browseService = {
         collegeId: c.collegeId,
 
         status: mapBackendCourseStatus(c.status),
-
       }));
-
     } catch {
-
       return [];
-
     }
-
   },
 
-
-
   async getCourse(courseId: number | string): Promise<Course> {
-
     const res = await fetchApi<any>(`/api/v1/courses/${courseId}`);
 
     const c = res.data!;
 
     return {
-
       id: c.id,
 
       name: c.name,
@@ -483,19 +349,13 @@ export const browseService = {
       collegeId: c.collegeId,
 
       status: mapBackendCourseStatus(c.status),
-
     };
-
   },
 
-
-
   async getCourseTopics(courseId: number | string): Promise<Topic[]> {
-
     const res = await fetchApi<any[]>(`/api/v1/courses/${courseId}/topics`);
 
     return (res.data || []).map((t: any) => ({
-
       id: t.id || t.orderIndex,
 
       name: t.chapterTitle || t.name,
@@ -503,65 +363,47 @@ export const browseService = {
       durationMinutes: Math.round((t.estimatedHours || 2) * 60),
 
       contentExcerpt: t.contentExcerpt || t.content_excerpt,
-
     }));
-
   },
 
-
-
-  async addCourseTopic(courseId: number | string, chapterTitle: string, estimatedHours?: number): Promise<Topic> {
-
+  async addCourseTopic(
+    courseId: number | string,
+    chapterTitle: string,
+    estimatedHours?: number,
+  ): Promise<Topic> {
     const res = await fetchApi<any>(`/api/v1/courses/${courseId}/topics`, {
-
       method: "POST",
 
       body: JSON.stringify({ chapterTitle, estimatedHours }),
-
     });
 
     const t = res.data!;
 
     return {
-
       id: t.id || t.orderIndex,
 
       name: t.chapterTitle || chapterTitle,
 
       durationMinutes: Math.round((t.estimatedHours || 2) * 60),
-
     };
-
   },
-
-
 
   async deleteCourseTopic(courseId: number | string, topicId: number | string): Promise<void> {
-
     await fetchApi<void>(`/api/v1/courses/${courseId}/topics/${topicId}`, {
-
       method: "DELETE",
-
     });
-
   },
 
-
-
   async createCourse(collegeId: number | string, name: string): Promise<Course> {
-
     const res = await fetchApi<any>(`/api/v1/colleges/${collegeId}/courses`, {
-
       method: "POST",
 
       body: JSON.stringify({ name }),
-
     });
 
     const c = res.data!;
 
     return {
-
       id: c.id,
 
       name: c.name,
@@ -571,16 +413,17 @@ export const browseService = {
       collegeId: c.collegeId,
 
       status: mapBackendCourseStatus(c.status),
-
     };
-
   },
-
-
 
   async joinCourse(
     courseId: number | string,
-    params: { examDate: string; dailyHours: number; mode: "normal" | "survival"; selectedTopicIds?: (number | string)[] }
+    params: {
+      examDate: string;
+      dailyHours: number;
+      mode: "normal" | "survival";
+      selectedTopicIds?: (number | string)[];
+    },
   ): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/join`, {
       method: "POST",
@@ -590,18 +433,19 @@ export const browseService = {
         mode: params.mode,
         selected_topic_ids: params.selectedTopicIds,
       }),
-
     });
 
     return res.data!;
-
   },
-
-
 
   async generateOrUpdatePlan(
     courseId: number | string,
-    params: { examDate: string; dailyHours: number; mode: "normal" | "survival"; selectedTopicIds?: (number | string)[] }
+    params: {
+      examDate: string;
+      dailyHours: number;
+      mode: "normal" | "survival";
+      selectedTopicIds?: (number | string)[];
+    },
   ): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan`, {
       method: "POST",
@@ -616,21 +460,19 @@ export const browseService = {
   },
 
   async getCoursePlan(courseId: number | string): Promise<PlanResponseData> {
-
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan`);
 
     return res.data!;
-
   },
-
 };
 
-
-
 export const syllabusService = {
-
-  async parseSyllabus(file: File, courseName?: string, courseId?: number | string, languageHint = "auto"): Promise<any> {
-
+  async parseSyllabus(
+    file: File,
+    courseName?: string,
+    courseId?: number | string,
+    languageHint = "auto",
+  ): Promise<any> {
     const formData = new FormData();
 
     formData.append("file", file);
@@ -638,144 +480,98 @@ export const syllabusService = {
     if (courseName) formData.append("course_name", courseName);
 
     if (courseId && !String(courseId).startsWith("c-") && !String(courseId).startsWith("course-")) {
-
       formData.append("course_id", String(courseId));
-
     }
 
     formData.append("language_hint", languageHint);
 
-
-
     const res = await fetchApi<any>("/api/v1/syllabus/parse", {
-
       method: "POST",
 
       body: formData,
-
     });
 
     return res.data;
-
   },
-
 };
 
-
-
 export const studyService = {
-
   async generateStudyKit(courseId: number | string, topicIds: number[]): Promise<any> {
-
     const res = await fetchApi<any>("/api/v1/study-kits/generate", {
-
       method: "POST",
 
       body: JSON.stringify({ courseId, topicIds }),
-
     });
 
     return res.data;
-
   },
 
-
-
   async getDueCards(kitId: string | number, limit?: number): Promise<any[]> {
-
     const query = limit ? `?limit=${limit}` : "";
 
     const res = await fetchApi<any[]>(`/api/v1/study-kits/${kitId}/due${query}`);
 
     return res.data || [];
-
   },
 
-
-
   async reviewCards(kitId: string | number, items: ReviewItem[]): Promise<ReviewResponse> {
-
     const submissionId = crypto.randomUUID();
 
     const res = await fetchApi<ReviewResponse>(`/api/v1/study-kits/${kitId}/review`, {
-
       method: "POST",
 
       body: JSON.stringify({ submissionId, items }),
-
     });
 
     return res.data!;
-
   },
 
-
-
   async submitQuiz(
-
     kitId: string | number,
 
-    answers: { questionId: string; selectedOptionIndex: number }[]
-
+    answers: { questionId: string; selectedOptionIndex: number }[],
   ): Promise<QuizSubmissionResponse> {
-
     const submissionId = crypto.randomUUID();
 
     const res = await fetchApi<QuizSubmissionResponse>(
-
       `/api/v1/study-kits/${kitId}/quiz-submissions`,
 
       {
-
         method: "POST",
 
         body: JSON.stringify({ submissionId, answers }),
-
-      }
-
+      },
     );
 
     return res.data!;
-
   },
 
-
-
   async getProgress(kitId: string | number): Promise<any> {
-
     const res = await fetchApi<any>(`/api/v1/study-kits/${kitId}/progress`);
 
     return res.data;
-
   },
-
 };
-
-
 
 export const gamificationService = {
-
   async getProfile(): Promise<GamificationProfile> {
-
     const res = await fetchApi<GamificationProfile>("/api/v1/gamification/profile");
-
     return res.data!;
-
   },
 
-
+  async syncProgress(data: { points?: number; streak?: number }): Promise<GamificationProfile> {
+    const res = await fetchApi<GamificationProfile>("/api/v1/gamification/sync", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return res.data!;
+  },
 
   async getLeaderboard(): Promise<LeaderboardEntry[]> {
-
     const res = await fetchApi<LeaderboardEntry[]>("/api/v1/gamification/leaderboard");
-
     return res.data || [];
-
   },
-
 };
-
-
 
 export interface RemoteExam {
   id: number;
@@ -810,7 +606,9 @@ export interface CommunityChallenge {
 export const examService = {
   async getCommunityChallenges(collegeId?: number | string): Promise<CommunityChallenge[]> {
     try {
-      const url = collegeId ? `/api/v1/exams/challenges?college_id=${collegeId}` : '/api/v1/exams/challenges';
+      const url = collegeId
+        ? `/api/v1/exams/challenges?college_id=${collegeId}`
+        : "/api/v1/exams/challenges";
       const res = await fetchApi<any[]>(url);
       if (!res.data) return [];
       return res.data.map((item: any) => ({
@@ -834,7 +632,7 @@ export const examService = {
   },
 
   async getExams(): Promise<RemoteExam[]> {
-    const res = await fetchApi<RemoteExam[]>('/api/v1/exams');
+    const res = await fetchApi<RemoteExam[]>("/api/v1/exams");
     return res.data || [];
   },
 
@@ -854,18 +652,19 @@ export const examService = {
       professor: data.professor,
       uploader_name: data.uploaderName,
       student_email: data.studentEmail,
-      course_id: data.courseId != null && !isNaN(Number(data.courseId)) ? Number(data.courseId) : undefined,
+      course_id:
+        data.courseId != null && !isNaN(Number(data.courseId)) ? Number(data.courseId) : undefined,
     };
-    const res = await fetchApi<RemoteExam>('/api/v1/exams', {
-      method: 'POST',
+    const res = await fetchApi<RemoteExam>("/api/v1/exams", {
+      method: "POST",
       body: JSON.stringify(payload),
     });
     return res.data!;
   },
 
   async deleteExam(id: number | string): Promise<void> {
-    await fetchApi<void>('/api/v1/exams/' + id, {
-      method: 'DELETE',
+    await fetchApi<void>("/api/v1/exams/" + id, {
+      method: "DELETE",
     });
   },
 };
@@ -878,11 +677,14 @@ export const courseReportService = {
     details?: string;
     reportedBy?: string;
   }): Promise<any> {
-    const cid = data.courseId && !String(data.courseId).startsWith("c-") && !String(data.courseId).startsWith("course-")
-      ? Number(data.courseId)
-      : null;
-    const res = await fetchApi<any>('/api/v1/courses/report', {
-      method: 'POST',
+    const cid =
+      data.courseId &&
+      !String(data.courseId).startsWith("c-") &&
+      !String(data.courseId).startsWith("course-")
+        ? Number(data.courseId)
+        : null;
+    const res = await fetchApi<any>("/api/v1/courses/report", {
+      method: "POST",
       body: JSON.stringify({
         course_id: cid,
         course_name: data.courseName,
@@ -895,7 +697,7 @@ export const courseReportService = {
   },
 
   async getReports(): Promise<any[]> {
-    const res = await fetchApi<any[]>('/api/v1/courses/reports');
+    const res = await fetchApi<any[]>("/api/v1/courses/reports");
     return res.data || [];
   },
 };
@@ -917,14 +719,16 @@ export const adminService = {
     return res.data!;
   },
 
-  async getReports(params: {
-    status?: string;
-    reason?: string;
-    courseId?: number;
-    search?: string;
-    page?: number;
-    size?: number;
-  } = {}): Promise<AdminPageResponse<AdminReportDto>> {
+  async getReports(
+    params: {
+      status?: string;
+      reason?: string;
+      courseId?: number;
+      search?: string;
+      page?: number;
+      size?: number;
+    } = {},
+  ): Promise<AdminPageResponse<AdminReportDto>> {
     const res = await fetchApi<AdminPageResponse<AdminReportDto>>(
       `/api/admin/reports${buildQuery(params)}`,
     );
@@ -947,17 +751,19 @@ export const adminService = {
     return res.data!;
   },
 
-  async getCourses(params: {
-    universityId?: number;
-    collegeId?: number;
-    status?: string;
-    minEnrollments?: number;
-    minTopics?: number;
-    search?: string;
-    includeDeleted?: boolean;
-    page?: number;
-    size?: number;
-  } = {}): Promise<AdminPageResponse<AdminCourseDto>> {
+  async getCourses(
+    params: {
+      universityId?: number;
+      collegeId?: number;
+      status?: string;
+      minEnrollments?: number;
+      minTopics?: number;
+      search?: string;
+      includeDeleted?: boolean;
+      page?: number;
+      size?: number;
+    } = {},
+  ): Promise<AdminPageResponse<AdminCourseDto>> {
     const res = await fetchApi<AdminPageResponse<AdminCourseDto>>(
       `/api/admin/courses${buildQuery(params)}`,
     );
@@ -997,7 +803,10 @@ export const adminService = {
     });
   },
 
-  async mergeCourse(sourceCourseId: number | string, targetCourseId: number | string): Promise<AdminCourseDto> {
+  async mergeCourse(
+    sourceCourseId: number | string,
+    targetCourseId: number | string,
+  ): Promise<AdminCourseDto> {
     const res = await fetchApi<AdminCourseDto>(`/api/admin/courses/${sourceCourseId}/merge`, {
       method: "POST",
       body: JSON.stringify({ targetCourseId: Number(targetCourseId) }),
@@ -1005,7 +814,10 @@ export const adminService = {
     return res.data!;
   },
 
-  async mergeCourses(sourceCourseId: number | string, targetCourseId: number | string): Promise<AdminCourseDto> {
+  async mergeCourses(
+    sourceCourseId: number | string,
+    targetCourseId: number | string,
+  ): Promise<AdminCourseDto> {
     return this.mergeCourse(sourceCourseId, targetCourseId);
   },
 
@@ -1019,27 +831,36 @@ export const adminService = {
   async updateTopic(
     courseId: number | string,
     topicId: number | string,
-    payload: { chapterTitle?: string; title?: string; estimatedHours?: number; orderIndex?: number; weekNumber?: number },
+    payload: {
+      chapterTitle?: string;
+      title?: string;
+      estimatedHours?: number;
+      orderIndex?: number;
+      weekNumber?: number;
+    },
   ): Promise<AdminTopicDto> {
     const body = {
       chapterTitle: payload.chapterTitle ?? payload.title,
       estimatedHours: payload.estimatedHours,
       orderIndex: payload.orderIndex ?? payload.weekNumber,
     };
-    const res = await fetchApi<AdminTopicDto>(
-      `/api/admin/courses/${courseId}/topics/${topicId}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      },
-    );
+    const res = await fetchApi<AdminTopicDto>(`/api/admin/courses/${courseId}/topics/${topicId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
     return res.data!;
   },
 
   async updateCourseTopic(
     courseId: number | string,
     topicId: number | string,
-    payload: { chapterTitle?: string; title?: string; estimatedHours?: number; orderIndex?: number; weekNumber?: number },
+    payload: {
+      chapterTitle?: string;
+      title?: string;
+      estimatedHours?: number;
+      orderIndex?: number;
+      weekNumber?: number;
+    },
   ): Promise<AdminTopicDto> {
     return this.updateTopic(courseId, topicId, payload);
   },
@@ -1059,7 +880,9 @@ export const adminService = {
     return res.data || [];
   },
 
-  async createUniversity(input: string | { name: string; city?: string; website?: string }): Promise<AdminUniversityDto> {
+  async createUniversity(
+    input: string | { name: string; city?: string; website?: string },
+  ): Promise<AdminUniversityDto> {
     const name = typeof input === "string" ? input : input.name;
     const res = await fetchApi<AdminUniversityDto>("/api/admin/universities", {
       method: "POST",
@@ -1121,14 +944,16 @@ export const adminService = {
     });
   },
 
-  async getUsers(params: {
-    search?: string;
-    role?: string;
-    status?: string;
-    universityId?: number;
-    page?: number;
-    size?: number;
-  } = {}): Promise<AdminPageResponse<AdminUserDto>> {
+  async getUsers(
+    params: {
+      search?: string;
+      role?: string;
+      status?: string;
+      universityId?: number;
+      page?: number;
+      size?: number;
+    } = {},
+  ): Promise<AdminPageResponse<AdminUserDto>> {
     const res = await fetchApi<AdminPageResponse<AdminUserDto>>(
       `/api/admin/users${buildQuery(params)}`,
     );
@@ -1167,14 +992,16 @@ export const adminService = {
     return this.resetUserPassword(id);
   },
 
-  async getAuditLogs(params: {
-    adminId?: number;
-    action?: string;
-    targetType?: string;
-    search?: string;
-    page?: number;
-    size?: number;
-  } = {}): Promise<AdminPageResponse<AdminAuditLogDto>> {
+  async getAuditLogs(
+    params: {
+      adminId?: number;
+      action?: string;
+      targetType?: string;
+      search?: string;
+      page?: number;
+      size?: number;
+    } = {},
+  ): Promise<AdminPageResponse<AdminAuditLogDto>> {
     const res = await fetchApi<AdminPageResponse<AdminAuditLogDto>>(
       `/api/admin/audit-log${buildQuery(params)}`,
     );

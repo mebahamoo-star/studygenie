@@ -37,6 +37,9 @@ public class GamificationControllerTest {
     @MockBean
     private JwtService jwtService;
 
+    @MockBean
+    private com.studygenie.backend.service.gamification.LevelCalculator levelCalculator;
+
     @Test
     @WithMockUser(username = "1")
     void testGetProfile() throws Exception {

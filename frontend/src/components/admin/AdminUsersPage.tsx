@@ -184,12 +184,14 @@ export default function AdminUsersPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-muted/40 text-xs font-bold uppercase text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">User</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">University</th>
-                  <th className="px-4 py-3">Courses / Points</th>
-                  <th className="px-4 py-3 text-right">Action</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "المستخدم" : "User"}</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "الدور" : "Role"}</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "الحالة" : "Status"}</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "الجامعة" : "University"}</th>
+                  <th className="px-4 py-3">
+                    {lang === "ar" ? "الحماسة والنقاط / المقررات" : "Streak & Score / Courses"}
+                  </th>
+                  <th className="px-4 py-3 text-right">{lang === "ar" ? "الإجراء" : "Action"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -225,8 +227,33 @@ export default function AdminUsersPage() {
                       {u.universityName || "—"}
                     </td>
                     <td className="px-4 py-3.5 text-xs">
-                      <span className="font-bold">{u.enrolledCoursesCount}</span> courses ·{" "}
-                      <span className="font-bold text-primary">{u.geniePoints}</span> pts
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-flex items-center font-bold text-amber-500"
+                          title={lang === "ar" ? "الحماسة المتتالية" : "Study streak"}
+                        >
+                          <Flame className="mr-0.5 h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                          {u.streakCount ?? 0}d
+                        </span>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span
+                          className="inline-flex items-center font-bold text-primary"
+                          title={lang === "ar" ? "النقاط" : "Genie points"}
+                        >
+                          <Star className="mr-0.5 h-3.5 w-3.5 fill-amber-400 text-gold" />
+                          {u.geniePoints ?? 0} pts
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        <span className="font-semibold">{u.enrolledCoursesCount ?? 0}</span>{" "}
+                        {lang === "ar"
+                          ? u.enrolledCoursesCount === 1
+                            ? "مقرر مسجل"
+                            : "مقررات مسجلة"
+                          : u.enrolledCoursesCount === 1
+                            ? "enrolled course"
+                            : "enrolled courses"}
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       <Button
@@ -296,25 +323,49 @@ export default function AdminUsersPage() {
               <div className="space-y-5 pt-2">
                 <div className="grid grid-cols-3 gap-3 rounded-xl border border-border bg-muted/30 p-3 text-center text-xs">
                   <div>
-                    <div className="text-muted-foreground">Enrolled</div>
+                    <div className="text-muted-foreground">
+                      {lang === "ar" ? "المقررات" : "Enrolled"}
+                    </div>
                     <div className="mt-1 text-base font-extrabold">
-                      {selectedUser.enrolledCoursesCount}
+                      {selectedUser.enrolledCoursesCount ?? 0}
                     </div>
                   </div>
                   <div>
                     <div className="flex items-center justify-center gap-1 text-muted-foreground">
-                      <Star className="h-3.5 w-3.5 text-gold" /> Points
+                      <Star className="h-3.5 w-3.5 fill-amber-400 text-gold" />{" "}
+                      {lang === "ar" ? "النقاط" : "Points"}
                     </div>
-                    <div className="mt-1 text-base font-extrabold">{selectedUser.geniePoints}</div>
+                    <div className="mt-1 text-base font-extrabold">
+                      {selectedUser.geniePoints ?? 0} pts
+                    </div>
                   </div>
                   <div>
                     <div className="flex items-center justify-center gap-1 text-muted-foreground">
-                      <Flame className="h-3.5 w-3.5 text-gold" /> Streak
+                      <Flame className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />{" "}
+                      {lang === "ar" ? "الحماسة" : "Streak"}
                     </div>
                     <div className="mt-1 text-base font-extrabold">
-                      {selectedUser.streakCount}d (max {selectedUser.longestStreakDays}d)
+                      {selectedUser.streakCount ?? 0}d (max{" "}
+                      {selectedUser.longestStreakDays ?? selectedUser.streakCount ?? 0}d)
                     </div>
                   </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
+                  <span>
+                    {lang === "ar" ? "آخر نشاط دراسي: " : "Last study date: "}
+                    <strong className="text-foreground">
+                      {selectedUser.lastStudyDate || (lang === "ar" ? "لا يوجد" : "None")}
+                    </strong>
+                  </span>
+                  <span>
+                    {lang === "ar" ? "تاريخ الانضمام: " : "Joined: "}
+                    <strong className="text-foreground">
+                      {selectedUser.createdAt
+                        ? new Date(selectedUser.createdAt).toLocaleDateString()
+                        : "—"}
+                    </strong>
+                  </span>
                 </div>
 
                 {isSelf && (

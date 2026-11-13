@@ -96,14 +96,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshGamification = async () => {
     if (!getStoredAccessToken()) return;
     try {
-      const profile = await gamificationService.getProfile();
+      const prefix = getUserStoragePrefix();
+      const rawPoints =
+        localStorage.getItem(`sg-${prefix}-points`) || localStorage.getItem("sg-points");
+      const localPoints = rawPoints !== null ? Number(rawPoints) : 0;
+      const safeLocalPoints = isNaN(localPoints) ? 0 : localPoints;
+
+      const rawStreak =
+        localStorage.getItem(`sg-${prefix}-streak`) || localStorage.getItem("sg-streak");
+      const localStreak = rawStreak !== null ? Number(rawStreak) : 0;
+      const safeLocalStreak = isNaN(localStreak) ? 0 : localStreak;
+
+      let profile = await gamificationService.getProfile();
       if (profile) {
-        const prefix = getUserStoragePrefix();
-        const raw =
-          localStorage.getItem(`sg-${prefix}-points`) || localStorage.getItem("sg-points");
-        const currentLocal = raw !== null ? Number(raw) : 0;
-        const safeLocal = isNaN(currentLocal) ? 0 : currentLocal;
-        const best = Math.max(profile.currentXp || 0, safeLocal);
+        // If local storage has higher points or streak (from offline or client activities), sync to backend
+        if (
+          safeLocalPoints > (profile.currentXp || 0) ||
+          safeLocalStreak > (profile.currentStreakDays || 0)
+        ) {
+          try {
+            const synced = await gamificationService.syncProgress({
+              points: Math.max(profile.currentXp || 0, safeLocalPoints),
+              streak: Math.max(profile.currentStreakDays || 0, safeLocalStreak),
+            });
+            if (synced) profile = synced;
+          } catch {}
+        }
+
+        const best = Math.max(profile.currentXp || 0, safeLocalPoints);
 
         try {
           localStorage.setItem(`sg-${prefix}-points`, String(best));
@@ -111,7 +131,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         } catch {}
         setPoints(best);
 
-        const currentStreak = profile.currentStreakDays || 1;
+        const currentStreak = Math.max(profile.currentStreakDays || 0, safeLocalStreak, 1);
         setStreak(currentStreak);
         try {
           localStorage.setItem(`sg-${prefix}-streak`, String(currentStreak));
@@ -307,6 +327,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setPoints(next);
 
             window.dispatchEvent(new CustomEvent("sg-points-updated", { detail: next }));
+
+            if (getStoredAccessToken()) {
+              gamificationService.syncProgress({ points: next, streak }).catch(() => {});
+            }
           } catch {
             setPoints((prev) => prev + n);
           }
