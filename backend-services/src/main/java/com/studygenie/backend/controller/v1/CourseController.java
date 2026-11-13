@@ -53,9 +53,14 @@ public class CourseController {
 
 
     public CourseController(CourseService courseService) {
-
         this.courseService = courseService;
+    }
 
+    private Long requireUserId(com.studygenie.backend.security.AuthenticatedUser userDetails) {
+        if (userDetails == null || userDetails.id() == null) {
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
+        }
+        return userDetails.id();
     }
 
 
@@ -294,7 +299,7 @@ public class CourseController {
 
             @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
 
-        Long userId = userDetails.id();
+        Long userId = requireUserId(userDetails);
 
         PlanResponseData data = courseService.getPlan(courseId, userId);
 
@@ -314,7 +319,7 @@ public class CourseController {
         LocalDate examDate = body.examDate();
         Double dailyHours = body.dailyHours();
         String mode = body.mode();
-        Long userId = userDetails.id();
+        Long userId = requireUserId(userDetails);
         PlanResponseData data = courseService.regeneratePlan(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds());
         return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
     }
@@ -343,7 +348,7 @@ public class CourseController {
 
 
 
-        Long userId = userDetails.id(); 
+        Long userId = requireUserId(userDetails); 
 
         
 

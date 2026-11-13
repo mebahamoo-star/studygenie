@@ -1,6 +1,8 @@
 package com.studygenie.backend.adapter.jpa;
 
 import com.studygenie.backend.entity.Student;
+import com.studygenie.backend.entity.enums.AccountStatus;
+import com.studygenie.backend.entity.enums.Role;
 import com.studygenie.backend.exception.DuplicateResourceException;
 import com.studygenie.backend.repository.StudentRepository;
 import com.studygenie.backend.service.auth.UserAccount;
@@ -30,7 +32,9 @@ public class JpaUserAccountStore implements UserAccountStore {
                 student.getFullName(),
                 student.getEmail(),
                 student.getPassword(),
-                student.getCreatedAt() != null ? student.getCreatedAt().toInstant(ZoneOffset.UTC) : null
+                student.getCreatedAt() != null ? student.getCreatedAt().toInstant(ZoneOffset.UTC) : null,
+                student.getRole(),
+                student.getStatus()
         );
     }
 
@@ -65,6 +69,8 @@ public class JpaUserAccountStore implements UserAccountStore {
                 .streakCount(0)
                 .lastStudyDate(null)
                 .authProvider("LOCAL")
+                .role(Role.STUDENT)
+                .status(AccountStatus.ACTIVE)
                 .build();
         try {
             Student saved = studentRepository.saveAndFlush(student);
@@ -110,6 +116,8 @@ public class JpaUserAccountStore implements UserAccountStore {
                 .geniePoints(0)
                 .streakCount(0)
                 .longestStreakDays(0)
+                .role(Role.STUDENT)
+                .status(AccountStatus.ACTIVE)
                 .build();
 
         Student saved = studentRepository.saveAndFlush(newStudent);
@@ -121,6 +129,22 @@ public class JpaUserAccountStore implements UserAccountStore {
         studentRepository.findByEmail(normalizedEmail).ifPresent(student -> {
             student.setPassword(newPasswordHash);
             studentRepository.save(student);
+        });
+    }
+
+    @Override
+    public void updateRole(Long userId, Role role) {
+        studentRepository.findById(userId).ifPresent(student -> {
+            student.setRole(role != null ? role : Role.STUDENT);
+            studentRepository.saveAndFlush(student);
+        });
+    }
+
+    @Override
+    public void updateStatus(Long userId, AccountStatus status) {
+        studentRepository.findById(userId).ifPresent(student -> {
+            student.setStatus(status != null ? status : AccountStatus.ACTIVE);
+            studentRepository.saveAndFlush(student);
         });
     }
 }

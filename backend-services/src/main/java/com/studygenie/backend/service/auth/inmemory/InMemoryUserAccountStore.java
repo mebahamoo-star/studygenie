@@ -1,5 +1,7 @@
 package com.studygenie.backend.service.auth.inmemory;
 
+import com.studygenie.backend.entity.enums.AccountStatus;
+import com.studygenie.backend.entity.enums.Role;
 import com.studygenie.backend.exception.DuplicateResourceException;
 import com.studygenie.backend.service.auth.UserAccount;
 import com.studygenie.backend.service.auth.UserAccountStore;
@@ -46,7 +48,7 @@ public class InMemoryUserAccountStore implements UserAccountStore {
     @Override
     public UserAccount create(String fullName, String normalizedEmail, String passwordHash) {
         long id = idGenerator.getAndIncrement();
-        UserAccount user = new UserAccount(id, fullName, normalizedEmail, passwordHash, clock.instant());
+        UserAccount user = new UserAccount(id, fullName, normalizedEmail, passwordHash, clock.instant(), Role.STUDENT, AccountStatus.ACTIVE);
         
         // Atomically put if absent to prevent duplicates
         UserAccount existing = usersByEmail.putIfAbsent(normalizedEmail, user);
@@ -65,7 +67,7 @@ public class InMemoryUserAccountStore implements UserAccountStore {
             return existing;
         }
         long id = idGenerator.getAndIncrement();
-        UserAccount user = new UserAccount(id, fullName != null ? fullName : "User", normalizedEmail, "oauth-hash", clock.instant());
+        UserAccount user = new UserAccount(id, fullName != null ? fullName : "User", normalizedEmail, "oauth-hash", clock.instant(), Role.STUDENT, AccountStatus.ACTIVE);
         usersByEmail.put(normalizedEmail, user);
         usersById.put(id, user);
         return user;
@@ -80,10 +82,48 @@ public class InMemoryUserAccountStore implements UserAccountStore {
                     existing.fullName(),
                     existing.email(),
                     newPasswordHash,
-                    existing.createdAt()
+                    existing.createdAt(),
+                    existing.role(),
+                    existing.status()
             );
             usersByEmail.put(normalizedEmail, updated);
             usersById.put(existing.id(), updated);
+        }
+    }
+
+    @Override
+    public void updateRole(Long userId, Role role) {
+        UserAccount existing = usersById.get(userId);
+        if (existing != null) {
+            UserAccount updated = new UserAccount(
+                    existing.id(),
+                    existing.fullName(),
+                    existing.email(),
+                    existing.passwordHash(),
+                    existing.createdAt(),
+                    role != null ? role : Role.STUDENT,
+                    existing.status()
+            );
+            usersByEmail.put(existing.email(), updated);
+            usersById.put(userId, updated);
+        }
+    }
+
+    @Override
+    public void updateStatus(Long userId, AccountStatus status) {
+        UserAccount existing = usersById.get(userId);
+        if (existing != null) {
+            UserAccount updated = new UserAccount(
+                    existing.id(),
+                    existing.fullName(),
+                    existing.email(),
+                    existing.passwordHash(),
+                    existing.createdAt(),
+                    existing.role(),
+                    status != null ? status : AccountStatus.ACTIVE
+            );
+            usersByEmail.put(existing.email(), updated);
+            usersById.put(userId, updated);
         }
     }
 }

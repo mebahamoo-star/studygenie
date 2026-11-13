@@ -61,6 +61,8 @@ public class BrowseAndJoinIntegrationTest {
     private StudyPlanRepository studyPlanRepository;
     @Autowired
     private com.studygenie.backend.repository.PlanTaskRepository planTaskRepository;
+    @Autowired
+    private com.studygenie.backend.repository.ExamRepository examRepository;
 
     @Autowired
     private JwtService jwtService;
@@ -79,12 +81,13 @@ public class BrowseAndJoinIntegrationTest {
     void setUp() {
         planTaskRepository.deleteAll();
         studyPlanRepository.deleteAll();
+        examRepository.deleteAll();
+        studentRepository.deleteAll();
         topicRepository.deleteAll();
         syllabusRepository.deleteAll();
         courseRepository.deleteAll();
         collegeRepository.deleteAll();
         universityRepository.deleteAll();
-        studentRepository.deleteAll();
 
         student = Student.builder().fullName("Test User").email("test@example.com").password("pwd").build();
         student = studentRepository.save(student);

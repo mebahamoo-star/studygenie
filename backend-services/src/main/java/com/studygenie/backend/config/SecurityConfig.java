@@ -2,10 +2,13 @@ package com.studygenie.backend.config;
 
 import com.studygenie.backend.security.JsonAccessDeniedHandler;
 import com.studygenie.backend.security.JsonAuthenticationEntryPoint;
+import com.studygenie.backend.service.auth.UserAccountStore;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -24,23 +27,27 @@ import java.util.Arrays;
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JsonAuthenticationEntryPoint jsonAuthenticationEntryPoint;
     private final JsonAccessDeniedHandler jsonAccessDeniedHandler;
     private final String[] allowedOrigins;
     private final com.studygenie.backend.security.JwtService jwtService;
+    private final ObjectProvider<UserAccountStore> userAccountStoreProvider;
 
     private final com.studygenie.backend.security.InternalAuthFilter internalAuthFilter;
 
     public SecurityConfig(JsonAuthenticationEntryPoint jsonAuthenticationEntryPoint,
                           JsonAccessDeniedHandler jsonAccessDeniedHandler,
                           com.studygenie.backend.security.JwtService jwtService,
+                          ObjectProvider<UserAccountStore> userAccountStoreProvider,
                           com.studygenie.backend.security.InternalAuthFilter internalAuthFilter,
                           @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}") String allowedOrigins) {
         this.jsonAuthenticationEntryPoint = jsonAuthenticationEntryPoint;
         this.jsonAccessDeniedHandler = jsonAccessDeniedHandler;
         this.jwtService = jwtService;
+        this.userAccountStoreProvider = userAccountStoreProvider;
         this.internalAuthFilter = internalAuthFilter;
         this.allowedOrigins = Arrays.stream(allowedOrigins.split(","))
                                     .map(String::trim)
@@ -50,7 +57,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        com.studygenie.backend.security.JwtAuthenticationFilter jwtFilter = new com.studygenie.backend.security.JwtAuthenticationFilter(jwtService);
+        com.studygenie.backend.security.JwtAuthenticationFilter jwtFilter =
+                new com.studygenie.backend.security.JwtAuthenticationFilter(jwtService, userAccountStoreProvider.getIfAvailable());
 
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -64,6 +72,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/", "/swagger-ui", "/api/health").permitAll()
                         .requestMatchers("/api/internal/**").permitAll()
+                        .requestMatchers("/api/admin/reports", "/api/admin/reports/**").hasAnyRole("ADMIN", "MODERATOR")
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**", "/webjars/**").permitAll()
                         .requestMatchers("/h2-console/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
