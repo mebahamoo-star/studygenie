@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/_admin'
 import { Route as ShellRouteImport } from './routes/_shell'
 import { Route as ExamCheckinRouteImport } from './routes/exam-checkin'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
@@ -25,10 +26,20 @@ import { Route as ShellPomodoroRouteImport } from './routes/_shell.pomodoro'
 import { Route as ShellProfileRouteImport } from './routes/_shell.profile'
 import { Route as ShellQuizRouteImport } from './routes/_shell.quiz'
 import { Route as ShellSettingsRouteImport } from './routes/_shell.settings'
+import { Route as AdminAdminIndexRouteImport } from './routes/_admin.admin.index'
+import { Route as AdminAdminAuditLogRouteImport } from './routes/_admin.admin.audit-log'
+import { Route as AdminAdminCoursesRouteImport } from './routes/_admin.admin.courses'
+import { Route as AdminAdminOverviewRouteImport } from './routes/_admin.admin.overview'
+import { Route as AdminAdminReportsRouteImport } from './routes/_admin.admin.reports'
+import { Route as AdminAdminUsersRouteImport } from './routes/_admin.admin.users'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/_admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShellRoute = ShellRouteImport.update({
@@ -105,6 +116,36 @@ const ShellSettingsRoute = ShellSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => ShellRoute,
 } as any)
+const AdminAdminIndexRoute = AdminAdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminAuditLogRoute = AdminAdminAuditLogRouteImport.update({
+  id: '/admin/audit-log',
+  path: '/admin/audit-log',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminCoursesRoute = AdminAdminCoursesRouteImport.update({
+  id: '/admin/courses',
+  path: '/admin/courses',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminOverviewRoute = AdminAdminOverviewRouteImport.update({
+  id: '/admin/overview',
+  path: '/admin/overview',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminReportsRoute = AdminAdminReportsRouteImport.update({
+  id: '/admin/reports',
+  path: '/admin/reports',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAdminUsersRoute = AdminAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -122,6 +163,12 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ShellProfileRoute
   '/quiz': typeof ShellQuizRoute
   '/settings': typeof ShellSettingsRoute
+  '/admin/audit-log': typeof AdminAdminAuditLogRoute
+  '/admin/courses': typeof AdminAdminCoursesRoute
+  '/admin/overview': typeof AdminAdminOverviewRoute
+  '/admin/reports': typeof AdminAdminReportsRoute
+  '/admin/users': typeof AdminAdminUsersRoute
+  '/admin/': typeof AdminAdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -139,10 +186,17 @@ export interface FileRoutesByTo {
   '/profile': typeof ShellProfileRoute
   '/quiz': typeof ShellQuizRoute
   '/settings': typeof ShellSettingsRoute
+  '/admin/audit-log': typeof AdminAdminAuditLogRoute
+  '/admin/courses': typeof AdminAdminCoursesRoute
+  '/admin/overview': typeof AdminAdminOverviewRoute
+  '/admin/reports': typeof AdminAdminReportsRoute
+  '/admin/users': typeof AdminAdminUsersRoute
+  '/admin': typeof AdminAdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_admin': typeof AdminRouteWithChildren
   '/_shell': typeof ShellRouteWithChildren
   '/exam-checkin': typeof ExamCheckinRoute
   '/forgot-password': typeof ForgotPasswordRoute
@@ -158,6 +212,12 @@ export interface FileRoutesById {
   '/_shell/profile': typeof ShellProfileRoute
   '/_shell/quiz': typeof ShellQuizRoute
   '/_shell/settings': typeof ShellSettingsRoute
+  '/_admin/admin/audit-log': typeof AdminAdminAuditLogRoute
+  '/_admin/admin/courses': typeof AdminAdminCoursesRoute
+  '/_admin/admin/overview': typeof AdminAdminOverviewRoute
+  '/_admin/admin/reports': typeof AdminAdminReportsRoute
+  '/_admin/admin/users': typeof AdminAdminUsersRoute
+  '/_admin/admin/': typeof AdminAdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -177,6 +237,12 @@ export interface FileRouteTypes {
     | '/profile'
     | '/quiz'
     | '/settings'
+    | '/admin/audit-log'
+    | '/admin/courses'
+    | '/admin/overview'
+    | '/admin/reports'
+    | '/admin/users'
+    | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -194,9 +260,16 @@ export interface FileRouteTypes {
     | '/profile'
     | '/quiz'
     | '/settings'
+    | '/admin/audit-log'
+    | '/admin/courses'
+    | '/admin/overview'
+    | '/admin/reports'
+    | '/admin/users'
+    | '/admin'
   id:
     | '__root__'
     | '/'
+    | '/_admin'
     | '/_shell'
     | '/exam-checkin'
     | '/forgot-password'
@@ -212,10 +285,17 @@ export interface FileRouteTypes {
     | '/_shell/profile'
     | '/_shell/quiz'
     | '/_shell/settings'
+    | '/_admin/admin/audit-log'
+    | '/_admin/admin/courses'
+    | '/_admin/admin/overview'
+    | '/_admin/admin/reports'
+    | '/_admin/admin/users'
+    | '/_admin/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
   ShellRoute: typeof ShellRouteWithChildren
   ExamCheckinRoute: typeof ExamCheckinRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
@@ -231,6 +311,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_admin': {
+      id: '/_admin'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_shell': {
@@ -338,8 +425,70 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellSettingsRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_admin/admin/': {
+      id: '/_admin/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminAdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/audit-log': {
+      id: '/_admin/admin/audit-log'
+      path: '/admin/audit-log'
+      fullPath: '/admin/audit-log'
+      preLoaderRoute: typeof AdminAdminAuditLogRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/courses': {
+      id: '/_admin/admin/courses'
+      path: '/admin/courses'
+      fullPath: '/admin/courses'
+      preLoaderRoute: typeof AdminAdminCoursesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/overview': {
+      id: '/_admin/admin/overview'
+      path: '/admin/overview'
+      fullPath: '/admin/overview'
+      preLoaderRoute: typeof AdminAdminOverviewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/reports': {
+      id: '/_admin/admin/reports'
+      path: '/admin/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof AdminAdminReportsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/_admin/admin/users': {
+      id: '/_admin/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminAdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
+
+interface AdminRouteChildren {
+  AdminAdminAuditLogRoute: typeof AdminAdminAuditLogRoute
+  AdminAdminCoursesRoute: typeof AdminAdminCoursesRoute
+  AdminAdminOverviewRoute: typeof AdminAdminOverviewRoute
+  AdminAdminReportsRoute: typeof AdminAdminReportsRoute
+  AdminAdminUsersRoute: typeof AdminAdminUsersRoute
+  AdminAdminIndexRoute: typeof AdminAdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAdminAuditLogRoute: AdminAdminAuditLogRoute,
+  AdminAdminCoursesRoute: AdminAdminCoursesRoute,
+  AdminAdminOverviewRoute: AdminAdminOverviewRoute,
+  AdminAdminReportsRoute: AdminAdminReportsRoute,
+  AdminAdminUsersRoute: AdminAdminUsersRoute,
+  AdminAdminIndexRoute: AdminAdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface ShellRouteChildren {
   ShellCoursesRoute: typeof ShellCoursesRoute
@@ -369,6 +518,7 @@ const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
   ShellRoute: ShellRouteWithChildren,
   ExamCheckinRoute: ExamCheckinRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,

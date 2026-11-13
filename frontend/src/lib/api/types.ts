@@ -5,10 +5,15 @@ export interface ApiResponse<T = any> {
   timestamp?: string;
 }
 
+export type UserRole = "STUDENT" | "MODERATOR" | "ADMIN";
+export type AccountStatus = "ACTIVE" | "SUSPENDED";
+
 export interface UserSummary {
   id: number;
   fullName: string;
   email: string;
+  role?: UserRole;
+  status?: AccountStatus;
 }
 
 export interface AuthResponse {
@@ -170,4 +175,121 @@ export interface CourseReport {
   reportedBy?: string;
   status?: string;
   createdAt?: string;
+}
+
+export interface AdminPageResponse<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface DailyMetricPoint {
+  date: string;
+  count: number;
+}
+
+export interface AdminOverviewDto {
+  totalUsers: number;
+  activeUsersToday: number;
+  activeUsers7d: number;
+  newSignupsToday: number;
+  newSignups7d: number;
+  totalCourses: number;
+  enrolledCount: number;
+  uploadsToday: number;
+  openReports: number;
+  failedAnalyses: number;
+  dailySignups: DailyMetricPoint[];
+  dailyActivity: DailyMetricPoint[];
+}
+
+export interface AdminReportDto {
+  id: number;
+  courseId?: number | null;
+  courseName: string;
+  reportedBy?: string | null;
+  reason: string;
+  details?: string | null;
+  status: "PENDING" | "IN_REVIEW" | "RESOLVED" | "REJECTED" | string;
+  adminNote?: string | null;
+  resolvedById?: number | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface AdminTopicDto {
+  id: number;
+  chapterTitle: string;
+  orderIndex: number;
+  estimatedHours: number;
+  contentExcerpt?: string | null;
+}
+
+export interface AdminCourseDto {
+  id: number;
+  name: string;
+  collegeId?: number | null;
+  collegeName?: string | null;
+  universityId?: number | null;
+  universityName?: string | null;
+  status: "READY" | "NO_SYLLABUS" | "ANALYZING" | "FAILED" | string;
+  verified: boolean;
+  locked: boolean;
+  deletedAt?: string | null;
+  enrollmentCount: number;
+  topicCount: number;
+  openReportCount: number;
+  createdAt?: string | null;
+  topics?: AdminTopicDto[];
+}
+
+export interface AdminUniversityDto {
+  id: number;
+  name: string;
+  collegeCount: number;
+  courseCount: number;
+}
+
+export interface AdminCollegeDto {
+  id: number;
+  name: string;
+  universityId?: number | null;
+  universityName?: string | null;
+  courseCount: number;
+}
+
+export interface AdminUserDto {
+  id: number;
+  fullName: string;
+  email: string;
+  role: UserRole;
+  status: AccountStatus;
+  universityId?: number | null;
+  universityName?: string | null;
+  authProvider: string;
+  enrolledCoursesCount: number;
+  geniePoints: number;
+  streakCount: number;
+  longestStreakDays: number;
+  lastStudyDate?: string | null;
+  lastActiveAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface AdminAuditLogDto {
+  id: number;
+  adminId: number;
+  adminEmail: string;
+  action: string;
+  targetType: string;
+  targetId?: string | null;
+  beforeSummary?: string | null;
+  afterSummary?: string | null;
+  ip?: string | null;
+  userAgent?: string | null;
+  createdAt: string;
 }

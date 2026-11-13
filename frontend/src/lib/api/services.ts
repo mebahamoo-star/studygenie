@@ -1,39 +1,33 @@
 import { fetchApi, clearAuthSession, getStoredRefreshToken, saveAuthSession } from "./client";
 
 import type {
-
+  AccountStatus,
+  AdminAuditLogDto,
+  AdminCollegeDto,
+  AdminCourseDto,
+  AdminOverviewDto,
+  AdminPageResponse,
+  AdminReportDto,
+  AdminTopicDto,
+  AdminUniversityDto,
+  AdminUserDto,
   ApiResponse,
-
   AuthResponse,
-
   ClientQuizQuestion,
-
   College,
-
   Course,
-
   CourseStatus,
-
   GamificationProfile,
-
   LeaderboardEntry,
-
   PlanResponseData,
-
   ProgressResponse,
-
   QuizSubmissionResponse,
-
   ReviewItem,
-
   ReviewResponse,
-
   Topic,
-
   University,
-
+  UserRole,
   UserSummary,
-
 } from "./types";
 
 
@@ -903,5 +897,287 @@ export const courseReportService = {
   async getReports(): Promise<any[]> {
     const res = await fetchApi<any[]>('/api/v1/courses/reports');
     return res.data || [];
+  },
+};
+
+function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && String(val).trim() !== "") {
+      searchParams.set(key, String(val));
+    }
+  });
+  const qs = searchParams.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export const adminService = {
+  async getOverview(): Promise<AdminOverviewDto> {
+    const res = await fetchApi<AdminOverviewDto>("/api/admin/overview");
+    return res.data!;
+  },
+
+  async getReports(params: {
+    status?: string;
+    reason?: string;
+    courseId?: number;
+    search?: string;
+    page?: number;
+    size?: number;
+  } = {}): Promise<AdminPageResponse<AdminReportDto>> {
+    const res = await fetchApi<AdminPageResponse<AdminReportDto>>(
+      `/api/admin/reports${buildQuery(params)}`,
+    );
+    return res.data!;
+  },
+
+  async getReport(id: number): Promise<AdminReportDto> {
+    const res = await fetchApi<AdminReportDto>(`/api/admin/reports/${id}`);
+    return res.data!;
+  },
+
+  async updateReport(
+    id: number,
+    payload: { status?: string; adminNote?: string },
+  ): Promise<AdminReportDto> {
+    const res = await fetchApi<AdminReportDto>(`/api/admin/reports/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return res.data!;
+  },
+
+  async getCourses(params: {
+    universityId?: number;
+    collegeId?: number;
+    status?: string;
+    minEnrollments?: number;
+    minTopics?: number;
+    search?: string;
+    includeDeleted?: boolean;
+    page?: number;
+    size?: number;
+  } = {}): Promise<AdminPageResponse<AdminCourseDto>> {
+    const res = await fetchApi<AdminPageResponse<AdminCourseDto>>(
+      `/api/admin/courses${buildQuery(params)}`,
+    );
+    return res.data!;
+  },
+
+  async getCourse(id: number | string): Promise<AdminCourseDto> {
+    const res = await fetchApi<AdminCourseDto>(`/api/admin/courses/${id}`);
+    return res.data!;
+  },
+
+  async getCourseById(id: number | string): Promise<AdminCourseDto> {
+    return this.getCourse(id);
+  },
+
+  async updateCourse(
+    id: number | string,
+    payload: {
+      code?: string;
+      name?: string;
+      collegeId?: number;
+      status?: string;
+      verified?: boolean;
+      locked?: boolean;
+    },
+  ): Promise<AdminCourseDto> {
+    const res = await fetchApi<AdminCourseDto>(`/api/admin/courses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return res.data!;
+  },
+
+  async deleteCourse(id: number | string): Promise<void> {
+    await fetchApi<void>(`/api/admin/courses/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  async mergeCourse(sourceCourseId: number | string, targetCourseId: number | string): Promise<AdminCourseDto> {
+    const res = await fetchApi<AdminCourseDto>(`/api/admin/courses/${sourceCourseId}/merge`, {
+      method: "POST",
+      body: JSON.stringify({ targetCourseId: Number(targetCourseId) }),
+    });
+    return res.data!;
+  },
+
+  async mergeCourses(sourceCourseId: number | string, targetCourseId: number | string): Promise<AdminCourseDto> {
+    return this.mergeCourse(sourceCourseId, targetCourseId);
+  },
+
+  async reanalyzeCourse(id: number | string): Promise<AdminCourseDto> {
+    const res = await fetchApi<AdminCourseDto>(`/api/admin/courses/${id}/reanalyze`, {
+      method: "POST",
+    });
+    return res.data!;
+  },
+
+  async updateTopic(
+    courseId: number | string,
+    topicId: number | string,
+    payload: { chapterTitle?: string; title?: string; estimatedHours?: number; orderIndex?: number; weekNumber?: number },
+  ): Promise<AdminTopicDto> {
+    const body = {
+      chapterTitle: payload.chapterTitle ?? payload.title,
+      estimatedHours: payload.estimatedHours,
+      orderIndex: payload.orderIndex ?? payload.weekNumber,
+    };
+    const res = await fetchApi<AdminTopicDto>(
+      `/api/admin/courses/${courseId}/topics/${topicId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      },
+    );
+    return res.data!;
+  },
+
+  async updateCourseTopic(
+    courseId: number | string,
+    topicId: number | string,
+    payload: { chapterTitle?: string; title?: string; estimatedHours?: number; orderIndex?: number; weekNumber?: number },
+  ): Promise<AdminTopicDto> {
+    return this.updateTopic(courseId, topicId, payload);
+  },
+
+  async deleteTopic(courseId: number | string, topicId: number | string): Promise<void> {
+    await fetchApi<void>(`/api/admin/courses/${courseId}/topics/${topicId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async deleteCourseTopic(courseId: number | string, topicId: number | string): Promise<void> {
+    return this.deleteTopic(courseId, topicId);
+  },
+
+  async listUniversities(): Promise<AdminUniversityDto[]> {
+    const res = await fetchApi<AdminUniversityDto[]>("/api/admin/universities");
+    return res.data || [];
+  },
+
+  async createUniversity(input: string | { name: string; city?: string; website?: string }): Promise<AdminUniversityDto> {
+    const name = typeof input === "string" ? input : input.name;
+    const res = await fetchApi<AdminUniversityDto>("/api/admin/universities", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    return res.data!;
+  },
+
+  async updateUniversity(id: number | string, name: string): Promise<AdminUniversityDto> {
+    const res = await fetchApi<AdminUniversityDto>(`/api/admin/universities/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
+    return res.data!;
+  },
+
+  async deleteUniversity(id: number | string): Promise<void> {
+    await fetchApi<void>(`/api/admin/universities/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  async listColleges(universityId?: number | string): Promise<AdminCollegeDto[]> {
+    const res = await fetchApi<AdminCollegeDto[]>(
+      `/api/admin/colleges${buildQuery({ universityId })}`,
+    );
+    return res.data || [];
+  },
+
+  async createCollege(
+    universityIdOrPayload: number | string | { universityId: number | string; name: string },
+    maybeName?: string,
+  ): Promise<AdminCollegeDto> {
+    const payload =
+      typeof universityIdOrPayload === "object"
+        ? {
+            universityId: Number(universityIdOrPayload.universityId),
+            name: universityIdOrPayload.name,
+          }
+        : { universityId: Number(universityIdOrPayload), name: maybeName || "" };
+    const res = await fetchApi<AdminCollegeDto>("/api/admin/colleges", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res.data!;
+  },
+
+  async updateCollege(id: number, universityId: number, name: string): Promise<AdminCollegeDto> {
+    const res = await fetchApi<AdminCollegeDto>(`/api/admin/colleges/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ universityId, name }),
+    });
+    return res.data!;
+  },
+
+  async deleteCollege(id: number): Promise<void> {
+    await fetchApi<void>(`/api/admin/colleges/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getUsers(params: {
+    search?: string;
+    role?: string;
+    status?: string;
+    universityId?: number;
+    page?: number;
+    size?: number;
+  } = {}): Promise<AdminPageResponse<AdminUserDto>> {
+    const res = await fetchApi<AdminPageResponse<AdminUserDto>>(
+      `/api/admin/users${buildQuery(params)}`,
+    );
+    return res.data!;
+  },
+
+  async getUser(id: number): Promise<AdminUserDto> {
+    const res = await fetchApi<AdminUserDto>(`/api/admin/users/${id}`);
+    return res.data!;
+  },
+
+  async updateUserRole(id: number | string, role: UserRole): Promise<AdminUserDto> {
+    const res = await fetchApi<AdminUserDto>(`/api/admin/users/${id}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    });
+    return res.data!;
+  },
+
+  async updateUserStatus(id: number | string, status: AccountStatus): Promise<AdminUserDto> {
+    const res = await fetchApi<AdminUserDto>(`/api/admin/users/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    return res.data!;
+  },
+
+  async resetUserPassword(id: number | string): Promise<{ message: string }> {
+    const res = await fetchApi<void>(`/api/admin/users/${id}/reset-password`, {
+      method: "POST",
+    });
+    return { message: res.message || "Password reset email triggered" };
+  },
+
+  async triggerPasswordReset(id: number | string): Promise<{ message: string }> {
+    return this.resetUserPassword(id);
+  },
+
+  async getAuditLogs(params: {
+    adminId?: number;
+    action?: string;
+    targetType?: string;
+    search?: string;
+    page?: number;
+    size?: number;
+  } = {}): Promise<AdminPageResponse<AdminAuditLogDto>> {
+    const res = await fetchApi<AdminPageResponse<AdminAuditLogDto>>(
+      `/api/admin/audit-log${buildQuery(params)}`,
+    );
+    return res.data!;
   },
 };

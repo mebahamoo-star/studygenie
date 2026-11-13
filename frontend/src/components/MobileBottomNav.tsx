@@ -1,7 +1,7 @@
 import React from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Home, BookOpen, Brain, Trophy, User, Sparkles } from "lucide-react";
+import { Home, BookOpen, Brain, Trophy, User, Sparkles, ShieldCheck } from "lucide-react";
 import { useApp } from "@/lib/app-state";
 import { cn } from "@/lib/utils";
 
@@ -27,13 +27,26 @@ export function MobileBottomNav({
   accessory?: boolean;
 }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const { lang } = useApp();
+  const { lang, user } = useApp();
+  const isAdminOrMod = user?.role === "ADMIN" || user?.role === "MODERATOR";
+  const items: readonly NavItem[] = isAdminOrMod
+    ? [
+        ...ITEMS,
+        {
+          to: user?.role === "MODERATOR" ? "/admin/reports" : "/admin/overview",
+          label: "Admin",
+          ar: "الإدارة",
+          icon: ShieldCheck,
+          match: ["/admin"],
+        },
+      ]
+    : ITEMS;
 
   return (
     <div className="fixed inset-x-0 bottom-3 z-50 flex justify-center pointer-events-none px-3 md:hidden">
       <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/80 bg-background/90 px-2 py-1.5 shadow-2xl backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/10">
         <ul className="flex items-center gap-1">
-          {ITEMS.map((item) => {
+          {items.map((item) => {
             const isActive = item.match.some((m) => path.startsWith(m));
             const Icon = item.icon;
             const labelText = lang === "ar" ? item.ar : item.label;
