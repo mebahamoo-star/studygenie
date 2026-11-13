@@ -51,7 +51,15 @@ public class CourseReportController {
         String reporter = null;
         Student s = studentRepository.findById(userDetails.id()).orElse(null);
         if (s != null) {
-            reporter = (s.getFullName() != null && !s.getFullName().isBlank()) ? s.getFullName() : s.getEmail();
+            String name = (s.getFullName() != null && !s.getFullName().isBlank()) ? s.getFullName().trim() : null;
+            String email = (s.getEmail() != null && !s.getEmail().isBlank()) ? s.getEmail().trim() : null;
+            if (name != null && email != null) {
+                reporter = name + " (" + email + ")";
+            } else if (name != null) {
+                reporter = name;
+            } else if (email != null) {
+                reporter = email;
+            }
         }
         if (reporter == null || reporter.isBlank()) {
             reporter = (userDetails.email() != null && !userDetails.email().isBlank())

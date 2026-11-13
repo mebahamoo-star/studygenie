@@ -288,25 +288,29 @@ export default function AdminReportsPage() {
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="font-bold text-foreground">
-                        {r.courseCode || "Unknown"} — {r.courseName || "Course"}
+                        {r.courseCode ? `${r.courseCode} — ` : ""}
+                        {r.courseName || "Course"}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {r.universityName || "University"}
+                        {r.universityName || "General Catalog"}
                       </div>
                     </td>
                     <td className="max-w-xs px-4 py-3.5">
                       <div className="font-semibold text-foreground">{r.reason}</div>
-                      {r.description && (
+                      {(r.details || r.description) && (
                         <div className="truncate text-xs text-muted-foreground">
-                          {r.description}
+                          {r.details || r.description}
                         </div>
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-xs">
                       <div className="font-semibold text-foreground">
-                        {r.studentName || "Student"}
+                        {r.studentName || r.reportedBy || "Student"}
                       </div>
-                      <div className="text-muted-foreground">{r.studentEmail || "—"}</div>
+                      <div className="text-muted-foreground">
+                        {r.studentEmail ||
+                          (r.reportedBy && r.reportedBy.includes("@") ? r.reportedBy : "—")}
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground">
                       {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}
@@ -371,12 +375,23 @@ export default function AdminReportsPage() {
                 <DialogTitle className="flex items-center gap-2 text-lg font-bold">
                   <FileWarning className="h-5 w-5 text-primary" />
                   <span>
-                    Report: {selectedReport.courseCode} — {selectedReport.courseName}
+                    Report: {selectedReport.courseCode ? `${selectedReport.courseCode} — ` : ""}
+                    {selectedReport.courseName}
                   </span>
                 </DialogTitle>
                 <DialogDescription>
-                  Submitted by {selectedReport.studentName || "Student"} (
-                  {selectedReport.studentEmail || "no email"}) · Status:{" "}
+                  Submitted by{" "}
+                  <span className="font-semibold text-foreground">
+                    {selectedReport.studentName || selectedReport.reportedBy || "Student"}
+                  </span>
+                  {(selectedReport.studentEmail ||
+                    (selectedReport.reportedBy && selectedReport.reportedBy.includes("@"))) && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      ({selectedReport.studentEmail || selectedReport.reportedBy})
+                    </span>
+                  )}{" "}
+                  · Status:{" "}
                   <span className="font-bold text-foreground">{selectedReport.status}</span>
                 </DialogDescription>
               </DialogHeader>
@@ -387,12 +402,17 @@ export default function AdminReportsPage() {
                     Reason: {selectedReport.reason}
                   </div>
                   <p className="mt-1.5 whitespace-pre-wrap text-foreground">
-                    {selectedReport.description || "No additional description provided."}
+                    {selectedReport.details ||
+                      selectedReport.description ||
+                      "No additional description provided."}
                   </p>
-                  {selectedReport.resolvedByEmail && (
+                  {(selectedReport.resolvedBy || selectedReport.resolvedByEmail) && (
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Last updated by {selectedReport.resolvedByName} (
-                      {selectedReport.resolvedByEmail})
+                      Last updated by {selectedReport.resolvedByName || selectedReport.resolvedBy}
+                      {selectedReport.resolvedByEmail &&
+                      selectedReport.resolvedByName !== selectedReport.resolvedByEmail
+                        ? ` (${selectedReport.resolvedByEmail})`
+                        : ""}
                     </p>
                   )}
                 </div>

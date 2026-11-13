@@ -240,17 +240,103 @@ public class AdminManagementService {
     }
 
     private AdminReportDto toReportDto(CourseReport r) {
+        String courseCode = null;
+        String universityName = null;
+        if (r.getCourseId() != null) {
+            Course c = courseRepository.findById(r.getCourseId()).orElse(null);
+            if (c != null) {
+                courseCode = "CS " + c.getId();
+                if (c.getCollege() != null && c.getCollege().getUniversity() != null) {
+                    universityName = c.getCollege().getUniversity().getName();
+                }
+            }
+        }
+
+        String studentName = null;
+        String studentEmail = null;
+        Long studentId = null;
+
+        if (r.getReportedBy() != null && !r.getReportedBy().isBlank()) {
+            String rep = r.getReportedBy().trim();
+            if (rep.contains("(") && rep.endsWith(")")) {
+                int open = rep.lastIndexOf('(');
+                studentName = rep.substring(0, open).trim();
+                studentEmail = rep.substring(open + 1, rep.length() - 1).trim();
+            } else if (rep.contains("@")) {
+                studentEmail = rep;
+            } else {
+                studentName = rep;
+            }
+
+            Student matched = null;
+            if (studentEmail != null) {
+                matched = studentRepository.findByEmailIgnoreCase(studentEmail).orElse(null);
+            }
+            if (matched == null && studentName != null) {
+                matched = studentRepository.findFirstByFullNameIgnoreCase(studentName).orElse(null);
+            }
+            if (matched == null) {
+                final String sName = studentName;
+                final String sEmail = studentEmail;
+                matched = studentRepository.findAll().stream()
+                        .filter(st -> (sEmail != null && sEmail.equalsIgnoreCase(st.getEmail()))
+                                   || (sName != null && sName.equalsIgnoreCase(st.getFullName()))
+                                   || rep.equalsIgnoreCase(st.getEmail())
+                                   || rep.equalsIgnoreCase(st.getFullName()))
+                        .findFirst()
+                        .orElse(null);
+            }
+
+            if (matched != null) {
+                studentId = matched.getId();
+                if (matched.getFullName() != null && !matched.getFullName().isBlank()) {
+                    studentName = matched.getFullName();
+                }
+                if (matched.getEmail() != null && !matched.getEmail().isBlank()) {
+                    studentEmail = matched.getEmail();
+                }
+            }
+        }
+
+        String reportedByDisplay = (studentName != null && studentEmail != null)
+                ? studentName + " (" + studentEmail + ")"
+                : (studentName != null ? studentName : (studentEmail != null ? studentEmail : r.getReportedBy()));
+
+        String resolvedByName = null;
+        String resolvedByEmail = null;
+        if (r.getResolvedById() != null) {
+            Student admin = studentRepository.findById(r.getResolvedById()).orElse(null);
+            if (admin != null) {
+                resolvedByName = admin.getFullName();
+                resolvedByEmail = admin.getEmail();
+            }
+        }
+        if (resolvedByName == null) {
+            resolvedByName = r.getResolvedBy();
+        }
+        if (resolvedByEmail == null) {
+            resolvedByEmail = r.getResolvedBy();
+        }
+
         return new AdminReportDto(
                 r.getId(),
                 r.getCourseId(),
+                courseCode,
                 r.getCourseName(),
-                r.getReportedBy(),
+                universityName,
+                studentId,
+                studentName,
+                studentEmail,
+                reportedByDisplay,
                 r.getReason(),
+                r.getDetails(),
                 r.getDetails(),
                 r.getStatus() != null ? r.getStatus() : "PENDING",
                 r.getAdminNote(),
                 r.getResolvedById(),
                 r.getResolvedBy(),
+                resolvedByName,
+                resolvedByEmail,
                 r.getResolvedAt(),
                 r.getUpdatedAt(),
                 r.getCreatedAt()

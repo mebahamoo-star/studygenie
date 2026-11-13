@@ -208,14 +208,22 @@ export interface AdminOverviewDto {
 export interface AdminReportDto {
   id: number;
   courseId?: number | null;
+  courseCode?: string | null;
   courseName: string;
+  universityName?: string | null;
+  studentId?: number | null;
+  studentName?: string | null;
+  studentEmail?: string | null;
   reportedBy?: string | null;
   reason: string;
   details?: string | null;
+  description?: string | null;
   status: "PENDING" | "IN_REVIEW" | "RESOLVED" | "REJECTED" | string;
   adminNote?: string | null;
   resolvedById?: number | null;
   resolvedBy?: string | null;
+  resolvedByName?: string | null;
+  resolvedByEmail?: string | null;
   resolvedAt?: string | null;
   updatedAt?: string | null;
   createdAt?: string | null;

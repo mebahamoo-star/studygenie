@@ -19,6 +19,7 @@ import java.util.Optional;
 public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpecificationExecutor<Student> {
     Optional<Student> findByEmail(String email);
     Optional<Student> findByEmailIgnoreCase(String email);
+    Optional<Student> findFirstByFullNameIgnoreCase(String fullName);
     boolean existsByEmail(String email);
 
     long countByRole(Role role);
