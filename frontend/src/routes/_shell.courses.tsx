@@ -462,7 +462,7 @@ function CoursesPage() {
 
     e?.stopPropagation();
 
-    if (!skipPrompt && !window.confirm("Are you sure you want to delete this course from your courses?")) return;
+    if (!skipPrompt && !window.confirm("Remove this course from your My Courses list? Other classmates and shared syllabi will not be affected.")) return;
 
 
 
@@ -471,8 +471,6 @@ function CoursesPage() {
       if (courseId && !String(courseId).startsWith("course-") && !String(courseId).startsWith("c-")) {
 
         await browseService.unenrollCourse(courseId).catch(() => {});
-
-        await browseService.deleteCourse(courseId).catch(() => {});
 
       }
 
@@ -498,7 +496,7 @@ function CoursesPage() {
 
       }
 
-      toast.success("Course removed successfully.");
+      toast.success("Course removed from My Courses.");
 
     } catch (err: any) {
 

@@ -22,6 +22,7 @@ import com.studygenie.backend.entity.Syllabus;
 import com.studygenie.backend.entity.Topic;
 import com.studygenie.backend.entity.University;
 import com.studygenie.backend.entity.enums.CourseStatus;
+import com.studygenie.backend.exception.BadRequestException;
 import com.studygenie.backend.exception.DuplicateResourceException;
 import com.studygenie.backend.exception.ResourceNotFoundException;
 import com.studygenie.backend.exception.ResourceNotReadyException;
@@ -182,6 +183,16 @@ public class CourseService {
             student.getEnrolledCourses().removeIf(c -> c.getId().equals(courseId));
             studentRepository.save(student);
         }
+
+        // Clean up only this student's personal study plan for the course,
+        // leaving the shared course, syllabus, topics, and other students intact.
+        studyPlanRepository.findByStudentIdAndCourseId(studentId, courseId).ifPresent(plan -> {
+            List<PlanTask> tasks = planTaskRepository.findByStudyPlanId(plan.getId());
+            if (!tasks.isEmpty()) {
+                planTaskRepository.deleteAll(tasks);
+            }
+            studyPlanRepository.delete(plan);
+        });
     }
 
     @Transactional
@@ -421,6 +432,12 @@ public class CourseService {
     public void deleteCourse(Long courseId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
+
+        long enrolledCount = studentRepository.countEnrolledStudentsByCourseId(courseId);
+        if (enrolledCount > 0) {
+            throw new BadRequestException(
+                    "Cannot delete a shared course while students are still enrolled. Unenroll from it instead.");
+        }
 
         // Delete associated study plans and their tasks
         List<StudyPlan> plans = studyPlanRepository.findByCourseId(courseId);

@@ -3,6 +3,7 @@ package com.studygenie.backend.repository;
 import com.studygenie.backend.entity.Student;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -15,4 +16,7 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
 
     @Query(value = "SELECT course_id, student_id FROM student_courses", nativeQuery = true)
     List<Object[]> findAllEnrollmentPairs();
+
+    @Query(value = "SELECT COUNT(*) FROM student_courses WHERE course_id = :courseId", nativeQuery = true)
+    long countEnrolledStudentsByCourseId(@Param("courseId") Long courseId);
 }
