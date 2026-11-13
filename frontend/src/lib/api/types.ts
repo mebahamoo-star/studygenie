@@ -223,9 +223,12 @@ export interface AdminReportDto {
 
 export interface AdminTopicDto {
   id: number;
-  chapterTitle: string;
-  orderIndex: number;
-  estimatedHours: number;
+  chapterTitle?: string;
+  title?: string;
+  name?: string;
+  orderIndex?: number;
+  weekNumber?: number;
+  estimatedHours?: number;
   contentExcerpt?: string | null;
 }
 

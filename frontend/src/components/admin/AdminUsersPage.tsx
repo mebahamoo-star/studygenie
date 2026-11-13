@@ -21,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -373,19 +372,27 @@ export default function AdminUsersPage() {
                   </Button>
 
                   {selectedUser.status === "ACTIVE" ? (
-                    <HoldToConfirmButton
+                    <Button
+                      size="sm"
+                      variant="destructive"
                       disabled={Boolean(isSelf) || statusMutation.isPending}
-                      duration={1400}
-                      onConfirm={() =>
-                        statusMutation.mutate({
-                          userId: selectedUser.id,
-                          status: "SUSPENDED",
-                        })
-                      }
+                      className="gap-1.5 rounded-xl text-xs"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Are you sure you want to suspend user "${selectedUser.fullName || selectedUser.email}"?`,
+                          )
+                        ) {
+                          statusMutation.mutate({
+                            userId: selectedUser.id,
+                            status: "SUSPENDED",
+                          });
+                        }
+                      }}
                     >
                       <Ban className="h-3.5 w-3.5" />
-                      Hold to Suspend Account
-                    </HoldToConfirmButton>
+                      Suspend Account
+                    </Button>
                   ) : (
                     <Button
                       size="sm"

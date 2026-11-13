@@ -23,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -541,14 +540,21 @@ export default function AdminCoursesPage() {
                     <div className="font-bold text-foreground">{u.name}</div>
                     <div className="text-muted-foreground">{u.city || "—"}</div>
                   </div>
-                  <HoldToConfirmButton
-                    duration={1200}
-                    className="h-7 min-w-28 px-2 text-[11px]"
-                    onConfirm={() => deleteUniMutation.mutate(u.id)}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => {
+                      if (
+                        window.confirm(`Are you sure you want to delete university "${u.name}"?`)
+                      ) {
+                        deleteUniMutation.mutate(u.id);
+                      }
+                    }}
                   >
                     <Trash2 className="h-3 w-3" />
-                    Hold Delete
-                  </HoldToConfirmButton>
+                    Delete
+                  </Button>
                 </div>
               ))}
             </div>
@@ -655,13 +661,23 @@ export default function AdminCoursesPage() {
                     <Sparkles className="h-4 w-4 text-gold" />
                     Re-analyze Syllabus
                   </Button>
-                  <HoldToConfirmButton
-                    duration={1500}
-                    onConfirm={() => deleteCourseMutation.mutate(courseDetail.id)}
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="gap-1.5"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Are you sure you want to soft-delete "${courseDetail.name}"?`,
+                        )
+                      ) {
+                        deleteCourseMutation.mutate(courseDetail.id);
+                      }
+                    }}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    Hold to Soft-Delete
-                  </HoldToConfirmButton>
+                    Soft-Delete Course
+                  </Button>
                 </div>
 
                 <Button
@@ -685,21 +701,28 @@ export default function AdminCoursesPage() {
                       className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-xs"
                     >
                       <span>
-                        <strong>Week {t.weekNumber ?? "—"}:</strong> {t.title}
+                        <strong>Week {t.orderIndex ?? t.weekNumber ?? "—"}:</strong>{" "}
+                        {t.chapterTitle || t.title || t.name || "Untitled Topic"}
                       </span>
-                      <HoldToConfirmButton
-                        duration={1000}
-                        className="h-7 min-w-24 px-2 text-[11px]"
-                        onConfirm={() =>
-                          deleteTopicMutation.mutate({
-                            courseId: courseDetail.id,
-                            topicId: t.id,
-                          })
-                        }
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => {
+                          const topicTitle = t.chapterTitle || t.title || t.name || "this topic";
+                          if (
+                            window.confirm(`Are you sure you want to delete topic "${topicTitle}"?`)
+                          ) {
+                            deleteTopicMutation.mutate({
+                              courseId: courseDetail.id,
+                              topicId: t.id,
+                            });
+                          }
+                        }}
                       >
                         <Trash2 className="h-3 w-3" />
-                        Hold Delete
-                      </HoldToConfirmButton>
+                        Delete
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -754,21 +777,29 @@ export default function AdminCoursesPage() {
               <Button variant="outline" size="sm" onClick={() => setMergeSourceCourse(null)}>
                 Cancel
               </Button>
-              <HoldToConfirmButton
+              <Button
+                variant="destructive"
+                size="sm"
                 disabled={!mergeTargetCourseId || mergeMutation.isPending}
-                duration={1500}
-                onConfirm={() => {
+                className="gap-1.5"
+                onClick={() => {
                   if (mergeSourceCourse && mergeTargetCourseId) {
-                    mergeMutation.mutate({
-                      sourceId: mergeSourceCourse.id,
-                      targetId: mergeTargetCourseId,
-                    });
+                    if (
+                      window.confirm(
+                        `Are you sure you want to merge "${mergeSourceCourse.name}" into the target course? This action cannot be undone.`,
+                      )
+                    ) {
+                      mergeMutation.mutate({
+                        sourceId: mergeSourceCourse.id,
+                        targetId: mergeTargetCourseId,
+                      });
+                    }
                   }
                 }}
               >
                 <GitMerge className="h-3.5 w-3.5" />
-                Hold to Merge Courses
-              </HoldToConfirmButton>
+                Merge Courses
+              </Button>
             </div>
           </div>
         </DialogContent>

@@ -24,7 +24,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { HoldToConfirmButton } from "@/components/ui/hold-to-confirm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -491,9 +490,11 @@ export default function AdminReportsPage() {
                                   <>
                                     <div>
                                       <span className="font-bold text-primary">
-                                        W{t.weekNumber ?? "—"}:
+                                        W{t.orderIndex ?? t.weekNumber ?? "—"}:
                                       </span>{" "}
-                                      <span className="font-medium">{t.title}</span>
+                                      <span className="font-medium">
+                                        {t.chapterTitle || t.title || t.name || "Untitled Topic"}
+                                      </span>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                       <Button
@@ -502,27 +503,37 @@ export default function AdminReportsPage() {
                                         className="h-7 px-2 text-xs"
                                         onClick={() => {
                                           setEditingTopicId(t.id);
-                                          setEditingTopicTitle(t.title);
-                                          setEditingTopicWeek(
-                                            t.weekNumber !== null ? String(t.weekNumber) : "",
+                                          setEditingTopicTitle(
+                                            t.chapterTitle || t.title || t.name || "",
                                           );
+                                          const wk = t.orderIndex ?? t.weekNumber;
+                                          setEditingTopicWeek(wk != null ? String(wk) : "");
                                         }}
                                       >
                                         <Pencil className="h-3.5 w-3.5" />
                                       </Button>
-                                      <HoldToConfirmButton
-                                        duration={1000}
-                                        className="h-7 min-w-24 px-2 text-[11px]"
-                                        onConfirm={() =>
-                                          deleteTopicMutation.mutate({
-                                            courseId: selectedReport.courseId!,
-                                            topicId: t.id,
-                                          })
-                                        }
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                        onClick={() => {
+                                          const topicTitle =
+                                            t.chapterTitle || t.title || t.name || "this topic";
+                                          if (
+                                            window.confirm(
+                                              `Are you sure you want to delete topic "${topicTitle}"?`,
+                                            )
+                                          ) {
+                                            deleteTopicMutation.mutate({
+                                              courseId: selectedReport.courseId!,
+                                              topicId: t.id,
+                                            });
+                                          }
+                                        }}
                                       >
                                         <Trash2 className="h-3 w-3" />
-                                        Hold Delete
-                                      </HoldToConfirmButton>
+                                        Delete
+                                      </Button>
                                     </div>
                                   </>
                                 )}
