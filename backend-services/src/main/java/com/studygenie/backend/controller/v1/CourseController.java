@@ -53,9 +53,14 @@ public class CourseController {
 
 
     public CourseController(CourseService courseService) {
-
         this.courseService = courseService;
+    }
 
+    private Long requireUserId(com.studygenie.backend.security.AuthenticatedUser userDetails) {
+        if (userDetails == null || userDetails.id() == null) {
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
+        }
+        return userDetails.id();
     }
 
 
@@ -90,7 +95,7 @@ public class CourseController {
 
             @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
 
-        Long userId = userDetails.id();
+        Long userId = requireUserId(userDetails);
 
         return ResponseEntity.ok(ApiResponse.ok("Enrolled courses fetched successfully", courseService.getMyCourses(userId)));
 
@@ -110,7 +115,7 @@ public class CourseController {
 
             @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
 
-        CourseDto enrolled = courseService.enrollCourse(userDetails.id(), courseId);
+        CourseDto enrolled = courseService.enrollCourse(requireUserId(userDetails), courseId);
 
         return ResponseEntity.ok(ApiResponse.ok("Course enrolled successfully", enrolled));
 
@@ -130,7 +135,7 @@ public class CourseController {
 
             @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
 
-        courseService.unenrollCourse(userDetails.id(), courseId);
+        courseService.unenrollCourse(requireUserId(userDetails), courseId);
 
         return ResponseEntity.ok(ApiResponse.ok("Course unenrolled successfully", null));
 
@@ -150,7 +155,7 @@ public class CourseController {
 
             @RequestBody List<String> courseIdentifiers) {
 
-        List<CourseDto> enrolled = courseService.syncEnrolledCourses(userDetails.id(), courseIdentifiers);
+        List<CourseDto> enrolled = courseService.syncEnrolledCourses(requireUserId(userDetails), courseIdentifiers);
 
         return ResponseEntity.ok(ApiResponse.ok("Enrolled courses synced successfully", enrolled));
 
@@ -185,6 +190,8 @@ public class CourseController {
     @Operation(summary = "Delete a course")
 
     @SecurityRequirement(name = "bearerAuth")
+
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR')")
 
     @DeleteMapping("/courses/{courseId}")
 
@@ -240,7 +247,11 @@ public class CourseController {
 
             @PathVariable Long courseId,
 
-            @PathVariable Long topicId) {
+            @PathVariable Long topicId,
+
+            @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
+
+        courseService.verifyCanModifySyllabusOrTopics(courseId, userDetails);
 
         courseService.deleteTopic(courseId, topicId);
 
@@ -254,7 +265,11 @@ public class CourseController {
 
     @DeleteMapping("/courses/{courseId}/syllabus")
 
-    public ResponseEntity<ApiResponse<Void>> deleteSyllabus(@PathVariable Long courseId) {
+    public ResponseEntity<ApiResponse<Void>> deleteSyllabus(
+            @PathVariable Long courseId,
+            @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
+
+        courseService.verifyCanModifySyllabusOrTopics(courseId, userDetails);
 
         courseService.deleteSyllabus(courseId);
 
@@ -294,7 +309,7 @@ public class CourseController {
 
             @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
 
-        Long userId = userDetails.id();
+        Long userId = requireUserId(userDetails);
 
         PlanResponseData data = courseService.getPlan(courseId, userId);
 
@@ -314,7 +329,7 @@ public class CourseController {
         LocalDate examDate = body.examDate();
         Double dailyHours = body.dailyHours();
         String mode = body.mode();
-        Long userId = userDetails.id();
+        Long userId = requireUserId(userDetails);
         PlanResponseData data = courseService.regeneratePlan(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds());
         return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
     }
@@ -343,7 +358,7 @@ public class CourseController {
 
 
 
-        Long userId = userDetails.id(); 
+        Long userId = requireUserId(userDetails); 
 
         
 

@@ -33,8 +33,11 @@ public class CollegeController {
     public ResponseEntity<ApiResponse<CollegeDto>> createCollege(
             @PathVariable Long universityId,
             @RequestBody Map<String, String> body) {
-        String name = body.get("name");
-        CollegeDto dto = collegeService.createCollege(universityId, name);
+        String name = body != null ? body.get("name") : null;
+        if (name == null || name.trim().isEmpty() || name.trim().length() > 150) {
+            throw new com.studygenie.backend.exception.BadRequestException("College name must be between 1 and 150 characters");
+        }
+        CollegeDto dto = collegeService.createCollege(universityId, name.trim());
         return ResponseEntity.ok(ApiResponse.ok("College created or found successfully", dto));
     }
 }

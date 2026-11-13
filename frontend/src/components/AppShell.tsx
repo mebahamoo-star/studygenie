@@ -9,6 +9,7 @@ import {
   LogOut,
   Moon,
   Settings,
+  ShieldCheck,
   Sparkles,
   Star,
   Sun,
@@ -268,6 +269,29 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </SidebarMenuItem>
                 );
               })}
+              {(user?.role === "ADMIN" || user?.role === "MODERATOR") && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={path.startsWith("/admin")}
+                    tooltip={lang === "ar" ? "لوحة الإدارة" : "Admin Panel"}
+                    className={cn(
+                      "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                      path.startsWith("/admin")
+                        ? "bg-primary bg-gradient-magic text-white shadow-glow hover:bg-primary hover:text-white hover:brightness-105"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <Link
+                      to={user.role === "MODERATOR" ? "/admin/reports" : "/admin/overview"}
+                      data-testid="sidebar-admin-link"
+                    >
+                      <ShieldCheck className="h-5 w-5 shrink-0" />
+                      <span>{lang === "ar" ? "لوحة الإدارة" : "Admin"}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroup>
         </SidebarContent>

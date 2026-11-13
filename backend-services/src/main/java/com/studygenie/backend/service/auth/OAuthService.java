@@ -35,6 +35,7 @@ public class OAuthService {
     private final AuthService authService;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final org.springframework.core.env.Environment environment;
 
     public OAuthService(
             @Value("${oauth.google.client-id:}") String googleClientId,
@@ -44,7 +45,8 @@ public class OAuthService {
             @Value("${oauth.microsoft.tenant-id:common}") String microsoftTenantId,
             UserAccountStore userStore,
             AuthService authService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            org.springframework.core.env.Environment environment) {
         this.googleClientId = googleClientId != null ? googleClientId.trim() : "";
         this.googleClientSecret = googleClientSecret != null ? googleClientSecret.trim() : "";
         this.microsoftClientId = microsoftClientId != null ? microsoftClientId.trim() : "";
@@ -53,7 +55,12 @@ public class OAuthService {
         this.userStore = userStore;
         this.authService = authService;
         this.objectMapper = objectMapper;
+        this.environment = environment;
         this.restClient = RestClient.builder().build();
+    }
+
+    private boolean isDevOrTestProfile() {
+        return environment != null && environment.acceptsProfiles(org.springframework.core.env.Profiles.of("dev", "test"));
     }
 
     public OAuthProviderInfo getProviderInfo(String redirectUri) {
@@ -93,9 +100,12 @@ public class OAuthService {
             throw new BadRequestException("Unsupported OAuth provider: " + provider);
         }
 
-        // Demo / test mode fallback if requested or if credentials are dummy
+        // Demo / test mode fallback ONLY in dev/test profiles
         if ((request.code() != null && (request.code().startsWith("demo_") || request.code().startsWith("mock_"))) ||
             (request.idToken() != null && request.idToken().startsWith("demo_"))) {
+            if (!isDevOrTestProfile()) {
+                throw new UnauthorizedException("Demo OAuth login is disabled outside dev/test environments");
+            }
             return handleDemoLogin(provider);
         }
 
@@ -124,7 +134,10 @@ public class OAuthService {
 
     private OAuthUserProfile authenticateGoogle(OAuthLoginRequest request) {
         if (googleClientId.isEmpty()) {
-            log.warn("Google OAuth attempted but GOOGLE_CLIENT_ID is not configured in environment. Using demo profile.");
+            if (!isDevOrTestProfile()) {
+                throw new UnauthorizedException("Google OAuth is not configured on this server");
+            }
+            log.warn("Google OAuth attempted in dev/test without GOOGLE_CLIENT_ID. Using demo profile.");
             return new OAuthUserProfile("Alex Scholar", "alex.scholar@gmail.com", "google-demo-123", null);
         }
 
@@ -187,7 +200,10 @@ public class OAuthService {
 
     private OAuthUserProfile authenticateMicrosoft(OAuthLoginRequest request) {
         if (microsoftClientId.isEmpty()) {
-            log.warn("Microsoft OAuth attempted but MICROSOFT_CLIENT_ID is not configured in environment. Using demo profile.");
+            if (!isDevOrTestProfile()) {
+                throw new UnauthorizedException("Microsoft OAuth is not configured on this server");
+            }
+            log.warn("Microsoft OAuth attempted in dev/test without MICROSOFT_CLIENT_ID. Using demo profile.");
             return new OAuthUserProfile("Taylor Student", "taylor.student@outlook.com", "microsoft-demo-456", null);
         }
 

@@ -153,7 +153,7 @@ public class ExamController {
 
         if (userDetails == null || userDetails.id() == null) {
 
-            return ResponseEntity.ok(ApiResponse.ok("Exams fetched successfully", List.of()));
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
 
         }
 
@@ -516,31 +516,12 @@ public class ExamController {
 
             @Valid @RequestBody CreateExamRequest req) {
 
-        Student student = null;
-
-        if (userDetails != null && userDetails.id() != null) {
-
-            student = studentRepository.findById(userDetails.id()).orElse(null);
-
+        if (userDetails == null || userDetails.id() == null) {
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
         }
 
-        if (student == null && req.studentEmail() != null && !req.studentEmail().isBlank()) {
-
-            student = studentRepository.findByEmail(req.studentEmail().trim()).orElse(null);
-
-        }
-
-        if (student == null) {
-
-            student = studentRepository.findAll().stream().findFirst().orElse(null);
-
-        }
-
-        if (student == null) {
-
-            throw new ResourceNotFoundException("No student found in system to associate exam with.");
-
-        }
+        Student student = studentRepository.findById(userDetails.id())
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated student account not found."));
 
 
 
@@ -658,17 +639,22 @@ public class ExamController {
 
             @PathVariable Long id) {
 
+        if (userDetails == null || userDetails.id() == null) {
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
+        }
+
         Long studentId = userDetails.id();
 
         Exam exam = examRepository.findById(id)
 
                 .orElseThrow(() -> new ResourceNotFoundException("Exam not found"));
 
+        boolean isPrivileged = userDetails.role() == com.studygenie.backend.entity.enums.Role.ADMIN
+                || userDetails.role() == com.studygenie.backend.entity.enums.Role.MODERATOR;
 
+        if (!isPrivileged && (exam.getStudent() == null || !exam.getStudent().getId().equals(studentId))) {
 
-        if (!exam.getStudent().getId().equals(studentId)) {
-
-            throw new ResourceNotFoundException("Exam not found");
+            throw new com.studygenie.backend.exception.ForbiddenException("You can only delete your own exams");
 
         }
 

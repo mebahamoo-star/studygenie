@@ -107,6 +107,10 @@ public class CourseService {
         this.examRepository = examRepository;
     }
 
+    public void clearCoursesCache() {
+        coursesCache.clear();
+    }
+
     @Transactional(readOnly = true)
     public List<CourseDto> getAllCourses() {
         CachedCourses cached = coursesCache.get("all");
@@ -114,6 +118,7 @@ public class CourseService {
             return cached.list();
         }
         List<CourseDto> list = courseRepository.findAll().stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
         coursesCache.put("all", new CachedCourses(System.currentTimeMillis(), list));
@@ -131,6 +136,7 @@ public class CourseService {
             return cached.list();
         }
         List<CourseDto> list = courseRepository.findByCollegeId(collegeId).stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
         coursesCache.put(key, new CachedCourses(System.currentTimeMillis(), list));
@@ -155,6 +161,7 @@ public class CourseService {
         }
 
         return courses.stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
     }
@@ -380,6 +387,34 @@ public class CourseService {
         }
 
         topicRepository.delete(topic);
+    }
+
+    @Transactional
+    public void verifyCanModifySyllabusOrTopics(Long courseId, com.studygenie.backend.security.AuthenticatedUser userDetails) {
+        if (userDetails == null || userDetails.id() == null) {
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
+        }
+        com.studygenie.backend.entity.enums.Role role = userDetails.role();
+        if (role == com.studygenie.backend.entity.enums.Role.ADMIN
+                || role == com.studygenie.backend.entity.enums.Role.MODERATOR) {
+            return;
+        }
+        long totalEnrolled = studentRepository.countEnrolledStudentsByCourseId(courseId);
+        if (totalEnrolled > 1) {
+            throw new com.studygenie.backend.exception.ForbiddenException(
+                    "Only an admin or moderator can delete topics or reset the syllabus of a shared course with multiple students.");
+        }
+        long callerEnrolled = studentRepository.countEnrollmentByCourseIdAndStudentId(courseId, userDetails.id());
+        if (callerEnrolled == 1) {
+            return;
+        }
+        Syllabus syllabus = syllabusRepository.findByCourseId(courseId).orElse(null);
+        if (totalEnrolled == 0 && syllabus != null && syllabus.getUploadedBy() != null
+                && userDetails.id().equals(syllabus.getUploadedBy().getId())) {
+            return;
+        }
+        throw new com.studygenie.backend.exception.ForbiddenException(
+                "You must be the sole enrolled student or an admin/moderator to modify this course's syllabus or topics.");
     }
 
     @Transactional

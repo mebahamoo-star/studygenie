@@ -45,8 +45,31 @@ public class Course {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "verified")
+    @Builder.Default
+    private Boolean verified = false;
+
+    @Column(name = "locked")
+    @Builder.Default
+    private Boolean locked = false;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @OneToOne(mappedBy = "course", fetch = FetchType.LAZY)
     private Syllabus syllabus;
+
+    public boolean isVerified() {
+        return Boolean.TRUE.equals(verified);
+    }
+
+    public boolean isLocked() {
+        return Boolean.TRUE.equals(locked);
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
 
     @Override
     public boolean equals(Object o) {

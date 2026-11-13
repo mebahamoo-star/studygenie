@@ -44,15 +44,27 @@ public class CourseReportController {
             @AuthenticationPrincipal AuthenticatedUser userDetails,
             @Valid @RequestBody CreateCourseReportRequest req) {
 
-        String reporter = req.reportedBy();
-        if ((reporter == null || reporter.isBlank()) && userDetails != null && userDetails.id() != null) {
-            Student s = studentRepository.findById(userDetails.id()).orElse(null);
-            if (s != null) {
-                reporter = s.getFullName() != null && !s.getFullName().isBlank() ? s.getFullName() : s.getEmail();
+        if (userDetails == null || userDetails.id() == null) {
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
+        }
+
+        String reporter = null;
+        Student s = studentRepository.findById(userDetails.id()).orElse(null);
+        if (s != null) {
+            String name = (s.getFullName() != null && !s.getFullName().isBlank()) ? s.getFullName().trim() : null;
+            String email = (s.getEmail() != null && !s.getEmail().isBlank()) ? s.getEmail().trim() : null;
+            if (name != null && email != null) {
+                reporter = name + " (" + email + ")";
+            } else if (name != null) {
+                reporter = name;
+            } else if (email != null) {
+                reporter = email;
             }
         }
         if (reporter == null || reporter.isBlank()) {
-            reporter = "Student / Community Member";
+            reporter = (userDetails.email() != null && !userDetails.email().isBlank())
+                    ? userDetails.email()
+                    : "Authenticated Student";
         }
 
         CourseReport report = CourseReport.builder()
@@ -82,6 +94,7 @@ public class CourseReportController {
     }
 
     @GetMapping("/reports")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR')")
     @Operation(summary = "Get list of all submitted course reports")
     public ResponseEntity<ApiResponse<List<CourseReportDto>>> getAllReports() {
         List<CourseReportDto> list = courseReportRepository.findByOrderByCreatedAtDesc().stream()

@@ -37,8 +37,11 @@ public class UniversityController {
     @Operation(summary = "Create or find a university by name")
     @PostMapping
     public ResponseEntity<ApiResponse<UniversityDto>> createUniversity(@RequestBody Map<String, String> body) {
-        String name = body.get("name");
-        UniversityDto dto = universityService.createUniversity(name);
+        String name = body != null ? body.get("name") : null;
+        if (name == null || name.trim().isEmpty() || name.trim().length() > 150) {
+            throw new com.studygenie.backend.exception.BadRequestException("University name must be between 1 and 150 characters");
+        }
+        UniversityDto dto = universityService.createUniversity(name.trim());
         return ResponseEntity.ok(ApiResponse.ok("University created or found successfully", dto));
     }
 }

@@ -30,7 +30,14 @@ public class JsonAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 
         String errorAttr = (String) request.getAttribute("auth.error");
-        String message = "TOKEN_EXPIRED".equals(errorAttr) ? "Token expired" : "Unauthorized";
+        String message;
+        if ("TOKEN_EXPIRED".equals(errorAttr)) {
+            message = "Token expired";
+        } else if ("ACCOUNT_SUSPENDED".equals(errorAttr)) {
+            message = "Account is suspended";
+        } else {
+            message = "Unauthorized";
+        }
 
         ApiResponse<Void> apiResponse = ApiResponse.error(message);
         objectMapper.writeValue(response.getOutputStream(), apiResponse);

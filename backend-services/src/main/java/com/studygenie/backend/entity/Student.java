@@ -1,5 +1,7 @@
 package com.studygenie.backend.entity;
 
+import com.studygenie.backend.entity.enums.AccountStatus;
+import com.studygenie.backend.entity.enums.Role;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -73,6 +75,38 @@ public class Student {
 
     @Column(name = "avatar_url", length = 512)
     private String avatarUrl;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", length = 30)
+    @Builder.Default
+    private Role role = Role.STUDENT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 30)
+    @Builder.Default
+    private AccountStatus status = AccountStatus.ACTIVE;
+
+    @Column(name = "last_active_at")
+    private LocalDateTime lastActiveAt;
+
+    public Role getRole() {
+        return role != null ? role : Role.STUDENT;
+    }
+
+    public AccountStatus getStatus() {
+        return status != null ? status : AccountStatus.ACTIVE;
+    }
+
+    @PrePersist
+    @PreUpdate
+    private void ensureDefaults() {
+        if (this.role == null) {
+            this.role = Role.STUDENT;
+        }
+        if (this.status == null) {
+            this.status = AccountStatus.ACTIVE;
+        }
+    }
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

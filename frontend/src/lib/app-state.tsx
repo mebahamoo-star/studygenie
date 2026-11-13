@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { authService, gamificationService } from "./api/services";
 import { getStoredAccessToken, getStoredUser, fetchApi } from "./api/client";
 import { getUserStoragePrefix } from "./courses-util";
@@ -51,7 +52,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return 1;
     }
   });
-  const [user, setUser] = useState<UserSummary | null>(() => getStoredUser());
+  const queryClient = useQueryClient();
+  // Never trust role from localStorage before backend confirmation via /api/auth/me or fresh login
+  const [user, setUser] = useState<UserSummary | null>(() => {
+    const stored = getStoredUser();
+    if (!stored) return null;
+    return { ...stored, role: "STUDENT" };
+  });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getStoredAccessToken());
   const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
 
@@ -118,10 +125,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
+    let active = true;
+    if (isAuthenticated && getStoredAccessToken()) {
       refreshGamification();
+      authService
+        .getMe()
+        .then((me) => {
+          if (active && me) {
+            setUser(me);
+            setIsBackendOnline(true);
+          }
+        })
+        .catch(() => {
+          // Keep safe STUDENT role if /api/auth/me cannot be verified
+        });
     }
+    return () => {
+      active = false;
+    };
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    const handleSessionCleared = () => {
+      queryClient.clear();
+      setUser(null);
+      setIsAuthenticated(false);
+    };
+    window.addEventListener("sg-session-cleared", handleSessionCleared);
+    return () => {
+      window.removeEventListener("sg-session-cleared", handleSessionCleared);
+    };
+  }, [queryClient]);
 
   useEffect(() => {
     const handlePointsUpdate = (e: any) => {
@@ -150,6 +184,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
+  const allowOfflineFallback = !import.meta.env.PROD && import.meta.env.VITE_ENABLE_OFFLINE_MOCK === "true";
+
   const login = async (email: string, password: string, rememberMe = false) => {
     try {
       const res = await authService.login(email, password, rememberMe);
@@ -160,15 +196,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err: any) {
       if (err?.isOffline) {
         setIsBackendOnline(false);
-        // Fallback for demo when backend is offline
-        const mockUser: UserSummary = {
-          id: 1,
-          fullName: email.split("@")[0] || "Mohammad Hammoo",
-          email,
-        };
-        setUser(mockUser);
-        setIsAuthenticated(true);
-        return;
+        if (allowOfflineFallback) {
+          const mockUser: UserSummary = {
+            id: 1,
+            fullName: email.split("@")[0] || "Student",
+            email,
+            role: "STUDENT",
+            status: "ACTIVE",
+          };
+          setUser(mockUser);
+          setIsAuthenticated(true);
+          return;
+        }
       }
       throw err;
     }
@@ -184,14 +223,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch (err: any) {
       if (err?.isOffline) {
         setIsBackendOnline(false);
-        const mockUser: UserSummary = {
-          id: 1,
-          fullName,
-          email,
-        };
-        setUser(mockUser);
-        setIsAuthenticated(true);
-        return;
+        if (allowOfflineFallback) {
+          const mockUser: UserSummary = {
+            id: 1,
+            fullName,
+            email,
+            role: "STUDENT",
+            status: "ACTIVE",
+          };
+          setUser(mockUser);
+          setIsAuthenticated(true);
+          return;
+        }
       }
       throw err;
     }
@@ -202,13 +245,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const res = await authService.oauthLogin(provider, code, idToken, redirectUri);
       setUser(res.user);
       setIsAuthenticated(true);
+      setIsBackendOnline(true);
       await refreshGamification();
     } catch (err) {
-      if (!isBackendOnline) {
+      if (!isBackendOnline && allowOfflineFallback) {
         const mockUser: UserSummary = {
           id: 1,
           fullName: provider === "google" ? "Google Student" : "Windows Student",
           email: provider === "google" ? "google.student@gmail.com" : "windows.student@outlook.com",
+          role: "STUDENT",
+          status: "ACTIVE",
         };
         setUser(mockUser);
         setIsAuthenticated(true);
@@ -219,9 +265,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
-    setIsAuthenticated(false);
+    try {
+      await authService.logout();
+    } finally {
+      queryClient.clear();
+      setUser(null);
+      setIsAuthenticated(false);
+    }
   };
 
   return (
