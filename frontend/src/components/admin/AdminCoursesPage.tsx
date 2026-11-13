@@ -67,10 +67,23 @@ export default function AdminCoursesPage() {
     staleTime: 60_000,
   });
 
-  const { data: colleges = [] } = useQuery({
-    queryKey: ["admin", "catalog", "colleges", universityId || newColUniId],
-    queryFn: () => browseService.getColleges(universityId || newColUniId),
-    enabled: Boolean(universityId || newColUniId),
+  const effectiveCatalogUniId =
+    newColUniId || (universities.length > 0 ? String(universities[0].id) : "");
+
+  const { data: catalogColleges = [] } = useQuery({
+    queryKey: ["admin", "catalog", "colleges", effectiveCatalogUniId],
+    queryFn: () =>
+      effectiveCatalogUniId
+        ? browseService.getColleges(effectiveCatalogUniId)
+        : Promise.resolve([]),
+    enabled: Boolean(effectiveCatalogUniId),
+    staleTime: 60_000,
+  });
+
+  const { data: filterColleges = [] } = useQuery({
+    queryKey: ["admin", "filter", "colleges", universityId],
+    queryFn: () => (universityId ? browseService.getColleges(universityId) : Promise.resolve([])),
+    enabled: Boolean(universityId),
     staleTime: 60_000,
   });
 
@@ -219,15 +232,29 @@ export default function AdminCoursesPage() {
   const createColMutation = useMutation({
     mutationFn: () =>
       adminService.createCollege({
-        universityId: newColUniId,
+        universityId: Number(effectiveCatalogUniId),
         name: newColName.trim(),
       }),
     onSuccess: () => {
-      toast.success("College created");
+      toast.success(lang === "ar" ? "تمت إضافة الكلية بنجاح" : "College created");
       setNewColName("");
       queryClient.invalidateQueries({ queryKey: ["admin", "catalog", "colleges"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "catalog", "universities"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "filter", "colleges"] });
     },
     onError: (err: Error) => toast.error(err.message || "Failed to create college"),
+  });
+
+  const deleteColMutation = useMutation({
+    mutationFn: (id: number | string) => adminService.deleteCollege(id),
+    onSuccess: () => {
+      toast.success(lang === "ar" ? "تم حذف الكلية بنجاح" : "College deleted");
+      queryClient.invalidateQueries({ queryKey: ["admin", "catalog", "colleges"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "catalog", "universities"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "filter", "colleges"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "courses"] });
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to delete college"),
   });
 
   return (
@@ -329,7 +356,7 @@ export default function AdminCoursesPage() {
                 className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-semibold"
               >
                 <option value="">{lang === "ar" ? "كل الكليات" : "All Colleges"}</option>
-                {colleges.map((c) => (
+                {filterColleges.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -563,15 +590,18 @@ export default function AdminCoursesPage() {
           <div className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-soft">
             <h2 className="flex items-center gap-2 text-lg font-bold">
               <BookOpen className="h-5 w-5 text-primary" />
-              <span>Colleges</span>
+              <span>
+                {lang === "ar" ? "الكليات" : "Colleges"} ({catalogColleges.length})
+              </span>
             </h2>
             <div className="grid gap-2 sm:grid-cols-3">
               <select
-                value={newColUniId}
+                aria-label="Select University"
+                value={effectiveCatalogUniId}
                 onChange={(e) => setNewColUniId(e.target.value)}
                 className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-semibold"
               >
-                <option value="">Select University...</option>
+                <option value="">{lang === "ar" ? "اختر الجامعة..." : "Select University..."}</option>
                 {universities.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -581,27 +611,63 @@ export default function AdminCoursesPage() {
               <Input
                 value={newColName}
                 onChange={(e) => setNewColName(e.target.value)}
-                placeholder="College Name"
+                placeholder={lang === "ar" ? "اسم الكلية" : "College Name"}
               />
               <Button
-                disabled={!newColUniId || !newColName.trim() || createColMutation.isPending}
+                disabled={!effectiveCatalogUniId || !newColName.trim() || createColMutation.isPending}
                 onClick={() => createColMutation.mutate()}
                 className="gap-1.5"
               >
                 <Plus className="h-4 w-4" />
-                Add College
+                {lang === "ar" ? "إضافة كلية" : "Add College"}
               </Button>
             </div>
             <div className="max-h-72 space-y-2 overflow-y-auto pt-2">
-              {colleges.map((col) => (
-                <div
-                  key={col.id}
-                  className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-xs"
-                >
-                  <span className="font-bold text-foreground">{col.name}</span>
-                  <span className="text-muted-foreground">ID: {col.id.slice(0, 8)}</span>
+              {!effectiveCatalogUniId ? (
+                <div className="py-8 text-center text-xs text-muted-foreground">
+                  {lang === "ar"
+                    ? "اختر جامعة من القائمة أعلاه لعرض وإدارة كلياتها"
+                    : "Select a university above to view and manage its colleges."}
                 </div>
-              ))}
+              ) : catalogColleges.length === 0 ? (
+                <div className="py-8 text-center text-xs text-muted-foreground">
+                  {lang === "ar"
+                    ? "لا توجد كليات مسجلة لهذه الجامعة حتى الآن"
+                    : "No colleges registered for this university yet."}
+                </div>
+              ) : (
+                catalogColleges.map((col) => (
+                  <div
+                    key={col.id}
+                    className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-foreground">{col.name}</div>
+                      <div className="text-[10px] text-muted-foreground">ID: #{col.id}</div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={deleteColMutation.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            lang === "ar"
+                              ? `هل أنت متأكد من حذف كلية "${col.name}"؟`
+                              : `Are you sure you want to delete college "${col.name}"?`,
+                          )
+                        ) {
+                          deleteColMutation.mutate(col.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      {lang === "ar" ? "حذف" : "Delete"}
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

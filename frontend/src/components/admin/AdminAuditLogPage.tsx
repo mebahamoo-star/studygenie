@@ -15,6 +15,16 @@ import { adminService } from "@/lib/api/services";
 import type { AdminAuditLogDto } from "@/lib/api/types";
 import { useApp } from "@/lib/app-state";
 
+function formatJsonSafely(raw?: string | null): string {
+  if (!raw) return "null";
+  try {
+    const parsed = JSON.parse(raw);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return raw;
+  }
+}
+
 export default function AdminAuditLogPage() {
   const { lang } = useApp();
 
@@ -130,12 +140,12 @@ export default function AdminAuditLogPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-muted/40 text-xs font-bold uppercase text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Timestamp</th>
-                  <th className="px-4 py-3">Actor</th>
-                  <th className="px-4 py-3">Action</th>
-                  <th className="px-4 py-3">Target</th>
-                  <th className="px-4 py-3">IP Address</th>
-                  <th className="px-4 py-3 text-right">Diff</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "الوقت" : "Timestamp"}</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "المسؤول" : "Actor"}</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "العملية" : "Action"}</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "الهدف" : "Target"}</th>
+                  <th className="px-4 py-3">{lang === "ar" ? "عنوان IP" : "IP Address"}</th>
+                  <th className="px-4 py-3 text-right">{lang === "ar" ? "التفاصيل" : "Diff"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -147,7 +157,7 @@ export default function AdminAuditLogPage() {
                     <td className="px-4 py-3 text-xs">
                       <div className="font-bold text-foreground">{item.adminEmail || "Admin"}</div>
                       <div className="text-[10px] text-muted-foreground">
-                        {item.adminId ? item.adminId.slice(0, 8) : "—"}
+                        {item.adminId != null ? `#${item.adminId}` : "—"}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -157,14 +167,14 @@ export default function AdminAuditLogPage() {
                     </td>
                     <td className="px-4 py-3 text-xs">
                       <span className="font-bold">{item.targetType}</span>
-                      {item.targetId && (
+                      {item.targetId != null && (
                         <span className="ml-1.5 font-mono text-muted-foreground">
-                          ({item.targetId.slice(0, 8)})
+                          ({String(item.targetId).slice(0, 8)})
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                      {item.ipAddress || "—"}
+                      {item.ip || item.ipAddress || "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button
@@ -174,7 +184,7 @@ export default function AdminAuditLogPage() {
                         className="gap-1 text-xs"
                       >
                         <Eye className="h-3.5 w-3.5" />
-                        Inspect
+                        {lang === "ar" ? "معاينة" : "Inspect"}
                       </Button>
                     </td>
                   </tr>
@@ -226,8 +236,8 @@ export default function AdminAuditLogPage() {
                   {selectedEntry.action} · {selectedEntry.targetType}
                 </DialogTitle>
                 <DialogDescription>
-                  Actor: {selectedEntry.adminEmail || selectedEntry.adminId} · IP:{" "}
-                  {selectedEntry.ipAddress || "—"} ·{" "}
+                  Actor: {selectedEntry.adminEmail || (selectedEntry.adminId ? `#${selectedEntry.adminId}` : "—")} · IP:{" "}
+                  {selectedEntry.ip || selectedEntry.ipAddress || "—"} ·{" "}
                   {selectedEntry.createdAt
                     ? new Date(selectedEntry.createdAt).toLocaleString()
                     : ""}
@@ -237,18 +247,18 @@ export default function AdminAuditLogPage() {
               <div className="grid gap-4 pt-2 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <div className="text-xs font-bold uppercase text-muted-foreground">
-                    Before State
+                    {lang === "ar" ? "الحالة السابقة" : "Before State"}
                   </div>
                   <pre className="max-h-64 overflow-auto rounded-xl border border-border bg-muted/40 p-3 font-mono text-xs text-foreground">
-                    {selectedEntry.beforeState || "null"}
+                    {formatJsonSafely(selectedEntry.beforeSummary || selectedEntry.beforeState)}
                   </pre>
                 </div>
                 <div className="space-y-1.5">
                   <div className="text-xs font-bold uppercase text-muted-foreground">
-                    After State
+                    {lang === "ar" ? "الحالة الجديدة" : "After State"}
                   </div>
                   <pre className="max-h-64 overflow-auto rounded-xl border border-border bg-muted/40 p-3 font-mono text-xs text-foreground">
-                    {selectedEntry.afterState || "null"}
+                    {formatJsonSafely(selectedEntry.afterSummary || selectedEntry.afterState)}
                   </pre>
                 </div>
               </div>

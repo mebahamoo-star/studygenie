@@ -938,7 +938,7 @@ export const adminService = {
     return res.data!;
   },
 
-  async deleteCollege(id: number): Promise<void> {
+  async deleteCollege(id: number | string): Promise<void> {
     await fetchApi<void>(`/api/admin/colleges/${id}`, {
       method: "DELETE",
     });
