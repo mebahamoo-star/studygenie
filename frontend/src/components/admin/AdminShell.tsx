@@ -204,6 +204,7 @@ export function AdminShell({
               <Link
                 key={item.to}
                 to={item.to}
+                preload="intent"
                 className={cn(
                   "flex shrink-0 items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all",
                   active

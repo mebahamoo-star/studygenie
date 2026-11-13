@@ -8,11 +8,11 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 
 import appCss from "../styles.css?url";
-import { AppProvider, themeInitScript } from "../lib/app-state";
+import { AppProvider, themeInitScript, useApp } from "../lib/app-state";
 import { Toaster } from "../components/ui/sonner";
 
 function NotFoundComponent() {
@@ -113,12 +113,73 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function RoutePreloader() {
+  const router = useRouter();
+  const { isAuthenticated, user } = useApp();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const schedule =
+      "requestIdleCallback" in window
+        ? (cb: () => void) => (window as any).requestIdleCallback(cb, { timeout: 2000 })
+        : (cb: () => void) => setTimeout(cb, 250);
+
+    const cancel = (id: any) => {
+      if ("cancelIdleCallback" in window) {
+        (window as any).cancelIdleCallback(id);
+      } else {
+        clearTimeout(id);
+      }
+    };
+
+    const handle = schedule(() => {
+      const routesToPreload = isAuthenticated
+        ? [
+            "/dashboard",
+            "/courses",
+            "/plan",
+            "/flashcards",
+            "/quiz",
+            "/pomodoro",
+            "/leaderboard",
+            "/profile",
+            "/settings",
+            ...(user?.role === "ADMIN" || user?.role === "MODERATOR"
+              ? [
+                  "/admin/overview",
+                  "/admin/reports",
+                  "/admin/courses",
+                  "/admin/users",
+                  "/admin/audit-log",
+                ]
+              : []),
+          ]
+        : ["/login", "/signup", "/onboarding", "/forgot-password"];
+
+      // Preload route chunks silently during idle time
+      routesToPreload.forEach((to, idx) => {
+        setTimeout(() => {
+          try {
+            router.preloadRoute({ to: to as any }).catch(() => {});
+          } catch {}
+        }, idx * 60);
+      });
+    });
+
+    return () => cancel(handle);
+  }, [router, isAuthenticated, user?.role]);
+
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
       <AppProvider>
+        <RoutePreloader />
         <Outlet />
         <Toaster position="top-center" />
       </AppProvider>

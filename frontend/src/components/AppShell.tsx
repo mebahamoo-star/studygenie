@@ -194,7 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild className="hover:bg-transparent data-[state=open]:hover:bg-transparent">
-                <Link to="/dashboard" className="flex items-center gap-2.5">
+                <Link to="/dashboard" preload="intent" className="flex items-center gap-2.5">
                   <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent shadow-sm">
                     <Genie className="h-8 w-8" />
                   </div>
@@ -233,7 +233,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
                     >
-                      <Link to={n.to}>
+                      <Link to={n.to} preload="intent">
                         <n.icon className="h-5 w-5 shrink-0" />
                         <span>{lang === "ar" ? n.ar : n.label}</span>
                       </Link>
@@ -249,6 +249,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                               <SidebarMenuSubButton asChild isActive={subActive}>
                                 <Link
                                   to={s.to}
+                                  preload="intent"
                                   className={cn(
                                     "flex items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors",
                                     subActive
@@ -284,6 +285,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   >
                     <Link
                       to={user.role === "MODERATOR" ? "/admin/reports" : "/admin/overview"}
+                      preload="intent"
                       data-testid="sidebar-admin-link"
                     >
                       <ShieldCheck className="h-5 w-5 shrink-0" />

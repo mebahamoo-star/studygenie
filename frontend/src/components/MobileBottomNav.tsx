@@ -55,6 +55,7 @@ export function MobileBottomNav({
               <li key={item.to} className="relative">
                 <Link
                   to={item.to}
+                  preload="intent"
                   className={cn(
                     "relative z-10 flex flex-col items-center justify-center rounded-full px-3 py-1.5 transition-colors duration-200 outline-none",
                     isActive

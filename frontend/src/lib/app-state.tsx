@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { authService, gamificationService } from "./api/services";
+import { authService, browseService, gamificationService } from "./api/services";
 import { getStoredAccessToken, getStoredUser, fetchApi } from "./api/client";
 import { getUserStoragePrefix } from "./courses-util";
 import type { UserSummary } from "./api/types";
@@ -159,6 +159,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             try {
               localStorage.setItem("sg_user", JSON.stringify(me));
             } catch {}
+
+            // Pre-warm courses data in query cache for instant page loads
+            queryClient
+              .prefetchQuery({
+                queryKey: ["courses", "enrolled"],
+                queryFn: () => browseService.getEnrolledCourses(),
+                staleTime: 60_000,
+              })
+              .catch(() => {});
           }
         })
         .catch(() => {
