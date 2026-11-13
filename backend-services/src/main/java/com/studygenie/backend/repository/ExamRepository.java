@@ -11,4 +11,6 @@ import java.util.Optional;
 public interface ExamRepository extends JpaRepository<Exam, Long> {
     List<Exam> findByStudentIdOrderByDateAsc(Long studentId);
     Optional<Exam> findFirstByStudentIdAndCourseIgnoreCase(Long studentId, String course);
+    List<Exam> findByCourseId(Long courseId);
+    List<Exam> findByCourseIgnoreCase(String courseName);
 }

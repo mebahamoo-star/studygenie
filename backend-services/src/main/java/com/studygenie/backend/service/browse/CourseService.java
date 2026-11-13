@@ -107,6 +107,10 @@ public class CourseService {
         this.examRepository = examRepository;
     }
 
+    public void clearCoursesCache() {
+        coursesCache.clear();
+    }
+
     @Transactional(readOnly = true)
     public List<CourseDto> getAllCourses() {
         CachedCourses cached = coursesCache.get("all");
@@ -114,6 +118,7 @@ public class CourseService {
             return cached.list();
         }
         List<CourseDto> list = courseRepository.findAll().stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
         coursesCache.put("all", new CachedCourses(System.currentTimeMillis(), list));
@@ -131,6 +136,7 @@ public class CourseService {
             return cached.list();
         }
         List<CourseDto> list = courseRepository.findByCollegeId(collegeId).stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
         coursesCache.put(key, new CachedCourses(System.currentTimeMillis(), list));
@@ -155,6 +161,7 @@ public class CourseService {
         }
 
         return courses.stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
     }

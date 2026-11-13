@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,6 +23,19 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     long countByRole(Role role);
     long countByRoleAndStatus(Role role, AccountStatus status);
+    long countByCreatedAtGreaterThanEqual(LocalDateTime since);
+    long countByLastStudyDateGreaterThanEqual(LocalDate since);
+    List<Student> findByCreatedAtGreaterThanEqual(LocalDateTime since);
+    List<Student> findByLastStudyDateGreaterThanEqual(LocalDate since);
+
+    @Query(value = "SELECT COUNT(*) FROM student_courses", nativeQuery = true)
+    long countAllEnrollments();
+
+    @Query(value = "SELECT student_id FROM student_courses WHERE course_id = :courseId", nativeQuery = true)
+    List<Long> findStudentIdsEnrolledInCourse(@Param("courseId") Long courseId);
+
+    @Query(value = "SELECT COUNT(*) FROM student_courses WHERE student_id = :studentId", nativeQuery = true)
+    long countEnrolledCoursesByStudentId(@Param("studentId") Long studentId);
 
     @Modifying
     @Query("UPDATE Student s SET s.role = com.studygenie.backend.entity.enums.Role.STUDENT WHERE s.role IS NULL")
