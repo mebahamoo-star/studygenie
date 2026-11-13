@@ -20,7 +20,12 @@ type Ctx = {
   isBackendOnline: boolean | null;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (fullName: string, email: string, password: string) => Promise<void>;
-  loginWithOAuth: (provider: "google" | "microsoft", code?: string, idToken?: string, redirectUri?: string) => Promise<void>;
+  loginWithOAuth: (
+    provider: "google" | "microsoft",
+    code?: string,
+    idToken?: string,
+    redirectUri?: string,
+  ) => Promise<void>;
   logout: () => Promise<void>;
   refreshGamification: () => Promise<void>;
 };
@@ -34,8 +39,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const prefix = getUserStoragePrefix();
       const saved =
-        localStorage.getItem(`sg-${prefix}-points`) ||
-        localStorage.getItem("sg-points");
+        localStorage.getItem(`sg-${prefix}-points`) || localStorage.getItem("sg-points");
       return saved ? Number(saved) : 0;
     } catch {
       return 0;
@@ -45,8 +49,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const prefix = getUserStoragePrefix();
       const saved =
-        localStorage.getItem(`sg-${prefix}-streak`) ||
-        localStorage.getItem("sg-streak");
+        localStorage.getItem(`sg-${prefix}-streak`) || localStorage.getItem("sg-streak");
       return saved ? Number(saved) : 1;
     } catch {
       return 1;
@@ -97,8 +100,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (profile) {
         const prefix = getUserStoragePrefix();
         const raw =
-          localStorage.getItem(`sg-${prefix}-points`) ||
-          localStorage.getItem("sg-points");
+          localStorage.getItem(`sg-${prefix}-points`) || localStorage.getItem("sg-points");
         const currentLocal = raw !== null ? Number(raw) : 0;
         const safeLocal = isNaN(currentLocal) ? 0 : currentLocal;
         const best = Math.max(profile.currentXp || 0, safeLocal);
@@ -134,6 +136,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (active && me) {
             setUser(me);
             setIsBackendOnline(true);
+            try {
+              localStorage.setItem("sg_user", JSON.stringify(me));
+            } catch {}
           }
         })
         .catch(() => {
@@ -166,8 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         const prefix = getUserStoragePrefix();
         const saved =
-          localStorage.getItem(`sg-${prefix}-points`) ||
-          localStorage.getItem("sg-points");
+          localStorage.getItem(`sg-${prefix}-points`) || localStorage.getItem("sg-points");
         if (saved !== null) {
           const val = Number(saved);
           if (!isNaN(val)) {
@@ -184,7 +188,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
-  const allowOfflineFallback = !import.meta.env.PROD && import.meta.env.VITE_ENABLE_OFFLINE_MOCK === "true";
+  const allowOfflineFallback =
+    !import.meta.env.PROD && import.meta.env.VITE_ENABLE_OFFLINE_MOCK === "true";
 
   const login = async (email: string, password: string, rememberMe = false) => {
     try {
@@ -240,7 +245,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loginWithOAuth = async (provider: "google" | "microsoft", code?: string, idToken?: string, redirectUri?: string) => {
+  const loginWithOAuth = async (
+    provider: "google" | "microsoft",
+    code?: string,
+    idToken?: string,
+    redirectUri?: string,
+  ) => {
     try {
       const res = await authService.oauthLogin(provider, code, idToken, redirectUri);
       setUser(res.user);
@@ -287,8 +297,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           try {
             const prefix = getUserStoragePrefix();
             const raw =
-              localStorage.getItem(`sg-${prefix}-points`) ||
-              localStorage.getItem("sg-points");
+              localStorage.getItem(`sg-${prefix}-points`) || localStorage.getItem("sg-points");
             const current = raw !== null ? Number(raw) : 0;
             const safeCurrent = isNaN(current) ? 0 : current;
             const next = safeCurrent + n;
