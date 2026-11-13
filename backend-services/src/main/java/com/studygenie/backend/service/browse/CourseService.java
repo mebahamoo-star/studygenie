@@ -383,6 +383,34 @@ public class CourseService {
     }
 
     @Transactional
+    public void verifyCanModifySyllabusOrTopics(Long courseId, com.studygenie.backend.security.AuthenticatedUser userDetails) {
+        if (userDetails == null || userDetails.id() == null) {
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
+        }
+        com.studygenie.backend.entity.enums.Role role = userDetails.role();
+        if (role == com.studygenie.backend.entity.enums.Role.ADMIN
+                || role == com.studygenie.backend.entity.enums.Role.MODERATOR) {
+            return;
+        }
+        long totalEnrolled = studentRepository.countEnrolledStudentsByCourseId(courseId);
+        if (totalEnrolled > 1) {
+            throw new com.studygenie.backend.exception.ForbiddenException(
+                    "Only an admin or moderator can delete topics or reset the syllabus of a shared course with multiple students.");
+        }
+        long callerEnrolled = studentRepository.countEnrollmentByCourseIdAndStudentId(courseId, userDetails.id());
+        if (callerEnrolled == 1) {
+            return;
+        }
+        Syllabus syllabus = syllabusRepository.findByCourseId(courseId).orElse(null);
+        if (totalEnrolled == 0 && syllabus != null && syllabus.getUploadedBy() != null
+                && userDetails.id().equals(syllabus.getUploadedBy().getId())) {
+            return;
+        }
+        throw new com.studygenie.backend.exception.ForbiddenException(
+                "You must be the sole enrolled student or an admin/moderator to modify this course's syllabus or topics.");
+    }
+
+    @Transactional
     public void deleteTopic(Long courseId, Long topicId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
