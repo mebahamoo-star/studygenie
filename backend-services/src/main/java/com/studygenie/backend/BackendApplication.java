@@ -73,6 +73,13 @@ public class BackendApplication {
 			dbUrl = System.getenv("DATABASE_URL");
 		}
 
+		if (dbUrl != null) {
+			dbUrl = dbUrl.trim();
+			if ((dbUrl.startsWith("\"") && dbUrl.endsWith("\"")) || (dbUrl.startsWith("'") && dbUrl.endsWith("'"))) {
+				dbUrl = dbUrl.substring(1, dbUrl.length() - 1).trim();
+			}
+		}
+
 		if (dbUrl != null && (dbUrl.startsWith("postgres://") || dbUrl.startsWith("postgresql://"))) {
 			try {
 				URI uri = URI.create(dbUrl.replaceFirst("^postgres(ql)?://", "http://"));
