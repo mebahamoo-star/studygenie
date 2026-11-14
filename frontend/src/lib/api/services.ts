@@ -529,7 +529,7 @@ export const studyService = {
   async submitQuiz(
     kitId: string | number,
 
-    answers: { questionId: string; selectedOptionIndex: number }[],
+    answers: { questionId: string; selectedOptionIndex?: number | null; answerText?: string | null }[],
   ): Promise<QuizSubmissionResponse> {
     const submissionId = crypto.randomUUID();
 

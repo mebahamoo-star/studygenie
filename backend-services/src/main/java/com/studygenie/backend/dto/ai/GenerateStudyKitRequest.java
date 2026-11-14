@@ -26,5 +26,13 @@ public record GenerateStudyKitRequest(
 
     @JsonProperty("questions_per_topic")
     @JsonAlias({"questions_per_topic", "questionsPerTopic"})
-    int questionsPerTopic
-) {}
+    int questionsPerTopic,
+
+    @JsonProperty("quiz_type")
+    @JsonAlias({"quiz_type", "quizType"})
+    String quizType
+) {
+    public GenerateStudyKitRequest(String courseName, String language, List<TopicInput> topics, int flashcardsPerTopic, int questionsPerTopic) {
+        this(courseName, language, topics, flashcardsPerTopic, questionsPerTopic, "MIXED");
+    }
+}

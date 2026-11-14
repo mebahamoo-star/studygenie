@@ -80,7 +80,16 @@ class FakeProvider(Provider):
                         "question": "AI stands for Artificial Intelligence.",
                         "options": ["True", "False"],
                         "correct_option_index": 0,
+                        "correct_answer_text": "True",
                         "explanation": "Standard acronym."
+                    },
+                    {
+                        "type": "SHORT_ANSWER",
+                        "question": "What does the letter P stand for in NLP?",
+                        "options": ["Processing"],
+                        "correct_option_index": 0,
+                        "correct_answer_text": "Processing",
+                        "explanation": "NLP stands for Natural Language Processing."
                     }
                 ]
             }

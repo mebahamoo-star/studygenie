@@ -2,5 +2,6 @@ package com.studygenie.backend.entity.enums;
 
 public enum QuestionType {
     MCQ,
-    TRUE_FALSE
+    TRUE_FALSE,
+    SHORT_ANSWER
 }

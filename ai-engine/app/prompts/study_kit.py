@@ -24,10 +24,25 @@ FLASHCARD ARCHITECTURAL PRINCIPLES:
    - Prioritize essential exam concepts: definitions, fundamental mechanisms, laws/formulas, and core trade-offs.
 
 4. QUIZ QUESTION SPECIFICATIONS:
-   - For "MCQ", provide 4 distinct, plausible options.
-   - For "TRUE_FALSE", provide exactly 2 options: ["True", "False"].
-   - Indicate the exact zero-based index of the correct answer in `correct_option_index`.
-   - Provide a concise `explanation` (1-2 sentences).
+   - When quiz_type is "MCQ" or when generating Multiple Choice questions:
+     * Set type to "MCQ".
+     * Provide 4 distinct, plausible options in `options`.
+     * Indicate the exact zero-based index of the correct answer in `correct_option_index`.
+     * Set `correct_answer_text` to the text of the correct option.
+   - When quiz_type is "TRUE_FALSE" or when generating True/False questions:
+     * Set type to "TRUE_FALSE".
+     * Provide exactly 2 options: ["True", "False"].
+     * Set `correct_option_index` to 0 (if True) or 1 (if False).
+     * Set `correct_answer_text` to "True" or "False".
+   - When quiz_type is "SHORT_ANSWER" or when generating Short Answer questions:
+     * Set type to "SHORT_ANSWER".
+     * Write a clear question asking for a specific term, concept, definition, name, or concise fact.
+     * Set `options` to an empty list `[]` (or a single-element list with the target answer).
+     * Set `correct_answer_text` to the exact target concise answer (1 to 5 words).
+     * Set `correct_option_index` to 0.
+   - When quiz_type is "MIXED" (or not specified):
+     * Provide a balanced mix of "MCQ", "TRUE_FALSE", and "SHORT_ANSWER" questions across the requested question count.
+   - For all questions, provide a concise `explanation` (1-2 sentences) explaining why the answer is correct.
 
 5. OUTPUT FORMAT:
    - Output strictly valid JSON matching the schema, with no markdown formatting outside the JSON object.
@@ -37,11 +52,12 @@ USER_PROMPT_TEMPLATE = """
 Academic Course: {course_name}
 Target Chapter / Topic: {chapter_title}
 Key Subtopics: {subtopics}
+Quiz Format Requested: {quiz_type}
 
 Chapter Body Content & Excerpt:
 <content>
 {source_excerpt}
 </content>
 
-Please generate EXACTLY {flashcards_per_topic} NotebookLM-style flashcards (with short 1-2 sentence answers under 35 words) and {questions_per_topic} exam quiz questions for this chapter.
+Please generate EXACTLY {flashcards_per_topic} NotebookLM-style flashcards (with short 1-2 sentence answers under 35 words) and {questions_per_topic} exam quiz questions ({quiz_type}) for this chapter.
 """

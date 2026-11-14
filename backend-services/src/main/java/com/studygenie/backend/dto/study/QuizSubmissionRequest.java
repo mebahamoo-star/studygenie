@@ -10,6 +10,11 @@ public record QuizSubmissionRequest(
 ) {
     public record QuizAnswer(
             @NotNull String questionId,
-            @NotNull Integer selectedOptionIndex
-    ) {}
+            Integer selectedOptionIndex,
+            String answerText
+    ) {
+        public QuizAnswer(String questionId, Integer selectedOptionIndex) {
+            this(questionId, selectedOptionIndex, null);
+        }
+    }
 }

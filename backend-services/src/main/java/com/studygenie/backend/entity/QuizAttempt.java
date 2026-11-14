@@ -30,9 +30,11 @@ public class QuizAttempt {
     @JoinColumn(name = "question_id", nullable = false)
     private QuizQuestion question;
 
-    @NotNull
-    @Column(name = "selected_option", nullable = false)
+    @Column(name = "selected_option")
     private Integer selectedOption;
+
+    @Column(name = "answer_text", columnDefinition = "TEXT")
+    private String answerText;
 
     @NotNull
     @Column(name = "is_correct", nullable = false)

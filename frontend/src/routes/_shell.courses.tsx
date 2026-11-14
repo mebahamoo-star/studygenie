@@ -1783,6 +1783,7 @@ function JoinChallenge({
 
   const [loadingQuiz, setLoadingQuiz] = useState(false);
   const [loadingCards, setLoadingCards] = useState(false);
+  const [quizFormatDialogOpen, setQuizFormatDialogOpen] = useState(false);
 
   const [examModalOpen, setExamModalOpen] = useState(false);
   const [examFormType, setExamFormType] = useState<string>(() => courseExam?.type || "Final Exam");
@@ -1885,7 +1886,7 @@ function JoinChallenge({
     }
   };
 
-  const handlePracticeQuiz = async () => {
+  const handlePracticeQuiz = async (quizType: "MIXED" | "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" = "MIXED") => {
     const selectedTopics = getSelectedTopics();
     if (selectedTopics.length === 0) {
       toast.warning("Please select at least one chapter file to practice a quiz.");
@@ -1896,6 +1897,7 @@ function JoinChallenge({
       const payload = {
         course_name: course.name,
         language: "en",
+        quiz_type: quizType,
         topics: selectedTopics.map((t, idx) => ({
           ref: String(t.id || idx + 1),
           chapter_title: t.name,
@@ -1903,7 +1905,7 @@ function JoinChallenge({
           source_excerpt: t.contentExcerpt || (t.subtopics ? t.subtopics.join(". ") : undefined),
         })),
         flashcards_per_topic: 2,
-        questions_per_topic: Math.min(5, Math.max(2, Math.ceil(12 / selectedTopics.length))),
+        questions_per_topic: Math.min(6, Math.max(3, Math.ceil(12 / selectedTopics.length))),
       };
 
       let generatedQuestions: any[] = [];
@@ -1917,12 +1919,32 @@ function JoinChallenge({
         if (res?.data?.topics) {
           res.data.topics.forEach((tk: any) => {
             (tk.quiz || []).forEach((q: any, qIdx: number) => {
+              const qType = (q.type || "MCQ").toUpperCase();
+              let answer = 0;
+              let correctAnswerText: string | undefined = q.correctAnswerText || undefined;
+              let options = q.options || [];
+
+              if (qType === "TRUE_FALSE") {
+                options = ["True", "False"];
+                answer = typeof q.correctOptionIndex === "number" ? q.correctOptionIndex : (typeof q.answer === "number" ? q.answer : 0);
+                correctAnswerText = answer === 1 ? "False" : "True";
+              } else if (qType === "SHORT_ANSWER") {
+                options = [];
+                correctAnswerText = q.correctAnswerText || (q.options && q.options[0]) || "";
+                answer = 0;
+              } else {
+                answer = typeof q.correctOptionIndex === "number" ? q.correctOptionIndex : (typeof q.answer === "number" ? q.answer : 0);
+                correctAnswerText = options[answer] || "";
+              }
+
               generatedQuestions.push({
                 id: q.questionId || `q-${Date.now()}-${qIdx}`,
+                type: qType,
                 q: q.question || q.q,
-                options: q.options || ["True", "False"],
-                answer: typeof q.answer === "number" ? q.answer : 0,
-                explain: q.explain || `Key takeaway from ${tk.ref || "chapter concepts"}.`,
+                options,
+                answer,
+                correctAnswerText,
+                explain: q.explain || q.explanation || `Key takeaway from ${tk.ref || "chapter concepts"}.`,
               });
             });
           });
@@ -1934,22 +1956,65 @@ function JoinChallenge({
       if (generatedQuestions.length === 0) {
         selectedTopics.forEach((st, idx) => {
           const sub = st.subtopics && st.subtopics[0] ? st.subtopics[0] : st.name;
-          generatedQuestions.push({
-            id: `q-gen-${idx}-1`,
-            q: `Which concept is a core component of "${st.name}"?`,
-            options: [
-              sub,
-              `Inverted logic of ${st.name}`,
-              `Unrelated legacy protocol`,
-              `None of the above`,
-            ],
-            answer: 0,
-            explain: `Based on your course syllabus for ${st.name}.`,
-          });
-          if (st.subtopics && st.subtopics.length > 1) {
+          const sub2 = st.subtopics && st.subtopics.length > 1 ? st.subtopics[1] : `principles of ${st.name}`;
+
+          if (quizType === "TRUE_FALSE") {
             generatedQuestions.push({
-              id: `q-gen-${idx}-2`,
-              q: `In the context of ${st.name}, what is the significance of "${st.subtopics[1]}"?`,
+              id: `q-tf-${idx}-1`,
+              type: "TRUE_FALSE",
+              q: `True or False: In ${st.name}, ${sub} is a foundational concept.`,
+              options: ["True", "False"],
+              answer: 0,
+              correctAnswerText: "True",
+              explain: `Extracted directly from syllabus topic "${st.name}".`,
+            });
+            generatedQuestions.push({
+              id: `q-tf-${idx}-2`,
+              type: "TRUE_FALSE",
+              q: `True or False: The topic ${st.name} completely excludes the study of ${sub2}.`,
+              options: ["True", "False"],
+              answer: 1,
+              correctAnswerText: "False",
+              explain: `${sub2} is explicitly listed as a key component under ${st.name}.`,
+            });
+          } else if (quizType === "SHORT_ANSWER") {
+            generatedQuestions.push({
+              id: `q-sa-${idx}-1`,
+              type: "SHORT_ANSWER",
+              q: `In the study of ${st.name}, what primary concept or mechanism is represented by ${sub}?`,
+              options: [],
+              answer: 0,
+              correctAnswerText: sub,
+              explain: `Key terminology from ${st.name}.`,
+            });
+            generatedQuestions.push({
+              id: `q-sa-${idx}-2`,
+              type: "SHORT_ANSWER",
+              q: `Name a key subtopic or mechanism studied within ${st.name}.`,
+              options: [],
+              answer: 0,
+              correctAnswerText: sub2,
+              explain: `Extracted from core concepts of ${st.name}.`,
+            });
+          } else if (quizType === "MCQ") {
+            generatedQuestions.push({
+              id: `q-mcq-${idx}-1`,
+              type: "MCQ",
+              q: `Which concept is a core component of "${st.name}"?`,
+              options: [
+                sub,
+                `Inverted logic of ${st.name}`,
+                `Unrelated legacy protocol`,
+                `None of the above`,
+              ],
+              answer: 0,
+              correctAnswerText: sub,
+              explain: `Based on your course syllabus for ${st.name}.`,
+            });
+            generatedQuestions.push({
+              id: `q-mcq-${idx}-2`,
+              type: "MCQ",
+              q: `In the context of ${st.name}, what is the significance of "${sub2}"?`,
               options: [
                 `It establishes foundational principles for ${st.name}`,
                 `It is deprecated syntax`,
@@ -1957,7 +2022,42 @@ function JoinChallenge({
                 `No relevant relationship`,
               ],
               answer: 0,
+              correctAnswerText: `It establishes foundational principles for ${st.name}`,
               explain: `Extracted directly from syllabus concepts in ${st.name}.`,
+            });
+          } else {
+            // MIXED
+            generatedQuestions.push({
+              id: `q-mix-mcq-${idx}`,
+              type: "MCQ",
+              q: `Which concept is a core component of "${st.name}"?`,
+              options: [
+                sub,
+                `Inverted logic of ${st.name}`,
+                `Unrelated legacy protocol`,
+                `None of the above`,
+              ],
+              answer: 0,
+              correctAnswerText: sub,
+              explain: `Based on your course syllabus for ${st.name}.`,
+            });
+            generatedQuestions.push({
+              id: `q-mix-tf-${idx}`,
+              type: "TRUE_FALSE",
+              q: `True or False: In ${st.name}, ${sub} is an active concept.`,
+              options: ["True", "False"],
+              answer: 0,
+              correctAnswerText: "True",
+              explain: `Directly covered in ${st.name}.`,
+            });
+            generatedQuestions.push({
+              id: `q-mix-sa-${idx}`,
+              type: "SHORT_ANSWER",
+              q: `What primary subject is covered in "${st.name}" alongside ${sub}?`,
+              options: [],
+              answer: 0,
+              correctAnswerText: sub2,
+              explain: `Identified directly from syllabus outline for ${st.name}.`,
             });
           }
         });
@@ -1980,7 +2080,15 @@ function JoinChallenge({
         localStorage.setItem("sg-active-kit", kitId);
         localStorage.setItem(`sg-${prefix}-active-kit`, kitId);
       }
-      toast.success(`Generated ${generatedQuestions.length} quiz questions from ${selectedTopics.length} chapters! ✨`);
+      const typeLabel =
+        quizType === "TRUE_FALSE"
+          ? "True/False"
+          : quizType === "SHORT_ANSWER"
+          ? "Short Answer"
+          : quizType === "MCQ"
+          ? "Multiple Choice"
+          : "Mixed Practice";
+      toast.success(`Generated ${generatedQuestions.length} ${typeLabel} questions! ✨`);
       nav({ to: "/quiz" });
     } catch (err: any) {
       toast.error(err?.message || "Failed to generate quiz.");
@@ -3078,7 +3186,7 @@ function JoinChallenge({
             variant="outline"
             className="h-8 gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
             disabled={selectedChapterIds.size === 0 || loadingQuiz}
-            onClick={handlePracticeQuiz}
+            onClick={() => setQuizFormatDialogOpen(true)}
             title="Generate practice quiz for selected chapters"
           >
             {loadingQuiz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <HelpCircle className="h-3.5 w-3.5" />}
@@ -3860,6 +3968,78 @@ function JoinChallenge({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Choose Quiz Format Dialog */}
+      <Dialog open={quizFormatDialogOpen} onOpenChange={setQuizFormatDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-amber-500" /> Choose Quiz Format
+            </DialogTitle>
+            <DialogDescription>
+              Select the question format to practice for {selectedChapterIds.size} selected chapter{selectedChapterIds.size > 1 ? "s" : ""}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-2.5 py-2">
+            <button
+              onClick={() => {
+                setQuizFormatDialogOpen(false);
+                handlePracticeQuiz("MIXED");
+              }}
+              className="flex items-start gap-3.5 p-3.5 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition text-left group"
+            >
+              <span className="text-2xl p-2 rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20">🎯</span>
+              <div>
+                <div className="font-bold text-foreground">Mixed Practice (Recommended)</div>
+                <div className="text-xs text-muted-foreground">Comprehensive review combining Multiple Choice, True/False, and Short Answer questions.</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setQuizFormatDialogOpen(false);
+                handlePracticeQuiz("MCQ");
+              }}
+              className="flex items-start gap-3.5 p-3.5 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition text-left group"
+            >
+              <span className="text-2xl p-2 rounded-lg bg-blue-500/10 group-hover:bg-blue-500/20">🔘</span>
+              <div>
+                <div className="font-bold text-foreground">Multiple Choice Only</div>
+                <div className="text-xs text-muted-foreground">Classic 4-option questions testing conceptual distinctions and definitions.</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setQuizFormatDialogOpen(false);
+                handlePracticeQuiz("TRUE_FALSE");
+              }}
+              className="flex items-start gap-3.5 p-3.5 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition text-left group"
+            >
+              <span className="text-2xl p-2 rounded-lg bg-emerald-500/10 group-hover:bg-emerald-500/20">⚖️</span>
+              <div>
+                <div className="font-bold text-foreground">True / False Only</div>
+                <div className="text-xs text-muted-foreground">Rapid-fire validity questions testing common misconceptions and key rules.</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setQuizFormatDialogOpen(false);
+                handlePracticeQuiz("SHORT_ANSWER");
+              }}
+              className="flex items-start gap-3.5 p-3.5 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition text-left group"
+            >
+              <span className="text-2xl p-2 rounded-lg bg-purple-500/10 group-hover:bg-purple-500/20">✍️</span>
+              <div>
+                <div className="font-bold text-foreground">Short Answer Only</div>
+                <div className="text-xs text-muted-foreground">Active recall practice where you type the exact concept, formula, or term.</div>
+              </div>
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
 

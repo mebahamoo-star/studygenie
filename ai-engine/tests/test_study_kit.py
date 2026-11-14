@@ -17,7 +17,11 @@ async def test_generate_study_kit():
     assert len(res.topics) == 1
     assert res.topics[0].ref == "ref1"
     assert len(res.topics[0].flashcards) == 1
-    assert len(res.topics[0].quiz) == 2
+    assert len(res.topics[0].quiz) == 3
+    quiz_types = [q.type for q in res.topics[0].quiz]
+    assert "MCQ" in quiz_types
+    assert "TRUE_FALSE" in quiz_types
+    assert "SHORT_ANSWER" in quiz_types
     assert len(res.failed_topics) == 0
 
 @pytest.mark.asyncio

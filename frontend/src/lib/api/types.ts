@@ -125,9 +125,12 @@ export interface ProgressResponse {
 
 export interface ClientQuizQuestion {
   questionId: string;
-  type?: string;
+  type?: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | string;
   question: string;
   options: string[];
+  correctOptionIndex?: number;
+  correctAnswerText?: string;
+  explanation?: string;
 }
 
 export interface QuizSubmissionResponse {
@@ -139,7 +142,8 @@ export interface QuizSubmissionResponse {
   results: {
     questionId: string;
     correct: boolean;
-    correctOptionIndex: number;
+    correctOptionIndex?: number | null;
+    correctAnswerText?: string | null;
     explanation: string;
   }[];
 }
