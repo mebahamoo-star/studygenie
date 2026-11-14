@@ -61,13 +61,13 @@ public class DataInitializer implements CommandLineRunner {
         log.info("Seeding initial universities, colleges, and courses into cloud database...");
 
         // 1. King Saud University
-        University ksu = universityRepository.save(University.builder().name("King Saud University").build());
+        University ksu = universityRepository.save(University.builder().name("King Saud University").city("Riyadh").build());
         College ccis = collegeRepository.save(College.builder().name("College of Computer and Information Sciences").university(ksu).build());
         collegeRepository.save(College.builder().name("College of Engineering").university(ksu).build());
         collegeRepository.save(College.builder().name("College of Business Administration").university(ksu).build());
 
         // 2. Stanford University
-        University stanford = universityRepository.save(University.builder().name("Stanford University").build());
+        University stanford = universityRepository.save(University.builder().name("Stanford University").city("Stanford, California").build());
         College stanfordEng = collegeRepository.save(College.builder().name("School of Engineering").university(stanford).build());
 
         // Seed sample ready courses for CCIS

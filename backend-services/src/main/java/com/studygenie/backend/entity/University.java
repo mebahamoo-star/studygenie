@@ -25,6 +25,10 @@ public class University {
     @Column(name = "name", nullable = false, length = 150)
     private String name;
 
+    @Size(max = 150)
+    @Column(name = "city", length = 150)
+    private String city;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

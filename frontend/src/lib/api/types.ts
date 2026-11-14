@@ -28,6 +28,7 @@ export interface AuthResponse {
 export interface University {
   id: number;
   name: string;
+  city?: string | null;
 }
 
 export interface College {
@@ -261,6 +262,7 @@ export interface AdminCourseDto {
 export interface AdminUniversityDto {
   id: number;
   name: string;
+  city?: string | null;
   collegeCount: number;
   courseCount: number;
 }

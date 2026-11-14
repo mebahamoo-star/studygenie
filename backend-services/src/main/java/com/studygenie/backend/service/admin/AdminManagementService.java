@@ -732,7 +732,7 @@ public class AdminManagementService {
             long courseCount = colleges.stream()
                     .mapToLong(col -> courseRepository.findByCollegeId(col.getId()).stream().filter(c -> !c.isDeleted()).count())
                     .sum();
-            return new AdminCatalogDtos.UniversityAdminDto(u.getId(), u.getName(), colleges.size(), courseCount);
+            return new AdminCatalogDtos.UniversityAdminDto(u.getId(), u.getName(), u.getCity(), colleges.size(), courseCount);
         }).toList();
     }
 
@@ -741,9 +741,13 @@ public class AdminManagementService {
             AuthenticatedUser actor,
             AdminCatalogDtos.UniversityWriteRequest req,
             HttpServletRequest httpReq) {
-        University u = University.builder().name(req.name().trim()).build();
+        String trimmedCity = (req.city() != null && !req.city().trim().isEmpty()) ? req.city().trim() : null;
+        University u = University.builder()
+                .name(req.name().trim())
+                .city(trimmedCity)
+                .build();
         u = universityRepository.saveAndFlush(u);
-        AdminCatalogDtos.UniversityAdminDto dto = new AdminCatalogDtos.UniversityAdminDto(u.getId(), u.getName(), 0, 0);
+        AdminCatalogDtos.UniversityAdminDto dto = new AdminCatalogDtos.UniversityAdminDto(u.getId(), u.getName(), u.getCity(), 0, 0);
         auditService.record(actor, "CREATE_UNIVERSITY", "UNIVERSITY", u.getId(), null, dto, httpReq);
         return dto;
     }
@@ -757,11 +761,18 @@ public class AdminManagementService {
         University u = universityRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("University not found: " + id));
         String beforeName = u.getName();
+        String beforeCity = u.getCity();
         u.setName(req.name().trim());
+        if (req.city() != null) {
+            u.setCity(req.city().trim().isEmpty() ? null : req.city().trim());
+        }
         u = universityRepository.saveAndFlush(u);
         List<College> colleges = collegeRepository.findByUniversityId(u.getId());
-        AdminCatalogDtos.UniversityAdminDto dto = new AdminCatalogDtos.UniversityAdminDto(u.getId(), u.getName(), colleges.size(), 0);
-        auditService.record(actor, "UPDATE_UNIVERSITY", "UNIVERSITY", u.getId(), Map.of("name", beforeName), dto, httpReq);
+        long courseCount = colleges.stream()
+                .mapToLong(col -> courseRepository.findByCollegeId(col.getId()).stream().filter(c -> !c.isDeleted()).count())
+                .sum();
+        AdminCatalogDtos.UniversityAdminDto dto = new AdminCatalogDtos.UniversityAdminDto(u.getId(), u.getName(), u.getCity(), colleges.size(), courseCount);
+        auditService.record(actor, "UPDATE_UNIVERSITY", "UNIVERSITY", u.getId(), Map.of("name", beforeName, "city", beforeCity == null ? "" : beforeCity), dto, httpReq);
         return dto;
     }
 

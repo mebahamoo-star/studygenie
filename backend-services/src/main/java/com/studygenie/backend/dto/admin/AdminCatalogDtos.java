@@ -9,15 +9,26 @@ public record AdminCatalogDtos() {
     public record UniversityAdminDto(
             Long id,
             String name,
+            String city,
             long collegeCount,
             long courseCount
-    ) {}
+    ) {
+        public UniversityAdminDto(Long id, String name, long collegeCount, long courseCount) {
+            this(id, name, null, collegeCount, courseCount);
+        }
+    }
 
     public record UniversityWriteRequest(
             @NotBlank
             @Size(max = 150)
-            String name
-    ) {}
+            String name,
+            @Size(max = 150)
+            String city
+    ) {
+        public UniversityWriteRequest(String name) {
+            this(name, null);
+        }
+    }
 
     public record CollegeAdminDto(
             Long id,

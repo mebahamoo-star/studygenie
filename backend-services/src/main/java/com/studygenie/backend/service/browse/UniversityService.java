@@ -22,7 +22,7 @@ public class UniversityService {
     @Transactional(readOnly = true)
     public List<UniversityDto> getAllUniversities() {
         return universityRepository.findAll().stream()
-                .map(u -> new UniversityDto(u.getId(), u.getName()))
+                .map(u -> new UniversityDto(u.getId(), u.getName(), u.getCity()))
                 .collect(Collectors.toList());
     }
 
@@ -30,22 +30,32 @@ public class UniversityService {
     public UniversityDto getUniversity(Long id) {
         University u = universityRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("University not found"));
-        return new UniversityDto(u.getId(), u.getName());
+        return new UniversityDto(u.getId(), u.getName(), u.getCity());
     }
 
     @Transactional
-    public UniversityDto createUniversity(String name) {
+    public UniversityDto createUniversity(String name, String city) {
         if (name == null || name.trim().isEmpty()) {
             throw new IllegalArgumentException("University name cannot be empty");
         }
         String trimmed = name.trim();
+        String trimmedCity = (city != null && !city.trim().isEmpty()) ? city.trim() : null;
         List<University> existing = universityRepository.findAll();
         for (University u : existing) {
             if (u.getName().equalsIgnoreCase(trimmed)) {
-                return new UniversityDto(u.getId(), u.getName());
+                if (trimmedCity != null && (u.getCity() == null || !u.getCity().equalsIgnoreCase(trimmedCity))) {
+                    u.setCity(trimmedCity);
+                    universityRepository.save(u);
+                }
+                return new UniversityDto(u.getId(), u.getName(), u.getCity());
             }
         }
-        University created = universityRepository.save(University.builder().name(trimmed).build());
-        return new UniversityDto(created.getId(), created.getName());
+        University created = universityRepository.save(University.builder().name(trimmed).city(trimmedCity).build());
+        return new UniversityDto(created.getId(), created.getName(), created.getCity());
+    }
+
+    @Transactional
+    public UniversityDto createUniversity(String name) {
+        return createUniversity(name, null);
     }
 }

@@ -172,11 +172,11 @@ export const browseService = {
     return res.data || [];
   },
 
-  async createUniversity(name: string): Promise<University> {
+  async createUniversity(name: string, city?: string): Promise<University> {
     const res = await fetchApi<University>("/api/v1/universities", {
       method: "POST",
 
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, city }),
     });
 
     return res.data!;
@@ -884,17 +884,22 @@ export const adminService = {
     input: string | { name: string; city?: string; website?: string },
   ): Promise<AdminUniversityDto> {
     const name = typeof input === "string" ? input : input.name;
+    const city = typeof input === "object" ? input.city : undefined;
     const res = await fetchApi<AdminUniversityDto>("/api/admin/universities", {
       method: "POST",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, city }),
     });
     return res.data!;
   },
 
-  async updateUniversity(id: number | string, name: string): Promise<AdminUniversityDto> {
+  async updateUniversity(
+    id: number | string,
+    input: string | { name: string; city?: string },
+  ): Promise<AdminUniversityDto> {
+    const payload = typeof input === "string" ? { name: input } : input;
     const res = await fetchApi<AdminUniversityDto>(`/api/admin/universities/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(payload),
     });
     return res.data!;
   },
