@@ -72,9 +72,16 @@ export function sanitizeUserCourses(courses: Course[]): Course[] {
       const existing = seenCourseNames.get(nameKey)!;
       const existingCount = existing.topics?.length || 0;
       const candidateCount = candidate.topics?.length || 0;
-      if (candidateCount > existingCount || (candidate.status === "ready" && existing.status !== "ready")) {
-        seenCourseNames.set(nameKey, candidate);
-      }
+      const preferredTopics = candidateCount >= existingCount && candidateCount > 0
+        ? candidate.topics
+        : (existing.topics || candidate.topics || []);
+      const mergedCandidate: Course = {
+        ...existing,
+        ...candidate,
+        topics: preferredTopics,
+        status: candidate.status === "ready" || existing.status === "ready" ? "ready" : candidate.status,
+      };
+      seenCourseNames.set(nameKey, mergedCandidate);
     }
   }
 
@@ -294,7 +301,7 @@ export function saveUserTaskKits(kits: Record<string, any>): void {
 export function isCourseMaterialUploaded(course: Course | null | undefined): boolean {
   if (!course) return false;
   return Boolean(
-    (course.status === "ready" && course.topics && course.topics.length > 0) ||
+    course.status === "ready" ||
     (course.topics && course.topics.length > 0)
   );
 }

@@ -20,7 +20,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { pageHead } from "@/lib/head";
 import { browseService } from "@/lib/api/services";
-import { getActiveCourse, getUserCourses, getUserStoragePrefix, isCourseMaterialUploaded, saveUserCourses } from "@/lib/courses-util";
+import { getActiveCourse, getActivePlan, getUserCourses, getUserStoragePrefix, isCourseMaterialUploaded, saveActiveCourse, saveUserCourses } from "@/lib/courses-util";
 import type { Course, PlanResponseData } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/app-state";
@@ -65,7 +65,16 @@ function Plan() {
       let enrolled: Course[] = [];
       try {
         const remote = await browseService.getEnrolledCourses();
-        enrolled = remote || [];
+        const local = getUserCourses();
+        enrolled = (remote || []).map((rc) => {
+          const match = local.find(
+            (lc) => String(lc.id) === String(rc.id) || lc.name.toLowerCase() === rc.name.toLowerCase()
+          );
+          return {
+            ...rc,
+            topics: rc.topics && rc.topics.length > 0 ? rc.topics : match?.topics || [],
+          };
+        });
         saveUserCourses(enrolled);
       } catch {
         enrolled = getUserCourses();
@@ -171,28 +180,50 @@ function Plan() {
   };
 
   const handleSelectSubject = async (c: Course) => {
-    if (!isCourseMaterialUploaded(c)) {
-      toast.warning(`Cannot view plan: Course syllabus has not been uploaded for "${c.name}". Please upload course materials first.`);
+    let currentCourse = c;
+
+    // Fetch topics if missing for a cloud-synced course
+    if (
+      (!currentCourse.topics || currentCourse.topics.length === 0) &&
+      currentCourse.id &&
+      !String(currentCourse.id).startsWith("course-") &&
+      !String(currentCourse.id).startsWith("c-")
+    ) {
+      try {
+        const remoteTopics = await browseService.getCourseTopics(currentCourse.id);
+        if (remoteTopics && remoteTopics.length > 0) {
+          currentCourse = { ...currentCourse, topics: remoteTopics, status: "ready" };
+          setSelectedCourse(currentCourse);
+          setCourses((prev) =>
+            prev.map((item) => String(item.id) === String(currentCourse.id) ? currentCourse : item)
+          );
+        }
+      } catch {}
     }
-    setSelectedCourse(c);
-    setCourseInfo({ name: c.name, code: c.code });
+
+    if (!isCourseMaterialUploaded(currentCourse)) {
+      toast.warning(`Cannot view plan: Course syllabus has not been uploaded for "${currentCourse.name}". Please upload course materials first.`);
+    }
+    setSelectedCourse(currentCourse);
+    saveActiveCourse(currentCourse);
+    setCourseInfo({ name: currentCourse.name, code: currentCourse.code });
     setPlanDays([]);
     setFullPlanDays([]);
     setSurvival(false);
 
     let planData: any = null;
-    if (c.id && !String(c.id).startsWith("course-") && !String(c.id).startsWith("c-")) {
+    if (currentCourse.id && !String(currentCourse.id).startsWith("course-") && !String(currentCourse.id).startsWith("c-")) {
       try {
-        const res = await browseService.getCoursePlan(c.id);
+        const res = await browseService.getCoursePlan(currentCourse.id);
         if (res?.tasks && res.tasks.length > 0) {
           planData = res;
           const prefix = getUserStoragePrefix();
           try {
-            localStorage.setItem(`sg-${prefix}-plan-${c.id}`, JSON.stringify(res));
-            localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(res));
-            if (c.name) {
-              localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(res));
-              localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(res));
+            localStorage.setItem(`sg-${prefix}-plan-${currentCourse.id}`, JSON.stringify(res));
+            localStorage.setItem(`sg-plan-${currentCourse.id}`, JSON.stringify(res));
+            if (currentCourse.name) {
+              localStorage.setItem(`sg-${prefix}-plan-${currentCourse.name}`, JSON.stringify(res));
+              localStorage.setItem(`sg-plan-${currentCourse.name}`, JSON.stringify(res));
             }
           } catch {}
         }
@@ -202,7 +233,7 @@ function Plan() {
     if (!planData) {
       try {
         const prefix = getUserStoragePrefix();
-        const localPlan = localStorage.getItem(`sg-${prefix}-plan-${c.id}`) || (prefix === "guest" ? localStorage.getItem(`sg-plan-${c.id}`) : null);
+        const localPlan = localStorage.getItem(`sg-${prefix}-plan-${currentCourse.id}`) || (prefix === "guest" ? localStorage.getItem(`sg-plan-${currentCourse.id}`) : null);
         if (localPlan) {
           planData = JSON.parse(localPlan);
         } else {
@@ -212,7 +243,7 @@ function Plan() {
     }
 
     if (planData?.tasks && planData.tasks.length > 0) {
-      formatAndSetTasks(planData.tasks, c);
+      formatAndSetTasks(planData.tasks, currentCourse);
     }
   };
 
