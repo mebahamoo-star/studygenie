@@ -69,6 +69,12 @@ export async function verifyAdminRouteAccess(
 
   if (!deps.getMe) {
     cachedAdminCheck = { user: currentUser, ts: Date.now() };
+    try {
+      localStorage.setItem("sg_user", JSON.stringify(currentUser));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("sg-user-sync", { detail: currentUser }));
+      }
+    } catch {}
   }
 
   return currentUser;

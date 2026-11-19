@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { authService, browseService, gamificationService } from "./api/services";
 import { getStoredAccessToken, getStoredUser, fetchApi } from "./api/client";
@@ -28,6 +28,7 @@ type Ctx = {
   ) => Promise<void>;
   logout: () => Promise<void>;
   refreshGamification: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -56,12 +57,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   });
   const queryClient = useQueryClient();
-  // Never trust role from localStorage before backend confirmation via /api/auth/me or fresh login
-  const [user, setUser] = useState<UserSummary | null>(() => {
-    const stored = getStoredUser();
-    if (!stored) return null;
-    return { ...stored, role: "STUDENT" };
-  });
+  // Initialize user from verified stored session, re-validated with /api/auth/me immediately
+  const [user, setUser] = useState<UserSummary | null>(() => getStoredUser());
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getStoredAccessToken());
   const [isBackendOnline, setIsBackendOnline] = useState<boolean | null>(null);
 
@@ -146,33 +143,99 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshUser = useCallback(async () => {
+    if (!getStoredAccessToken()) return;
+    try {
+      const me = await authService.getMe();
+      if (me) {
+        setUser(me);
+        setIsBackendOnline(true);
+        try {
+          localStorage.setItem("sg_user", JSON.stringify(me));
+        } catch {}
+      }
+    } catch (err: any) {
+      if (err?.isOffline) {
+        setIsBackendOnline(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     if (isAuthenticated && getStoredAccessToken()) {
       refreshGamification();
-      authService
-        .getMe()
-        .then((me) => {
-          if (active && me) {
-            setUser(me);
-            setIsBackendOnline(true);
-            try {
-              localStorage.setItem("sg_user", JSON.stringify(me));
-            } catch {}
 
-            // Pre-warm courses data in query cache for instant page loads
-            queryClient
-              .prefetchQuery({
-                queryKey: ["courses", "enrolled"],
-                queryFn: () => browseService.getEnrolledCourses(),
-                staleTime: 60_000,
-              })
-              .catch(() => {});
-          }
-        })
-        .catch(() => {
-          // Keep safe STUDENT role if /api/auth/me cannot be verified
-        });
+      const syncCurrentUser = () => {
+        if (!active || !getStoredAccessToken()) return;
+        authService
+          .getMe()
+          .then((me) => {
+            if (active && me) {
+              setUser(me);
+              setIsBackendOnline(true);
+              try {
+                localStorage.setItem("sg_user", JSON.stringify(me));
+              } catch {}
+
+              // Pre-warm courses data in query cache for instant page loads
+              queryClient
+                .prefetchQuery({
+                  queryKey: ["courses", "enrolled"],
+                  queryFn: () => browseService.getEnrolledCourses(),
+                  staleTime: 60_000,
+                })
+                .catch(() => {});
+            }
+          })
+          .catch((err: any) => {
+            if (err?.isOffline) {
+              setIsBackendOnline(false);
+            }
+          });
+      };
+
+      // 1. Initial sync
+      syncCurrentUser();
+
+      // 2. Window focus & tab visibility change sync so role updates appear immediately
+      const handleVisibilityOrFocus = () => {
+        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+          syncCurrentUser();
+        }
+      };
+
+      // 3. Custom event for immediate sync (e.g. from admin actions or route guards)
+      const handleUserSyncEvent = (e: Event) => {
+        const customEvent = e as CustomEvent<UserSummary>;
+        if (customEvent.detail) {
+          setUser(customEvent.detail);
+          try {
+            localStorage.setItem("sg_user", JSON.stringify(customEvent.detail));
+          } catch {}
+        } else {
+          syncCurrentUser();
+        }
+      };
+
+      // 4. Periodic polling every 15 seconds so role updates show up automatically without page refresh
+      const pollTimer = setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState === "visible") {
+          syncCurrentUser();
+        }
+      }, 15_000);
+
+      window.addEventListener("focus", handleVisibilityOrFocus);
+      document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+      window.addEventListener("sg-user-sync", handleUserSyncEvent);
+
+      return () => {
+        active = false;
+        clearInterval(pollTimer);
+        window.removeEventListener("focus", handleVisibilityOrFocus);
+        document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+        window.removeEventListener("sg-user-sync", handleUserSyncEvent);
+      };
     }
     return () => {
       active = false;
@@ -353,6 +416,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loginWithOAuth,
         logout,
         refreshGamification,
+        refreshUser,
       }}
     >
       {children}

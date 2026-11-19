@@ -71,6 +71,9 @@ export default function AdminUsersPage() {
       toast.success(`Role updated to ${updated.role}`);
       setSelectedUser(updated);
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("sg-user-sync"));
+      }
     },
     onError: (err: Error) => toast.error(err.message || "Could not update user role"),
   });
