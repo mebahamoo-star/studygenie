@@ -1,16 +1,34 @@
+/**
+ * routes/index.tsx — StudyGenie Landing Page (Book-Pager Edition)
+ * - Unauthenticated users -> Interactive 100dvh Book-Pages presentation
+ * - Authenticated users   -> Immediate redirect to /dashboard
+ * - 100% translated via `t.*`. No hardcoded strings.
+ */
 import { createFileRoute, redirect, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Capacitor } from "@capacitor/core";
-import { motion } from "framer-motion";
-import { CalendarCheck, Layers, Trophy } from "lucide-react";
-import { Branches, Plot, Riffle } from "@lucasmarkes/hairline/react";
+import { useApp } from "@/lib/app-state";
+import { arTranslations } from "@/components/landing/i18n/ar";
+import { enTranslations } from "@/components/landing/i18n/en";
 import { Genie, GenieLogo } from "@/components/Genie";
 import { ThemeToggle } from "@/components/AppShell";
+import { SoundToggle } from "@/components/landing/sound/SoundToggle";
 import { Button } from "@/components/ui/button";
-import { Boxes } from "@/components/ui/background-boxes";
-import { RotatingText, RotatingTextContainer } from "@/components/animate-ui/texts/rotating";
-import { useApp } from "@/lib/app-state";
+import { Globe, User } from "lucide-react";
 import { getStoredAccessToken } from "@/lib/api/client";
+
+import { BookPager } from "@/components/landing/pager/BookPager";
+import type { PageConfig } from "@/components/landing/pager/BookPager";
+
+// Dedicated 100dvh Interactive Pages for All Sections
+import { HeroPage } from "@/components/landing/pages/HeroPage";
+import { HowItWorksPage } from "@/components/landing/pages/HowItWorksPage";
+import { CommunityPage } from "@/components/landing/pages/CommunityPage";
+import { BentoFeaturesPage } from "@/components/landing/pages/BentoFeaturesPage";
+import { ProductShowcasePage } from "@/components/landing/pages/ProductShowcasePage";
+import { PsychologyPage } from "@/components/landing/pages/PsychologyPage";
+import { FaqPage } from "@/components/landing/pages/FaqPage";
+import { FinalCtaPage } from "@/components/landing/pages/FinalCtaPage";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => {
@@ -27,37 +45,27 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "StudyGenie — Study smarter, with a little magic" },
-      { name: "description", content: "Upload your syllabus and let your genie build a study plan, flashcards and quizzes." },
+      {
+        name: "description",
+        content:
+          "Upload your syllabus and let your study genie build a daily plan, active flashcards and shared challenges for university students.",
+      },
       { property: "og:title", content: "StudyGenie — Study smarter, with a little magic" },
-      { property: "og:description", content: "Upload your syllabus and let your genie build a study plan, flashcards and quizzes." },
+      {
+        property: "og:description",
+        content:
+          "Gamified daily study plans, spaced flashcards, and campus study rooms tailored to your syllabus.",
+      },
+      { property: "og:image", content: "/og-preview.png" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Landing,
 });
 
-const features = [
-  {
-    icon: CalendarCheck,
-    title: "Auto study plans",
-    text: "From syllabus to schedule in seconds.",
-    figure: Branches,
-  },
-  {
-    icon: Layers,
-    title: "Flashcards & quizzes",
-    text: "Active recall, built in.",
-    figure: Riffle,
-  },
-  {
-    icon: Trophy,
-    title: "Streaks & ranks",
-    text: "Compete with your campus.",
-    figure: Plot,
-  },
-];
-
 function Landing() {
-  const { isAuthenticated } = useApp();
+  const { lang, setLang, isAuthenticated } = useApp();
   const navigate = useNavigate();
 
   const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform();
@@ -74,9 +82,17 @@ function Landing() {
     }
   }, [hasStoredSession, isNative, navigate]);
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+      document.documentElement.lang = lang;
+      document.title = lang === "ar" ? arTranslations.meta.title : enTranslations.meta.title;
+    }
+  }, [lang]);
+
   if (hasStoredSession) {
     return (
-      <div className="min-h-screen w-full grid place-items-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen w-full grid place-items-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <Genie pose="high" className="h-20 w-20 animate-bounce" />
           <p className="text-sm font-semibold text-muted-foreground animate-pulse">
@@ -91,103 +107,128 @@ function Landing() {
     return null;
   }
 
+  const t = lang === "ar" ? arTranslations : enTranslations;
+  const isRTL = lang === "ar";
+
+  const toggleLanguage = () => setLang(lang === "ar" ? "en" : "ar");
+
+  // All 8 active presentation pages
+  const pages: PageConfig[] = useMemo(() => {
+    return [
+      {
+        id: "hero",
+        seoTitle: t.hero.title,
+        node: <HeroPage t={t} lang={lang} />,
+      },
+      {
+        id: "how",
+        seoTitle: t.howItWorks.title,
+        node: <HowItWorksPage t={t} lang={lang} />,
+      },
+      {
+        id: "community",
+        seoTitle: t.community.title,
+        node: <CommunityPage t={t} lang={lang} />,
+      },
+      {
+        id: "features",
+        seoTitle: t.bento.title,
+        node: <BentoFeaturesPage t={t} lang={lang} />,
+      },
+      {
+        id: "showcase",
+        seoTitle: t.showcase.title,
+        node: <ProductShowcasePage t={t} lang={lang} />,
+      },
+      {
+        id: "psychology",
+        seoTitle: t.psychology.title,
+        node: <PsychologyPage t={t} lang={lang} />,
+      },
+      {
+        id: "faq",
+        seoTitle: t.faq.title,
+        node: <FaqPage t={t} lang={lang} />,
+      },
+      {
+        id: "cta",
+        seoTitle: t.finalCta.title,
+        node: <FinalCtaPage t={t} lang={lang} />,
+      },
+    ];
+  }, [t, lang]);
+
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-      {/* Background Interactive Boxes (Theme-adapted for Light and Dark modes) */}
-      <Boxes />
-
-      {/* Soft Vignette Mask for depth and hero contrast */}
-      <div className="absolute inset-0 w-full h-full bg-slate-50/70 dark:bg-slate-950/75 z-10 [mask-image:radial-gradient(transparent,white)] pointer-events-none transition-colors duration-300" />
-
-      {/* Page Content */}
-      <div className="relative z-20 pointer-events-none">
-        <header className="mx-auto flex max-w-6xl items-center justify-between px-8 py-6 pointer-events-auto">
+    <div
+      dir={isRTL ? "rtl" : "ltr"}
+      className="relative flex h-screen h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground transition-colors duration-300 font-sans"
+    >
+      {/* Sticky Header with Unclipped Exact Ordered Controls */}
+      <header className="shrink-0 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-2 border-b border-border/40 bg-background/85 px-2.5 sm:px-6 backdrop-blur-md z-40">
+        <Link
+          to="/"
+          className="flex items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-primary rounded-lg shrink min-w-0"
+        >
           <GenieLogo />
-          <div className="flex items-center gap-3">
-            {isAuthenticated ? (
-              <Button variant="magic" asChild>
-                <Link to="/dashboard">Go to Dashboard →</Link>
-              </Button>
-            ) : (
-              <Button variant="ghost" asChild>
-                <Link to="/login">Log in</Link>
-              </Button>
-            )}
+        </Link>
+
+        {/* Ordered controls: [Language] [Theme] [Sound] [Log in] [Get Started] */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* 1. Language Switcher */}
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            title={t.nav.switchLang}
+            aria-label={t.nav.switchLang}
+            className="inline-flex h-9 sm:h-10 items-center gap-1 rounded-xl border border-border/80 bg-card px-2 sm:px-3 text-xs font-bold text-foreground hover:bg-accent transition-colors shadow-soft cursor-pointer focus-visible:outline-2 focus-visible:outline-primary shrink-0"
+          >
+            <Globe className="h-3.5 w-3.5 text-primary" />
+            <span className="hidden xs:inline">{t.nav.switchLang}</span>
+            <span className="xs:hidden">{t.nav.switchLangShort}</span>
+          </button>
+
+          {/* 2. Theme Toggle (Dark / Light) */}
+          <div className="shrink-0">
             <ThemeToggle />
           </div>
-        </header>
 
-        <section className="mx-auto grid max-w-6xl items-center gap-12 px-8 py-16 md:grid-cols-2">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="pointer-events-auto"
+          {/* 3. Sound Toggle (Mute / Unmute) */}
+          <div className="shrink-0">
+            <SoundToggle lang={lang} />
+          </div>
+
+          {/* 4. Login Action */}
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="h-9 sm:h-10 px-2 sm:px-2.5 text-xs font-semibold shrink-0"
           >
-            <span className="inline-block rounded-full bg-accent/90 px-3 py-1 text-xs font-bold text-accent-foreground backdrop-blur-sm shadow-soft">
-              ✨ Your wish: better grades
-            </span>
-            <h1 className="mt-5 text-6xl font-semibold leading-tight tracking-tight">
-              <RotatingTextContainer
-                text={["Study smarter,", "Think sharper,", "Achieve greater,"]}
-                duration={2200}
-                delay={0}
-                y={-50}
-                align="start"
-                className="inline-block"
-              >
-                <RotatingText />
-              </RotatingTextContainer>
-              <br />
-              <span className="text-gradient-magic">granted.</span>
-            </h1>
-            <p className="mt-5 max-w-md text-lg text-muted-foreground">
-              Your genie turns any syllabus into a daily plan you'll actually finish.
-            </p>
-            {isAuthenticated ? (
-              <Button variant="magic" size="lg" className="mt-8 shadow-glow" asChild>
-                <Link to="/dashboard">Open Dashboard →</Link>
-              </Button>
-            ) : (
-              <Button variant="magic" size="lg" className="mt-8 shadow-glow" asChild>
-                <Link to="/signup">Get Started</Link>
-              </Button>
-            )}
-          </motion.div>
+            <Link to="/login" title={t.nav.logIn} aria-label={t.nav.logIn}>
+              <User className="h-4 w-4 sm:hidden" />
+              <span className="hidden sm:inline">{t.nav.logIn}</span>
+            </Link>
+          </Button>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.15 }}
-            className="relative grid place-items-center pointer-events-none"
+          {/* 5. Primary CTA Action (Always visible on mobile as "Start" / "ابدأ") */}
+          <Button
+            variant="magic"
+            size="sm"
+            asChild
+            className="h-9 sm:h-10 text-xs font-bold shadow-glow shrink-0 px-2.5 sm:px-3.5"
           >
-            <div className="absolute h-80 w-80 rounded-full bg-gradient-magic opacity-25 blur-3xl pointer-events-none" />
-            <Genie pose="high" className="relative h-96 w-96 animate-float drop-shadow-2xl pointer-events-auto" />
-          </motion.div>
-        </section>
+            <Link to="/signup">
+              <span className="hidden sm:inline">{t.nav.getStarted}</span>
+              <span className="sm:hidden">{t.nav.getStartedShort}</span>
+            </Link>
+          </Button>
+        </div>
+      </header>
 
-        <section className="mx-auto grid max-w-6xl gap-6 px-8 pb-24 md:grid-cols-3">
-          {features.map((f, i) => (
-            <motion.div
-              key={f.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 + i * 0.1 }}
-              className="group pointer-events-auto flex flex-col justify-between rounded-2xl border bg-card/85 backdrop-blur-md p-6 shadow-soft transition hover:border-primary/50 hover:bg-card"
-            >
-              <div>
-                <div className="mb-4 flex h-36 w-full items-center justify-center overflow-hidden rounded-xl bg-muted/40 p-2 transition group-hover:bg-muted/70">
-                  <f.figure play intensity={0.65} className="h-full w-full" />
-                </div>
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-magic text-primary-foreground shadow-sm">
-                  <f.icon className="h-5 w-5" />
-                </div>
-                <h3 className="mt-4 text-lg font-semibold">{f.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{f.text}</p>
-              </div>
-            </motion.div>
-          ))}
-        </section>
-      </div>
+      {/* Book Pager Main Viewport */}
+      <main className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+        <BookPager pages={pages} lang={lang} t={t} />
+      </main>
     </div>
   );
 }
