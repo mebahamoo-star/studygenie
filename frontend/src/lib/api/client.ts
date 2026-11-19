@@ -1,6 +1,10 @@
+import { Capacitor } from "@capacitor/core";
 import type { ApiResponse, AuthResponse, UserSummary } from "./types";
 
 export function getApiBaseUrl(): string {
+  if (Capacitor.isNativePlatform()) {
+    return (import.meta.env["VITE_API_URL"] as string) || "http://10.0.2.2:8080";
+  }
   if (typeof window !== "undefined") {
     // In browser, always use relative path ("") so all API requests go through
     // Vite's reverse proxy on the same port (5173). This allows mobile devices,
@@ -144,7 +148,7 @@ function onTokenRefreshed(newToken: string | null) {
   refreshSubscribers = [];
 }
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = getStoredRefreshToken();
   if (!refreshToken) {
     clearAuthSession();
@@ -193,7 +197,7 @@ async function refreshAccessToken(): Promise<string | null> {
 
 export async function fetchApi<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<ApiResponse<T>> {
   const baseUrl = getApiBaseUrl();
   const url = endpoint.startsWith("http") ? endpoint : `${baseUrl}${endpoint}`;
@@ -221,7 +225,15 @@ export async function fetchApi<T = any>(
   }
 
   // Handle 401 Unauthorized by attempting a token refresh
-  if (response.status === 401 && !endpoint.includes("/api/auth/")) {
+  // Only skip refresh for authentication endpoints that do not accept refresh tokens
+  const isNoRefreshAuthEndpoint =
+    endpoint.includes("/api/auth/refresh") ||
+    endpoint.includes("/api/auth/login") ||
+    endpoint.includes("/api/auth/register") ||
+    endpoint.includes("/api/auth/forgot-password") ||
+    endpoint.includes("/api/auth/reset-password");
+
+  if (response.status === 401 && !isNoRefreshAuthEndpoint) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       headers.set("Authorization", `Bearer ${newToken}`);

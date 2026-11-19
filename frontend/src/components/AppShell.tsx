@@ -9,6 +9,7 @@ import {
   LogOut,
   Moon,
   Settings,
+  ShieldCheck,
   Sparkles,
   Star,
   Sun,
@@ -22,6 +23,7 @@ import { fetchAndSyncExams, loadExamsForUser, isCourseEnrolled, type Exam } from
 import { hasUserEnrolledCourses, getUserCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
 import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
+import { MobileBottomNav } from "./MobileBottomNav";
 import {
   Sidebar,
   SidebarContent,
@@ -192,7 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild className="hover:bg-transparent data-[state=open]:hover:bg-transparent">
-                <Link to="/dashboard" className="flex items-center gap-2.5">
+                <Link to="/dashboard" preload="intent" className="flex items-center gap-2.5">
                   <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent shadow-sm">
                     <Genie className="h-8 w-8" />
                   </div>
@@ -227,11 +229,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                       className={cn(
                         "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
                         active
-                          ? "bg-gradient-magic text-primary-foreground shadow-glow data-[active=true]:bg-gradient-magic data-[active=true]:text-primary-foreground hover:text-primary-foreground"
+                          ? "bg-primary bg-gradient-magic text-white shadow-glow hover:bg-primary hover:text-white hover:brightness-105 data-[active=true]:bg-primary data-[active=true]:bg-gradient-magic data-[active=true]:text-white data-[active=true]:hover:bg-primary data-[active=true]:hover:text-white"
                           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       )}
                     >
-                      <Link to={n.to}>
+                      <Link to={n.to} preload="intent">
                         <n.icon className="h-5 w-5 shrink-0" />
                         <span>{lang === "ar" ? n.ar : n.label}</span>
                       </Link>
@@ -247,11 +249,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                               <SidebarMenuSubButton asChild isActive={subActive}>
                                 <Link
                                   to={s.to}
+                                  preload="intent"
                                   className={cn(
                                     "flex items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors",
                                     subActive
-                                      ? "text-primary font-bold"
-                                      : "text-muted-foreground hover:text-foreground",
+                                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-bold data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                                      : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
                                     isLocked && "opacity-70"
                                   )}
                                 >
@@ -267,6 +270,30 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </SidebarMenuItem>
                 );
               })}
+              {(user?.role === "ADMIN" || user?.role === "MODERATOR") && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={path.startsWith("/admin")}
+                    tooltip={lang === "ar" ? "لوحة الإدارة" : "Admin Panel"}
+                    className={cn(
+                      "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                      path.startsWith("/admin")
+                        ? "bg-primary bg-gradient-magic text-white shadow-glow hover:bg-primary hover:text-white hover:brightness-105"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                  >
+                    <Link
+                      to={user.role === "MODERATOR" ? "/admin/reports" : "/admin/overview"}
+                      preload="intent"
+                      data-testid="sidebar-admin-link"
+                    >
+                      <ShieldCheck className="h-5 w-5 shrink-0" />
+                      <span>{lang === "ar" ? "لوحة الإدارة" : "Admin"}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroup>
         </SidebarContent>
@@ -281,7 +308,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className={cn(
                   "rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
                   path.startsWith("/settings")
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    ? "bg-primary bg-gradient-magic text-white shadow-glow hover:bg-primary hover:text-white hover:brightness-105 data-[active=true]:bg-primary data-[active=true]:bg-gradient-magic data-[active=true]:text-white data-[active=true]:hover:bg-primary data-[active=true]:hover:text-white"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
               >
@@ -311,7 +338,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-4 md:px-6 backdrop-blur">
           {/* Live Exam News Ticker */}
           <div className="flex min-w-0 flex-1 items-center gap-3 mr-4">
-            <SidebarTrigger className="-ml-1" />
+            <SidebarTrigger className="-ml-1 hidden md:flex" />
+            <Link to="/dashboard" className="flex md:hidden items-center shrink-0 mr-1">
+              <Genie className="h-7 w-7" />
+            </Link>
             <Separator orientation="vertical" className="mr-1 h-5 hidden sm:block" />
 
             <div className={cn("flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold shadow-sm transition-colors", tickerBadgeStyle)}>
@@ -424,7 +454,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 p-6 sm:p-8">{children}</main>
+        <main className="flex-1 p-4 pb-28 sm:p-8 sm:pb-8">{children}</main>
+        <MobileBottomNav />
       </SidebarInset>
     </SidebarProvider>
   );

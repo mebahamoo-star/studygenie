@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
@@ -8,11 +8,9 @@ import {
   Check,
   Clock,
   Flame,
-  HelpCircle,
-  Loader2,
   Siren,
-  Sliders,
   Sparkles,
+  RefreshCw,
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -20,22 +18,12 @@ import { Card, PageTitle } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { pageHead } from "@/lib/head";
 import { browseService } from "@/lib/api/services";
-import { fetchApi } from "@/lib/api/client";
-import { getUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, isCourseMaterialUploaded } from "@/lib/courses-util";
+import { getActiveCourse, getActivePlan, getUserCourses, getUserStoragePrefix, isCourseMaterialUploaded, saveActiveCourse, saveUserCourses } from "@/lib/courses-util";
 import type { Course, PlanResponseData } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+import { useApp } from "@/lib/app-state";
 
 export const Route = createFileRoute("/_shell/plan")({
   head: pageHead("Study plan", "Your day-by-day study and review timeline."),
@@ -57,14 +45,10 @@ interface DayPlan {
   tasks: DayTask[];
 }
 
-interface StoredTaskKit {
-  kitId?: string;
-  flashcards: { id: string; q: string; a: string; hint?: string }[];
-  quiz: { id: string; question: string; options: string[]; explanation?: string }[];
-}
-
 function Plan() {
-  const nav = useNavigate();
+  const { addPoints } = useApp();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [doneMap, setDoneMap] = useState<Record<string, string[]>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [survival, setSurvival] = useState(false);
@@ -74,25 +58,23 @@ function Plan() {
     name: "Study Plan",
     code: "",
   });
-  const [kitsMap, setKitsMap] = useState<Record<string, StoredTaskKit>>({});
-  const [loadingTaskKey, setLoadingTaskKey] = useState<string | null>(null);
-
-  // Flashcards generation modal state
-  const [cardModalOpen, setCardModalOpen] = useState(false);
-  const [targetTask, setTargetTask] = useState<DayTask | null>(null);
-  const [requestedCardCount, setRequestedCardCount] = useState<number>(10);
 
   useEffect(() => {
-    // 1. Load user-scoped kits cache
-    const kits = getUserTaskKits();
-    setKitsMap(kits);
-
-    // 2. Load subjects specifically enrolled by this user from cloud database
+    // Load subjects specifically enrolled by this user from cloud database
     const loadSubjects = async () => {
       let enrolled: Course[] = [];
       try {
         const remote = await browseService.getEnrolledCourses();
-        enrolled = remote || [];
+        const local = getUserCourses();
+        enrolled = (remote || []).map((rc) => {
+          const match = local.find(
+            (lc) => String(lc.id) === String(rc.id) || lc.name.toLowerCase() === rc.name.toLowerCase()
+          );
+          return {
+            ...rc,
+            topics: rc.topics && rc.topics.length > 0 ? rc.topics : match?.topics || [],
+          };
+        });
         saveUserCourses(enrolled);
       } catch {
         enrolled = getUserCourses();
@@ -117,29 +99,131 @@ function Plan() {
     loadSubjects();
   }, []);
 
-  const handleSelectSubject = async (c: Course) => {
-    if (!isCourseMaterialUploaded(c)) {
-      toast.warning(`Cannot view plan: Course syllabus has not been uploaded for "${c.name}". Please upload course materials first.`);
+  useEffect(() => {
+    const prefix = getUserStoragePrefix();
+    const loadDoneState = () => {
+      const map: Record<string, string[]> = {};
+      planDays.forEach((d) => {
+        const raw = localStorage.getItem(`sg-${prefix}-checklist-done-${d.date}`);
+        if (raw) {
+          try {
+            map[d.date] = JSON.parse(raw);
+          } catch {}
+        }
+      });
+      setDoneMap(map);
+    };
+    loadDoneState();
+
+    const handleSync = (e: any) => {
+      if (e?.detail?.date) {
+        setDoneMap((prev) => ({ ...prev, [e.detail.date]: e.detail.list }));
+      } else {
+        loadDoneState();
+      }
+    };
+    window.addEventListener("sg-checklist-updated", handleSync);
+    return () => window.removeEventListener("sg-checklist-updated", handleSync);
+  }, [planDays]);
+
+  const isTaskDone = (dateStr: string, t: DayTask) => {
+    const prefix = getUserStoragePrefix();
+    const taskId = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
+    const list = doneMap[dateStr] || [];
+    return list.includes(taskId) || list.includes(t.ref) || list.includes(t.title);
+  };
+
+  const togglePlanTaskDone = (dateStr: string, t: DayTask) => {
+    const prefix = getUserStoragePrefix();
+    const taskId = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
+    const currentList = doneMap[dateStr] || [];
+    const isDone = currentList.includes(taskId) || currentList.includes(t.ref) || currentList.includes(t.title);
+    const nextList = isDone ? currentList.filter((id) => id !== taskId && id !== t.ref && id !== t.title) : [...currentList, taskId];
+
+    setDoneMap((prev) => ({ ...prev, [dateStr]: nextList }));
+    try {
+      localStorage.setItem(`sg-${prefix}-checklist-done-${dateStr}`, JSON.stringify(nextList));
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (dateStr === todayStr) {
+        localStorage.setItem(`sg-${prefix}-checklist-done`, JSON.stringify(nextList));
+      }
+      window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateStr, list: nextList } }));
+    } catch {}
+
+    if (!isDone) {
+      addPoints(15);
+      toast.success("+15 XP! Topic marked as completed 🎉");
     }
-    setSelectedCourse(c);
-    setCourseInfo({ name: c.name, code: c.code });
+  };
+
+  const handleRefreshFromServer = async () => {
+    if (!selectedCourse) return;
+    setIsRefreshing(true);
+    try {
+      if (selectedCourse.id && !String(selectedCourse.id).startsWith("course-") && !String(selectedCourse.id).startsWith("c-")) {
+        const remote = await browseService.getCoursePlan(selectedCourse.id);
+        if (remote?.tasks && remote.tasks.length > 0) {
+          const prefix = getUserStoragePrefix();
+          localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.id}`, JSON.stringify(remote));
+          localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.name}`, JSON.stringify(remote));
+          formatAndSetTasks(remote.tasks, selectedCourse);
+          toast.success("Plan refreshed successfully from server!");
+          return;
+        }
+      }
+      toast.info("Plan is already up to date.");
+    } catch (err: any) {
+      toast.error(err?.message || "Could not refresh plan from server.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleSelectSubject = async (c: Course) => {
+    let currentCourse = c;
+
+    // Fetch topics if missing for a cloud-synced course
+    if (
+      (!currentCourse.topics || currentCourse.topics.length === 0) &&
+      currentCourse.id &&
+      !String(currentCourse.id).startsWith("course-") &&
+      !String(currentCourse.id).startsWith("c-")
+    ) {
+      try {
+        const remoteTopics = await browseService.getCourseTopics(currentCourse.id);
+        if (remoteTopics && remoteTopics.length > 0) {
+          currentCourse = { ...currentCourse, topics: remoteTopics, status: "ready" };
+          setSelectedCourse(currentCourse);
+          setCourses((prev) =>
+            prev.map((item) => String(item.id) === String(currentCourse.id) ? currentCourse : item)
+          );
+        }
+      } catch {}
+    }
+
+    if (!isCourseMaterialUploaded(currentCourse)) {
+      toast.warning(`Cannot view plan: Course syllabus has not been uploaded for "${currentCourse.name}". Please upload course materials first.`);
+    }
+    setSelectedCourse(currentCourse);
+    saveActiveCourse(currentCourse);
+    setCourseInfo({ name: currentCourse.name, code: currentCourse.code });
     setPlanDays([]);
     setFullPlanDays([]);
     setSurvival(false);
 
     let planData: any = null;
-    if (c.id && !String(c.id).startsWith("course-") && !String(c.id).startsWith("c-")) {
+    if (currentCourse.id && !String(currentCourse.id).startsWith("course-") && !String(currentCourse.id).startsWith("c-")) {
       try {
-        const res = await browseService.getCoursePlan(c.id);
+        const res = await browseService.getCoursePlan(currentCourse.id);
         if (res?.tasks && res.tasks.length > 0) {
           planData = res;
           const prefix = getUserStoragePrefix();
           try {
-            localStorage.setItem(`sg-${prefix}-plan-${c.id}`, JSON.stringify(res));
-            localStorage.setItem(`sg-plan-${c.id}`, JSON.stringify(res));
-            if (c.name) {
-              localStorage.setItem(`sg-${prefix}-plan-${c.name}`, JSON.stringify(res));
-              localStorage.setItem(`sg-plan-${c.name}`, JSON.stringify(res));
+            localStorage.setItem(`sg-${prefix}-plan-${currentCourse.id}`, JSON.stringify(res));
+            localStorage.setItem(`sg-plan-${currentCourse.id}`, JSON.stringify(res));
+            if (currentCourse.name) {
+              localStorage.setItem(`sg-${prefix}-plan-${currentCourse.name}`, JSON.stringify(res));
+              localStorage.setItem(`sg-plan-${currentCourse.name}`, JSON.stringify(res));
             }
           } catch {}
         }
@@ -149,7 +233,7 @@ function Plan() {
     if (!planData) {
       try {
         const prefix = getUserStoragePrefix();
-        const localPlan = localStorage.getItem(`sg-${prefix}-plan-${c.id}`) || (prefix === "guest" ? localStorage.getItem(`sg-plan-${c.id}`) : null);
+        const localPlan = localStorage.getItem(`sg-${prefix}-plan-${currentCourse.id}`) || (prefix === "guest" ? localStorage.getItem(`sg-plan-${currentCourse.id}`) : null);
         if (localPlan) {
           planData = JSON.parse(localPlan);
         } else {
@@ -159,7 +243,7 @@ function Plan() {
     }
 
     if (planData?.tasks && planData.tasks.length > 0) {
-      formatAndSetTasks(planData.tasks, c);
+      formatAndSetTasks(planData.tasks, currentCourse);
     }
   };
 
@@ -273,171 +357,6 @@ function Plan() {
       setPlanDays(computeSurvivalPlan(base));
       toast.error("Survival Mode activated ⚡ — plan compressed to high-yield topics.");
     }
-  };
-
-  // Open modal asking how many cards the user wants (max 25)
-  const handleFlashcardClick = (task: DayTask) => {
-    if (!selectedCourse || !isCourseMaterialUploaded(selectedCourse)) {
-      toast.warning("Cannot generate flashcards: Course syllabus has not been uploaded yet.");
-      return;
-    }
-    const taskKey = task.ref && !task.ref.startsWith("task-") ? String(task.ref) : task.title.trim().toLowerCase();
-    const titleKey = task.title.trim().toLowerCase();
-    const existing = kitsMap[taskKey] || kitsMap[titleKey];
-
-    if (existing?.flashcards?.length) {
-      handleOpenFlashcards(task, existing.flashcards, existing.kitId);
-      return;
-    }
-
-    setTargetTask(task);
-    setRequestedCardCount(10);
-    setCardModalOpen(true);
-  };
-
-  // Generate flashcards or quiz without duplicating for identical tasks
-  const handleGenerateTaskKit = async (task: DayTask, target: "flashcards" | "quiz", cardCount: number = 10) => {
-    if (!selectedCourse || !isCourseMaterialUploaded(selectedCourse)) {
-      toast.warning(`Cannot generate ${target === "flashcards" ? "flashcards" : "quiz"}: Please upload the course syllabus first.`);
-      return;
-    }
-    const taskKey = task.ref && !task.ref.startsWith("task-") ? String(task.ref) : task.title.trim().toLowerCase();
-    const titleKey = task.title.trim().toLowerCase();
-
-    // Deduplication check: if this task or a duplicate task already generated, open directly!
-    const existing = kitsMap[taskKey] || kitsMap[titleKey];
-    if (existing && ((target === "flashcards" && existing.flashcards?.length) || (target === "quiz" && existing.quiz?.length))) {
-      if (target === "flashcards") {
-        handleOpenFlashcards(task, existing.flashcards, existing.kitId);
-      } else {
-        handleOpenQuiz(task, existing.quiz, existing.kitId);
-      }
-      return;
-    }
-
-    setLoadingTaskKey(`${taskKey}-${target}`);
-    try {
-      const sanitizedCardCount = Math.min(25, Math.max(1, cardCount));
-      const sourceExcerpt =
-        task.contentExcerpt ||
-        (task.subtopics && task.subtopics.length > 0
-          ? `Key concepts and modules: ${task.subtopics.join(", ")}`
-          : undefined);
-
-      const payload = {
-        course_name: selectedCourse?.name || courseInfo.name || "Course",
-        language: "en",
-        topics: [
-          {
-            ref: task.ref || "1",
-            chapter_title: task.title,
-            subtopics: task.subtopics && task.subtopics.length > 0 ? task.subtopics : [task.title],
-            source_excerpt: sourceExcerpt,
-          },
-        ],
-        flashcards_per_topic: sanitizedCardCount,
-        questions_per_topic: 5,
-      };
-
-      let flashcards: any[] = [];
-      let quiz: any[] = [];
-      let kitId = `kit-${Date.now()}`;
-
-      try {
-        const res = await fetchApi<any>("/api/v1/study-kits/generate", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-
-        if (res?.data) {
-          kitId = res.data.kitId || kitId;
-          const topicKit = res.data.topics?.[0];
-          if (topicKit?.flashcards?.length) {
-            flashcards = topicKit.flashcards.slice(0, sanitizedCardCount).map((f: any, idx: number) => ({
-              id: f.cardId || f.id || String(idx + 1),
-              q: f.front || f.question || f.q,
-              a: f.back || f.answer || f.a,
-              hint: f.hint,
-            }));
-          }
-          if (topicKit?.quiz?.length) {
-            quiz = topicKit.quiz.map((q: any, idx: number) => ({
-              id: q.questionId || q.id || String(idx + 1),
-              question: q.questionText || q.question,
-              options: q.options || [],
-              explanation: q.explanation,
-            }));
-          }
-        }
-      } catch (apiErr) {
-        console.warn("Backend study kit generation failed, creating high-yield kit:", apiErr);
-      }
-
-      // Strictly ensure study kits are never fabricated without syllabus
-      if (target === "flashcards" && flashcards.length === 0) {
-        toast.error("Could not generate flashcards from syllabus. Please verify that syllabus material is uploaded.");
-        return;
-      }
-      if (target === "quiz" && quiz.length === 0) {
-        toast.error("Could not generate quiz questions from syllabus. Please verify that syllabus material is uploaded.");
-        return;
-      }
-            flashcards = flashcards.slice(0, sanitizedCardCount);
-      const kitObj: StoredTaskKit = { kitId, flashcards, quiz };
-      const nextMap = {
-        ...kitsMap,
-        [taskKey]: kitObj,
-        [titleKey]: kitObj,
-      };
-      setKitsMap(nextMap);
-      saveUserTaskKits(nextMap);
-      try {
-        localStorage.setItem("sg-task-kits", JSON.stringify(nextMap));
-      } catch {}
-
-      toast.success(`Generated ${flashcards.length} professional flashcards! ✨`);
-
-      if (target === "flashcards") {
-        handleOpenFlashcards(task, flashcards, kitId);
-      } else {
-        handleOpenQuiz(task, quiz, kitId);
-      }
-    } catch (err: any) {
-      console.error("Kit generation error:", err);
-      toast.error("Failed to generate task study material.");
-    } finally {
-      setLoadingTaskKey(null);
-    }
-  };
-
-  const handleOpenFlashcards = (task: DayTask, cardsParam?: any[], kitIdParam?: string) => {
-    const taskKey = task.ref && !task.ref.startsWith("task-") ? String(task.ref) : task.title.trim().toLowerCase();
-    const c = cardsParam || kitsMap[taskKey]?.flashcards || kitsMap[task.title.trim().toLowerCase()]?.flashcards;
-    if (!c || c.length === 0) return;
-
-    try {
-      localStorage.setItem("sg-active-cards", JSON.stringify(c));
-      const k = kitIdParam || kitsMap[taskKey]?.kitId;
-      if (k) localStorage.setItem("sg-active-kit", k);
-    } catch {}
-
-    toast.success(`Opening ${c.length} flashcards for ${task.title} ✨`);
-    nav({ to: "/flashcards" });
-  };
-
-  const handleOpenQuiz = (task: DayTask, quizParam?: any[], kitIdParam?: string) => {
-    const taskKey = task.ref && !task.ref.startsWith("task-") ? String(task.ref) : task.title.trim().toLowerCase();
-    const q = quizParam || kitsMap[taskKey]?.quiz || kitsMap[task.title.trim().toLowerCase()]?.quiz;
-    if (!q || q.length === 0) return;
-
-    try {
-      localStorage.setItem("sg-active-quiz", JSON.stringify(q));
-      const k = kitIdParam || kitsMap[taskKey]?.kitId;
-      if (k) localStorage.setItem("sg-active-kit", k);
-    } catch {}
-
-    toast.success(`Starting practice quiz for ${task.title} ✨`);
-    nav({ to: "/quiz" });
   };
 
   // SCREEN 1: Show Subjects First
@@ -626,7 +545,56 @@ function Plan() {
         </Card>
       ) : (
         <div className="relative flex flex-col gap-6 pl-8 before:absolute before:left-3 before:top-2 before:h-full before:w-0.5 before:bg-border">
-          {planDays.map((day, i) => (
+          {/* Smart Adaptive Progress & Daily Hours Card */}
+      {planDays.length > 0 && (() => {
+        const allTasks = planDays.flatMap((d) => d.tasks.map((t) => ({ ...t, date: d.date })));
+        const totalTasksCount = allTasks.length;
+        const completedTasksCount = allTasks.filter((t) => isTaskDone(t.date, t)).length;
+        const totalPlannedMinutes = allTasks.reduce((sum, t) => sum + (t.min || 30), 0);
+        const completedMinutes = allTasks.filter((t) => isTaskDone(t.date, t)).reduce((sum, t) => sum + (t.min || 30), 0);
+        const progressPct = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
+        const totalPlannedHours = (totalPlannedMinutes / 60).toFixed(1);
+        const completedHours = (completedMinutes / 60).toFixed(1);
+
+        return (
+          <div className="mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 via-card to-gold/5 p-4 shadow-sm">
+            <div className="flex flex-col justify-center">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Course Completion</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-display text-2xl font-bold text-foreground">{completedTasksCount} / {totalTasksCount}</span>
+                <span className="text-xs font-semibold text-primary font-bold">({progressPct}% finished)</span>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div className="h-full bg-primary transition-all duration-500 rounded-full" style={{ width: `${progressPct}%` }} />
+              </div>
+            </div>
+            <div className="flex flex-col justify-center border-t sm:border-t-0 sm:border-l border-border/60 sm:pl-4 pt-2 sm:pt-0">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Study Time Progress</div>
+              <div className="mt-1 flex items-baseline gap-1.5 font-display text-2xl font-bold text-foreground">
+                <span>{completedHours}h</span>
+                <span className="text-xs font-medium text-muted-foreground">/ {totalPlannedHours}h total</span>
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground font-medium">
+                ⏱️ Daily Target: {(totalPlannedMinutes / Math.max(1, planDays.length * 60)).toFixed(1)} hrs/day across {planDays.length} days
+              </div>
+            </div>
+            <div className="flex items-center justify-end border-t sm:border-t-0 sm:border-l border-border/60 sm:pl-4 pt-2 sm:pt-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshFromServer}
+                disabled={isRefreshing}
+                className="w-full sm:w-auto gap-2 font-semibold text-xs border-primary/30 hover:bg-primary/10 hover:text-primary shadow-xs"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin text-primary")} />
+                {isRefreshing ? "Syncing..." : "Refresh Plan"}
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {planDays.map((day, i) => (
             <div key={day.date + i} className="relative">
               <span
                 className={cn(
@@ -639,242 +607,78 @@ function Plan() {
                 {i === 0 && <span className="ml-2 text-xs text-primary">Today</span>}
               </div>
               <Card className="flex flex-col gap-3 p-4">
-                {day.tasks.map((t, idx) => {
-                  const taskKey = t.ref && !t.ref.startsWith("task-") ? String(t.ref) : t.title.trim().toLowerCase();
-                  const existingKit = kitsMap[taskKey] || kitsMap[t.title.trim().toLowerCase()];
-                  const hasCards = existingKit?.flashcards && existingKit.flashcards.length > 0;
-                  const hasQuiz = existingKit?.quiz && existingKit.quiz.length > 0;
-                  const isGeneratingCards = loadingTaskKey === `${taskKey}-flashcards`;
-                  const isGeneratingQuiz = loadingTaskKey === `${taskKey}-quiz`;
-
-                  return (
-                    <div
-                      key={t.title + t.tag + idx}
-                      className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card p-3.5 hover:border-primary/40 transition shadow-sm"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={cn(
-                              "flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider",
-                              t.tag === "STUDY"
-                                ? "bg-primary/10 text-primary border border-primary/20"
-                                : "bg-gold/20 text-gold-foreground dark:text-gold border border-gold/30"
-                            )}
-                          >
-                            {t.tag === "STUDY" ? <BookOpen className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
-                            {t.tag}
-                          </span>
-                          <span className="font-semibold text-foreground text-sm sm:text-base">
-                            {t.title}
-                          </span>
-                        </div>
-                        <span className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-muted-foreground whitespace-nowrap">
-                          <Clock className="h-3.5 w-3.5" />
-                          {t.min >= 60 ? `${(t.min / 60).toFixed(1)}h` : `${t.min}m`}
+                {day.tasks.map((t, idx) => (
+                  <div
+                    key={t.title + t.tag + idx}
+                    className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card p-3.5 hover:border-primary/40 transition shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider",
+                            t.tag === "STUDY"
+                              ? "bg-primary/10 text-primary border border-primary/20"
+                              : "bg-gold/20 text-gold-foreground dark:text-gold border border-gold/30"
+                          )}
+                        >
+                          {t.tag === "STUDY" ? <BookOpen className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+                          {t.tag}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Toggle completed"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            togglePlanTaskDone(day.date, t);
+                          }}
+                          className={cn(
+                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all cursor-pointer",
+                            isTaskDone(day.date, t)
+                              ? "border-emerald-500 bg-emerald-500 text-white shadow-xs"
+                              : "border-border hover:border-primary"
+                          )}
+                        >
+                          {isTaskDone(day.date, t) && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                        </button>
+                        <span className={cn("font-semibold text-sm sm:text-base transition-all", isTaskDone(day.date, t) ? "line-through text-muted-foreground opacity-60" : "text-foreground")}>
+                          {t.title}
                         </span>
                       </div>
-
-                      {t.desc && (
-                        <p className="text-xs text-muted-foreground">
-                          {t.desc}
-                        </p>
-                      )}
-
-                      {t.subtopics && t.subtopics.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
-                            Topics:
-                          </span>
-                          {t.subtopics.map((sub, sIdx) => (
-                            <span
-                              key={sub + sIdx}
-                              className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/80 border border-border/50"
-                            >
-                              {sub}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Flashcards & Quiz Action Buttons Behind Every Task */}
-                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2.5">
-                        <span className="text-[11px] font-medium text-muted-foreground">
-                          Active Recall Tools:
-                        </span>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {hasCards ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-8 gap-1.5 border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20"
-                              onClick={() => handleOpenFlashcards(t, existingKit?.flashcards, existingKit?.kitId)}
-                              title="Open ready flashcards"
-                            >
-                              <Check className="h-3.5 w-3.5 text-primary" />
-                              Flashcards ({existingKit.flashcards.length})
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 gap-1.5 text-xs font-semibold hover:border-primary hover:text-primary"
-                              disabled={isGeneratingCards || isGeneratingQuiz}
-                              onClick={() => handleFlashcardClick(t)}
-                            >
-                              {isGeneratingCards ? (
-                                <>
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                                  Generating...
-                                </>
-                              ) : (
-                                <>
-                                  <BookOpen className="h-3.5 w-3.5 text-primary" />
-                                  Flashcards
-                                </>
-                              )}
-                            </Button>
-                          )}
-
-                          {hasQuiz ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              className="h-8 gap-1.5 border border-amber-500/30 bg-amber-500/10 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 dark:text-amber-400"
-                              onClick={() => handleOpenQuiz(t, existingKit?.quiz, existingKit?.kitId)}
-                              title="Practice quiz"
-                            >
-                              <Check className="h-3.5 w-3.5 text-amber-500" />
-                              Quiz ({existingKit.quiz.length}Q)
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8 gap-1.5 text-xs font-semibold hover:border-amber-500 hover:text-amber-500"
-                              disabled={isGeneratingCards || isGeneratingQuiz}
-                              onClick={() => handleGenerateTaskKit(t, "quiz")}
-                            >
-                              {isGeneratingQuiz ? (
-                                <>
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
-                                  Generating...
-                                </>
-                              ) : (
-                                <>
-                                  <HelpCircle className="h-3.5 w-3.5 text-amber-500" />
-                                  Quiz
-                                </>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                      <span className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-muted-foreground whitespace-nowrap">
+                        <Clock className="h-3.5 w-3.5" />
+                        {t.min >= 60 ? `${(t.min / 60).toFixed(1)}h` : `${t.min}m`}
+                      </span>
                     </div>
-                  );
-                })}
+
+                    {t.desc && (
+                      <p className="text-xs text-muted-foreground">
+                        {t.desc}
+                      </p>
+                    )}
+
+                    {t.subtopics && t.subtopics.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                          Topics:
+                        </span>
+                        {t.subtopics.map((sub, sIdx) => (
+                          <span
+                            key={sub + sIdx}
+                            className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground/80 border border-border/50"
+                          >
+                            {sub}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </Card>
             </div>
           ))}
         </div>
       )}
-
-      {/* Dialog for asking how many flashcards the user wants (max 25 cards) */}
-      <Dialog open={cardModalOpen} onOpenChange={setCardModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-2 text-primary font-semibold text-xs tracking-wider uppercase">
-              <Sparkles className="h-4 w-4" />
-              <span>AI Active-Recall Generator</span>
-            </div>
-            <DialogTitle className="text-lg font-bold tracking-tight">
-              Generate Flashcards
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              Select how many active-recall flashcards to generate for{" "}
-              <span className="font-semibold text-foreground">
-                {targetTask?.title}
-              </span>
-              . The AI reads the full chapter content to produce high-yield cards.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="rounded-xl border border-border/70 bg-muted/40 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                  Card Quantity
-                </Label>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-black text-primary font-mono">
-                    {requestedCardCount}
-                  </span>
-                  <span className="text-xs font-semibold text-muted-foreground">/ 25 max</span>
-                </div>
-              </div>
-
-              <Slider
-                value={[requestedCardCount]}
-                min={1}
-                max={25}
-                step={1}
-                onValueChange={(vals) => setRequestedCardCount(vals[0] || 10)}
-                className="py-1"
-              />
-
-              {/* Fast presets */}
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[11px] font-medium text-muted-foreground">Quick select:</span>
-                <div className="flex items-center gap-1.5">
-                  {[5, 10, 15, 20, 25].map((cnt) => (
-                    <button
-                      key={cnt}
-                      type="button"
-                      onClick={() => setRequestedCardCount(cnt)}
-                      className={cn(
-                        "px-2.5 py-1 text-xs font-bold rounded-lg transition-all",
-                        requestedCardCount === cnt
-                          ? "bg-primary text-primary-foreground shadow-sm scale-105"
-                          : "bg-background border border-border/60 hover:bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {cnt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="text-xs text-muted-foreground bg-primary/5 rounded-xl p-3 border border-primary/15 flex items-start gap-2.5">
-              <BookOpen className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <p className="leading-relaxed">
-                Cards test key definitions, mechanisms, and contrasts extracted directly from this chapter, capped at <strong>25 cards</strong>.
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setCardModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="magic"
-              className="gap-2"
-              disabled={loadingTaskKey !== null}
-              onClick={() => {
-                if (targetTask) {
-                  const count = Math.min(25, Math.max(1, requestedCardCount));
-                  setCardModalOpen(false);
-                  handleGenerateTaskKit(targetTask, "flashcards", count);
-                }
-              }}
-            >
-              <Sparkles className="h-4 w-4" />
-              Generate {requestedCardCount} Cards
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

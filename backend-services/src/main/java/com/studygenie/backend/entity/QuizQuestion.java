@@ -37,12 +37,14 @@ public class QuizQuestion {
     private QuestionType type;
 
     @Convert(converter = StringListJsonConverter.class)
-    @Column(name = "options", columnDefinition = "TEXT", nullable = false)
+    @Column(name = "options", columnDefinition = "TEXT")
     private List<String> options;
 
-    @NotNull
-    @Column(name = "correct_option_index", nullable = false)
+    @Column(name = "correct_option_index")
     private Integer correctOptionIndex;
+
+    @Column(name = "correct_answer_text", columnDefinition = "TEXT")
+    private String correctAnswerText;
 
     @Column(name = "explanation", columnDefinition = "TEXT")
     private String explanation;

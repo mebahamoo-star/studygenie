@@ -1,6 +1,8 @@
 package com.studygenie.backend.service.auth;
 
 import com.studygenie.backend.dto.auth.*;
+import com.studygenie.backend.entity.enums.AccountStatus;
+import com.studygenie.backend.exception.ForbiddenException;
 import com.studygenie.backend.exception.TooManyRequestsException;
 import com.studygenie.backend.exception.UnauthorizedException;
 import com.studygenie.backend.security.JwtService;
@@ -71,6 +73,11 @@ public class AuthService {
             throw new UnauthorizedException("Invalid email or password");
         }
 
+        if (user.status() == AccountStatus.SUSPENDED) {
+            refreshStore.revokeAllForUser(user.id());
+            throw new ForbiddenException("Account is suspended");
+        }
+
         loginAttemptService.loginSucceeded(attemptKey);
         return issueTokens(user, request.rememberMe());
     }
@@ -92,6 +99,11 @@ public class AuthService {
         UserAccount user = userStore.findById(record.userId())
                 .orElseThrow(() -> new UnauthorizedException("Invalid refresh token")); // User deleted
 
+        if (user.status() == AccountStatus.SUSPENDED) {
+            refreshStore.revokeAllForUser(user.id());
+            throw new ForbiddenException("Account is suspended");
+        }
+
         refreshStore.revoke(record.id());
         
         return issueTokens(user, record.rememberMe());
@@ -105,11 +117,20 @@ public class AuthService {
     public UserSummary getMe(Long userId) {
         UserAccount user = userStore.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Unauthorized"));
-        return new UserSummary(user.id(), user.fullName(), user.email());
+        if (user.status() == AccountStatus.SUSPENDED) {
+            refreshStore.revokeAllForUser(user.id());
+            throw new ForbiddenException("Account is suspended");
+        }
+        return new UserSummary(user.id(), user.fullName(), user.email(), user.role().name(), user.status().name());
     }
 
     public AuthResponse issueTokens(UserAccount user, boolean rememberMe) {
-        String accessToken = jwtService.generateAccessToken(user.id(), user.email());
+        if (user.status() == AccountStatus.SUSPENDED) {
+            refreshStore.revokeAllForUser(user.id());
+            throw new ForbiddenException("Account is suspended");
+        }
+
+        String accessToken = jwtService.generateAccessToken(user.id(), user.email(), user.role());
         String refreshToken = refreshTokenGenerator.generateToken();
         String refreshTokenHash = refreshTokenGenerator.hashToken(refreshToken);
 
@@ -121,7 +142,7 @@ public class AuthService {
         );
         refreshStore.save(rtr);
 
-        UserSummary summary = new UserSummary(user.id(), user.fullName(), user.email());
+        UserSummary summary = new UserSummary(user.id(), user.fullName(), user.email(), user.role().name(), user.status().name());
         return new AuthResponse(
                 accessToken, refreshToken, jwtService.accessTokenTtlSeconds(), refreshTtl / 1000, summary
         );

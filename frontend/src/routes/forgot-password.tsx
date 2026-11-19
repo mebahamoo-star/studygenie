@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Capacitor } from "@capacitor/core";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, CheckCircle2, KeyRound, Mail, RefreshCw, ShieldCheck } from "lucide-react";
@@ -6,6 +7,7 @@ import { Genie, GenieLogo } from "@/components/Genie";
 import { ThemeToggle } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import {
   InputOTP,
@@ -146,7 +148,7 @@ function ForgotPasswordPage() {
       {/* Main Form View */}
       <div className="flex flex-col justify-between p-6 sm:p-8 md:p-12">
         <header className="flex items-center justify-between">
-          <Link to="/">
+          <Link to={Capacitor.isNativePlatform() ? "/login" : "/"}>
             <GenieLogo />
           </Link>
           <div className="flex items-center gap-3">
@@ -285,9 +287,8 @@ function ForgotPasswordPage() {
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="newPassword">New Password</Label>
-                  <Input
+                  <PasswordInput
                     id="newPassword"
-                    type="password"
                     placeholder="••••••••"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -302,9 +303,8 @@ function ForgotPasswordPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <Input
+                  <PasswordInput
                     id="confirmPassword"
-                    type="password"
                     placeholder="••••••••"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}

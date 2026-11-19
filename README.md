@@ -80,3 +80,30 @@ If you need to wipe the database and n8n data:
 ```bash
 docker compose down -v
 ```
+
+## Security & Admin Panel Configuration
+
+### Required Environment Variables (Non-Dev Profiles)
+The Spring Boot backend refuses to start in non-`dev` profiles unless all required secrets are provided via environment variables:
+- `DB_PASS`: PostgreSQL / Supabase database password.
+- `JWT_SECRET`: HMAC-SHA256 secret (must be at least 32 bytes).
+- `AI_INTERNAL_TOKEN`: Shared internal token between `backend-services` and `ai-engine` (at least 16 characters).
+- `INTERNAL_N8N_TOKEN`: Shared internal token for `/api/internal/**` n8n digest endpoints.
+- `CORS_ALLOWED_ORIGINS`: Comma-separated allow-list of frontend origins (defaults to `http://localhost:3000,http://localhost:5173` in local dev).
+
+### Bootstrapping the First Admin Account
+New accounts registered via `/api/auth/register` or OAuth always receive the `STUDENT` role. Never create a default-password admin account. Instead, promote an existing registered account using either method below:
+
+1. **Startup Environment Variable (Recommended)**:
+   Register your account normally in the app, then set `ADMIN_BOOTSTRAP_EMAIL` and restart the backend:
+   ```bash
+   ADMIN_BOOTSTRAP_EMAIL=your-registered-email@example.com
+   ```
+   On startup, if no `ADMIN` exists in the `students` table yet, `AdminBootstrapRunner` promotes that existing account to `ADMIN` and logs the promotion.
+
+2. **One-Line SQL Alternative**:
+   Run the following SQL statement against PostgreSQL / Supabase:
+   ```sql
+   UPDATE students SET role = 'ADMIN', status = 'ACTIVE' WHERE LOWER(email) = LOWER('your-registered-email@example.com');
+   ```
+

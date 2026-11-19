@@ -22,6 +22,7 @@ import com.studygenie.backend.entity.Syllabus;
 import com.studygenie.backend.entity.Topic;
 import com.studygenie.backend.entity.University;
 import com.studygenie.backend.entity.enums.CourseStatus;
+import com.studygenie.backend.exception.BadRequestException;
 import com.studygenie.backend.exception.DuplicateResourceException;
 import com.studygenie.backend.exception.ResourceNotFoundException;
 import com.studygenie.backend.exception.ResourceNotReadyException;
@@ -106,6 +107,10 @@ public class CourseService {
         this.examRepository = examRepository;
     }
 
+    public void clearCoursesCache() {
+        coursesCache.clear();
+    }
+
     @Transactional(readOnly = true)
     public List<CourseDto> getAllCourses() {
         CachedCourses cached = coursesCache.get("all");
@@ -113,6 +118,7 @@ public class CourseService {
             return cached.list();
         }
         List<CourseDto> list = courseRepository.findAll().stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
         coursesCache.put("all", new CachedCourses(System.currentTimeMillis(), list));
@@ -130,6 +136,7 @@ public class CourseService {
             return cached.list();
         }
         List<CourseDto> list = courseRepository.findByCollegeId(collegeId).stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
         coursesCache.put(key, new CachedCourses(System.currentTimeMillis(), list));
@@ -154,6 +161,7 @@ public class CourseService {
         }
 
         return courses.stream()
+                .filter(c -> c.getDeletedAt() == null)
                 .map(c -> new CourseDto(c.getId(), c.getName(), c.getCollege() != null ? c.getCollege().getId() : null, c.getStatus()))
                 .collect(Collectors.toList());
     }
@@ -182,6 +190,16 @@ public class CourseService {
             student.getEnrolledCourses().removeIf(c -> c.getId().equals(courseId));
             studentRepository.save(student);
         }
+
+        // Clean up only this student's personal study plan for the course,
+        // leaving the shared course, syllabus, topics, and other students intact.
+        studyPlanRepository.findByStudentIdAndCourseId(studentId, courseId).ifPresent(plan -> {
+            List<PlanTask> tasks = planTaskRepository.findByStudyPlanId(plan.getId());
+            if (!tasks.isEmpty()) {
+                planTaskRepository.deleteAll(tasks);
+            }
+            studyPlanRepository.delete(plan);
+        });
     }
 
     @Transactional
@@ -372,6 +390,34 @@ public class CourseService {
     }
 
     @Transactional
+    public void verifyCanModifySyllabusOrTopics(Long courseId, com.studygenie.backend.security.AuthenticatedUser userDetails) {
+        if (userDetails == null || userDetails.id() == null) {
+            throw new com.studygenie.backend.exception.UnauthorizedException("Unauthorized");
+        }
+        com.studygenie.backend.entity.enums.Role role = userDetails.role();
+        if (role == com.studygenie.backend.entity.enums.Role.ADMIN
+                || role == com.studygenie.backend.entity.enums.Role.MODERATOR) {
+            return;
+        }
+        long totalEnrolled = studentRepository.countEnrolledStudentsByCourseId(courseId);
+        if (totalEnrolled > 1) {
+            throw new com.studygenie.backend.exception.ForbiddenException(
+                    "Only an admin or moderator can delete topics or reset the syllabus of a shared course with multiple students.");
+        }
+        long callerEnrolled = studentRepository.countEnrollmentByCourseIdAndStudentId(courseId, userDetails.id());
+        if (callerEnrolled == 1) {
+            return;
+        }
+        Syllabus syllabus = syllabusRepository.findByCourseId(courseId).orElse(null);
+        if (totalEnrolled == 0 && syllabus != null && syllabus.getUploadedBy() != null
+                && userDetails.id().equals(syllabus.getUploadedBy().getId())) {
+            return;
+        }
+        throw new com.studygenie.backend.exception.ForbiddenException(
+                "You must be the sole enrolled student or an admin/moderator to modify this course's syllabus or topics.");
+    }
+
+    @Transactional
     public void deleteTopic(Long courseId, Long topicId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
@@ -421,6 +467,12 @@ public class CourseService {
     public void deleteCourse(Long courseId) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
+
+        long enrolledCount = studentRepository.countEnrolledStudentsByCourseId(courseId);
+        if (enrolledCount > 0) {
+            throw new BadRequestException(
+                    "Cannot delete a shared course while students are still enrolled. Unenroll from it instead.");
+        }
 
         // Delete associated study plans and their tasks
         List<StudyPlan> plans = studyPlanRepository.findByCourseId(courseId);
@@ -508,6 +560,11 @@ public class CourseService {
 
     @Transactional
     public PlanResponseData joinChallenge(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode) {
+        return joinChallenge(courseId, userId, examDate, dailyHours, mode, null);
+    }
+
+    @Transactional
+    public PlanResponseData joinChallenge(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
 
@@ -526,12 +583,13 @@ public class CourseService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found"));
 
         List<TopicPlanInput> topics = topicRepository.findBySyllabusId(course.getSyllabus().getId()).stream()
+                .filter(t -> selectedTopicIds == null || selectedTopicIds.isEmpty() || selectedTopicIds.contains(t.getId()))
                 .map(t -> new TopicPlanInput(
                         String.valueOf(t.getId()),
                         t.getChapterTitle(),
                         t.getOrderIndex(),
-                        t.getEstimatedHours(),
-                        1 // default importance
+                        t.getEstimatedHours() != null && t.getEstimatedHours() > 0 ? t.getEstimatedHours() : 0.5,
+                        t.getImportance() != null && t.getImportance() > 0 ? t.getImportance() : 3
                 ))
                 .collect(Collectors.toList());
 
@@ -596,6 +654,11 @@ public class CourseService {
 
     @Transactional
     public PlanResponseData regeneratePlan(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode) {
+        return regeneratePlan(courseId, userId, examDate, dailyHours, mode, null);
+    }
+
+    @Transactional
+    public PlanResponseData regeneratePlan(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
 
@@ -633,12 +696,13 @@ public class CourseService {
 
         // Fetch all current syllabus topics (including newly added chapters!)
         List<TopicPlanInput> topics = topicRepository.findBySyllabusId(course.getSyllabus().getId()).stream()
+                .filter(t -> selectedTopicIds == null || selectedTopicIds.isEmpty() || selectedTopicIds.contains(t.getId()))
                 .map(t -> new TopicPlanInput(
                         String.valueOf(t.getId()),
                         t.getChapterTitle(),
                         t.getOrderIndex(),
-                        t.getEstimatedHours(),
-                        1
+                        t.getEstimatedHours() != null && t.getEstimatedHours() > 0 ? t.getEstimatedHours() : 0.5,
+                        t.getImportance() != null && t.getImportance() > 0 ? t.getImportance() : 3
                 ))
                 .collect(Collectors.toList());
 

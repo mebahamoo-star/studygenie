@@ -41,22 +41,56 @@ def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand:
         if not q_text or q_text.lower() in seen_questions:
             continue
             
-        if q.type == "MCQ":
-            if not (3 <= len(q.options) <= 5):
+        q_type = (q.type or "MCQ").strip().upper()
+        if q_type in ("MCQ", "MULTIPLE_CHOICE"):
+            if not (2 <= len(q.options) <= 5):
                 continue
             opts = [o.strip() for o in q.options if o.strip()]
             if len(set(opts)) != len(opts) or len(opts) != len(q.options):
                 continue
             if not (0 <= q.correct_option_index < len(opts)):
                 continue
-        elif q.type == "TRUE_FALSE":
-            if len(q.options) != 2:
+            correct_opt = opts[q.correct_option_index]
+            rand.shuffle(opts)
+            new_correct_idx = opts.index(correct_opt)
+            valid_quiz.append(QuizQuestion(
+                type="MCQ",
+                question=q_text,
+                options=opts,
+                correct_option_index=new_correct_idx,
+                correct_answer_text=correct_opt,
+                explanation=q.explanation
+            ))
+        elif q_type in ("TRUE_FALSE", "TF", "BOOL", "BOOLEAN"):
+            opts = ["True", "False"]
+            correct_idx = q.correct_option_index
+            ans_text = (q.correct_answer_text or "").strip().lower()
+            if ans_text in ("true", "t", "1"):
+                correct_idx = 0
+            elif ans_text in ("false", "f", "0"):
+                correct_idx = 1
+            elif correct_idx not in (0, 1):
+                correct_idx = 0
+            valid_quiz.append(QuizQuestion(
+                type="TRUE_FALSE",
+                question=q_text,
+                options=opts,
+                correct_option_index=correct_idx,
+                correct_answer_text=opts[correct_idx],
+                explanation=q.explanation
+            ))
+        elif q_type in ("SHORT_ANSWER", "SHORT", "SA", "TEXT"):
+            ans_text = (q.correct_answer_text or (q.options[0] if q.options else "")).strip()
+            if not ans_text:
                 continue
-            opts = [o.strip() for o in q.options if o.strip()]
-            if len(set(opts)) != 2:
-                continue
-            if q.correct_option_index not in (0, 1):
-                continue
+            valid_quiz.append(QuizQuestion(
+                type="SHORT_ANSWER",
+                question=q_text,
+                options=[ans_text],
+                correct_option_index=0,
+                correct_answer_text=ans_text,
+                explanation=q.explanation
+            ))
         else:
             continue
             
@@ -64,27 +98,6 @@ def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand:
             continue
             
         seen_questions.add(q_text.lower())
-        
-        # Shuffle MCQ options safely
-        if q.type == "MCQ":
-            correct_opt = opts[q.correct_option_index]
-            rand.shuffle(opts)
-            new_correct_idx = opts.index(correct_opt)
-            valid_quiz.append(QuizQuestion(
-                type=q.type,
-                question=q_text,
-                options=opts,
-                correct_option_index=new_correct_idx,
-                explanation=q.explanation
-            ))
-        else:
-            valid_quiz.append(QuizQuestion(
-                type=q.type,
-                question=q_text,
-                options=opts,
-                correct_option_index=q.correct_option_index,
-                explanation=q.explanation
-            ))
 
     if max_flashcards > 0:
         valid_flashcards = valid_flashcards[:max_flashcards]
@@ -100,13 +113,15 @@ def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand:
 async def _generate_topic_kit(req: GenerateStudyKitRequest, topic: TopicInput, rand: random.Random) -> tuple[TopicKit, FailedTopic, dict[str, int], str]:
     provider = get_provider()
     
+    quiz_type = getattr(req, "quiz_type", "MIXED") or "MIXED"
     user_prompt = USER_PROMPT_TEMPLATE.format(
         course_name=req.course_name,
         chapter_title=topic.chapter_title,
         subtopics=", ".join(topic.subtopics) if topic.subtopics else "None",
         source_excerpt=topic.source_excerpt or "None",
         flashcards_per_topic=req.flashcards_per_topic,
-        questions_per_topic=req.questions_per_topic
+        questions_per_topic=req.questions_per_topic,
+        quiz_type=quiz_type
     )
 
     try:

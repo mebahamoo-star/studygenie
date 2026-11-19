@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { Capacitor } from "@capacitor/core";
 import { AlertCircle, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -6,7 +7,9 @@ import { Genie, GenieLogo } from "./Genie";
 import { ThemeToggle } from "./AppShell";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { PasswordInput } from "./ui/password-input";
 import { Label } from "./ui/label";
+import { Checkbox } from "./ui/checkbox";
 import { useApp } from "@/lib/app-state";
 import { authService } from "@/lib/api/services";
 import { fetchAndSyncExams, loadExams } from "@/lib/exam";
@@ -49,7 +52,7 @@ function MicrosoftIcon({ className }: { className?: string }) {
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const navigate = useNavigate();
-  const { login, register, loginWithOAuth, isBackendOnline } = useApp();
+  const { login, register, loginWithOAuth, isBackendOnline, isAuthenticated } = useApp();
   const signup = mode === "signup";
 
   const [fullName, setFullName] = useState("");
@@ -60,6 +63,33 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
   // Modal state when keys are not configured yet
   const [missingConfigModal, setMissingConfigModal] = useState<"google" | "microsoft" | null>(null);
+  const [rememberMe, setRememberMe] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("sg-remember-me");
+      return saved !== null ? saved === "true" : true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate({ to: "/dashboard" });
+      return;
+    }
+    try {
+      const savedRemember = localStorage.getItem("sg-remember-me");
+      if (savedRemember !== null) {
+        setRememberMe(savedRemember === "true");
+      }
+      if (!signup) {
+        const savedEmail = localStorage.getItem("sg-remembered-email");
+        if (savedEmail) {
+          setEmail(savedEmail);
+        }
+      }
+    } catch {}
+  }, [signup, isAuthenticated, navigate]);
 
   const navigateAfterLogin = async () => {
     try {
@@ -163,7 +193,16 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         toast.success("Account created successfully! ✨");
         navigate({ to: "/onboarding" });
       } else {
-        await login(email, password);
+        await login(email, password, rememberMe);
+        try {
+          if (rememberMe) {
+            localStorage.setItem("sg-remember-me", "true");
+            localStorage.setItem("sg-remembered-email", email);
+          } else {
+            localStorage.setItem("sg-remember-me", "false");
+            localStorage.removeItem("sg-remembered-email");
+          }
+        } catch {}
         toast.success("Welcome back! ✨");
         await navigateAfterLogin();
       }
@@ -174,6 +213,19 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       setLoading(false);
     }
   };
+
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen w-full grid place-items-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Genie pose="mid" className="h-20 w-20 animate-bounce" />
+          <p className="text-sm font-semibold text-muted-foreground animate-pulse">
+            Opening your dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid min-h-screen md:grid-cols-2">
@@ -213,7 +265,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       </div>
       <div className="flex flex-col bg-background p-8">
         <div className="flex items-center justify-between">
-          <Link to="/">
+          <Link to={Capacitor.isNativePlatform() ? "/login" : "/"}>
             <GenieLogo />
           </Link>
           <div className="flex items-center gap-3">
@@ -316,26 +368,37 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               />
             </div>
             <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <Label>Password</Label>
-                {!signup && (
-                  <Link
-                    to="/forgot-password"
-                    className="text-xs font-medium text-muted-foreground transition-colors hover:text-primary hover:underline cursor-pointer"
-                  >
-                    Forgot password?
-                  </Link>
-                )}
-              </div>
-              <Input
+              <Label>Password</Label>
+              <PasswordInput
                 className="h-11 rounded-xl"
-                type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
+
+            {!signup && (
+              <div className="flex items-center justify-between pt-0.5">
+                <label
+                  htmlFor="remember-me"
+                  className="flex items-center gap-2.5 text-xs font-medium text-foreground cursor-pointer select-none"
+                >
+                  <Checkbox
+                    id="remember-me"
+                    checked={rememberMe}
+                    onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
+                  />
+                  <span>Remember me</span>
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-medium text-muted-foreground transition-colors hover:text-primary hover:underline cursor-pointer"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            )}
             {signup && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5 leading-relaxed">
                 <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />

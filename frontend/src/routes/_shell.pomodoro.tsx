@@ -98,6 +98,7 @@ export function Pomodoro() {
   });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isFinishingRef = useRef<boolean>(false);
 
   // Load active course and user's saved Pomodoro rounds
   useEffect(() => {
@@ -148,7 +149,6 @@ export function Pomodoro() {
       setLeft((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          handleSessionFinished();
           return 0;
         }
         return prev - 1;
@@ -156,10 +156,19 @@ export function Pomodoro() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [running, mode, roundsCompleted, totalCompleted]);
+  }, [running]);
+
+  // Clean trigger when timer reaches 0 without nesting inside state setter
+  useEffect(() => {
+    if (running && left === 0) {
+      handleSessionFinished();
+    }
+  }, [running, left]);
 
   // Handle session finished (either focus round or break)
   const handleSessionFinished = () => {
+    if (isFinishingRef.current) return;
+    isFinishingRef.current = true;
     setRunning(false);
 
     if (mode === "focus") {
@@ -240,10 +249,15 @@ export function Pomodoro() {
       setMode("focus");
       setLeft(FOCUS_SECONDS);
     }
+
+    setTimeout(() => {
+      isFinishingRef.current = false;
+    }, 600);
   };
 
   // Switch modes manually
   const switchMode = (newMode: PomodoroMode) => {
+    isFinishingRef.current = false;
     setRunning(false);
     setMode(newMode);
     if (newMode === "focus") {
@@ -269,6 +283,7 @@ export function Pomodoro() {
 
   // Reset current timer
   const handleReset = () => {
+    isFinishingRef.current = false;
     setRunning(false);
     if (mode === "focus") {
       setLeft(FOCUS_SECONDS);

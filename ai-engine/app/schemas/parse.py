@@ -40,7 +40,7 @@ class TopicItem(BaseModel):
     order_index: int = 1
     chapter_title: str = Field(default="Topic", max_length=255)
     category_title: str | None = Field(default=None, alias="categoryTitle")
-    estimated_hours: float = Field(default=2.0)
+    estimated_hours: float = Field(default=1.0)
     importance: int = Field(default=3)
     subtopics: list[Any] = Field(default_factory=list)
     content_excerpt: str | None = Field(default=None)
@@ -54,12 +54,26 @@ class TopicItem(BaseModel):
             if "chapter_title" not in data:
                 title = data.get("categoryTitle") or data.get("category_title") or data.get("title") or data.get("name") or data.get("chapter") or data.get("topic") or "Topic"
                 data["chapter_title"] = str(title)
-            if "estimated_hours" not in data:
-                hours = data.get("hours") or data.get("duration") or 2.0
+            
+            # Check for estimated_minutes first
+            minutes = data.get("estimated_minutes") or data.get("estimatedMinutes") or data.get("minutes")
+            if minutes is not None:
                 try:
-                    data["estimated_hours"] = float(hours)
+                    data["estimated_hours"] = max(0.08, round(float(minutes) / 60.0, 2))
                 except (ValueError, TypeError):
-                    data["estimated_hours"] = 2.0
+                    pass
+            elif "estimated_hours" not in data:
+                hours = data.get("hours") or data.get("duration") or 1.0
+                try:
+                    data["estimated_hours"] = max(0.08, float(hours))
+                except (ValueError, TypeError):
+                    data["estimated_hours"] = 1.0
+            
+            if "importance" in data:
+                try:
+                    data["importance"] = max(1, min(5, int(data["importance"])))
+                except (ValueError, TypeError):
+                    data["importance"] = 3
             if "order_index" not in data:
                 idx = data.get("index") or data.get("order") or 1
                 try:

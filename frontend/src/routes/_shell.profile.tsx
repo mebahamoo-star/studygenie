@@ -18,7 +18,10 @@ import { Card } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
 import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
 import { useApp } from "@/lib/app-state";
-import { getUserAcademicProfile } from "@/lib/courses-util";
+import { getUserAcademicProfile, getQuizScores, type SavedQuizScore } from "@/lib/courses-util";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { CheckCircle2 } from "lucide-react";
 import { pageHead } from "@/lib/head";
 import { gamificationService } from "@/lib/api/services";
 import type { GamificationProfile } from "@/lib/api/types";
@@ -46,6 +49,7 @@ function Profile() {
   const [profileData, setProfileData] = useState<GamificationProfile | null>(null);
   const [uniName, setUniName] = useState<string>("");
   const [majorName, setMajorName] = useState<string>("");
+  const [savedQuizzes, setSavedQuizzes] = useState<SavedQuizScore[]>([]);
 
   useEffect(() => {
     try {
@@ -54,12 +58,27 @@ function Profile() {
       if (profile.major?.name) setMajorName(profile.major.name);
     } catch {}
 
+    const refreshScores = () => {
+      try {
+        setSavedQuizzes(getQuizScores());
+      } catch {}
+    };
+    refreshScores();
+
+    window.addEventListener("storage", refreshScores);
+    window.addEventListener("sg-quiz-saved", refreshScores);
+
     gamificationService
       .getProfile()
       .then((data) => {
         if (data) setProfileData(data);
       })
       .catch(() => {});
+
+    return () => {
+      window.removeEventListener("storage", refreshScores);
+      window.removeEventListener("sg-quiz-saved", refreshScores);
+    };
   }, []);
 
   const currentLevel = profileData?.currentLevel || 1;
@@ -71,9 +90,13 @@ function Profile() {
     (profileData?.unlockedBadges || []).map((b) => b.id.toLowerCase())
   );
 
+  const hasPerfectQuiz = savedQuizzes.some((q) => q.percentage === 100);
   const badgesWithStatus = allBadges.map((b) => ({
     ...b,
-    on: unlockedIds.has(b.id.toLowerCase()) || (b.id === "streak_7" && currentStreak >= 7),
+    on:
+      unlockedIds.has(b.id.toLowerCase()) ||
+      (b.id === "streak_7" && currentStreak >= 7) ||
+      (b.id === "perfect_quiz" && hasPerfectQuiz),
   }));
 
   const unlockedCount = badgesWithStatus.filter((b) => b.on).length;
@@ -152,6 +175,74 @@ function Profile() {
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-semibold">Saved Quiz Scores & History</h2>
+            <p className="text-sm text-muted-foreground">
+              All quiz completions and earned XP are permanently stored for your account.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/quiz">Practice Quiz</Link>
+          </Button>
+        </div>
+
+        {savedQuizzes.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground border border-dashed rounded-xl">
+            <Target className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+            <p className="font-medium text-foreground">No quiz scores recorded yet</p>
+            <p className="mt-1">Complete a quiz from any course to build your record and earn XP!</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {savedQuizzes.slice(0, 5).map((q) => (
+              <div
+                key={q.id}
+                className="flex items-center justify-between rounded-xl border border-border/40 bg-muted/20 px-4 py-3 transition hover:bg-muted/40"
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "grid h-10 w-10 place-items-center rounded-lg font-bold text-xs",
+                      q.percentage >= 80
+                        ? "bg-emerald-500/10 text-emerald-500 ring-1 ring-emerald-500/20"
+                        : q.percentage >= 60
+                          ? "bg-amber-500/10 text-amber-500 ring-1 ring-amber-500/20"
+                          : "bg-rose-500/10 text-rose-500 ring-1 ring-rose-500/20"
+                    )}
+                  >
+                    {q.percentage}%
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">
+                      {q.courseName || "General Quiz"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(q.date).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className="text-sm font-bold text-foreground">
+                    {q.score} / {q.total} correct
+                  </div>
+                  <div className="text-xs font-semibold text-gold">
+                    +{q.xpAwarded} XP
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );

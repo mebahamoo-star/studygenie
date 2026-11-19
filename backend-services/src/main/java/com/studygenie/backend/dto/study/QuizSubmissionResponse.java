@@ -13,7 +13,12 @@ public record QuizSubmissionResponse(
     public record QuestionResult(
             String questionId,
             boolean correct,
-            int correctOptionIndex,
+            Integer correctOptionIndex,
+            String correctAnswerText,
             String explanation
-    ) {}
+    ) {
+        public QuestionResult(String questionId, boolean correct, int correctOptionIndex, String explanation) {
+            this(questionId, correct, correctOptionIndex, null, explanation);
+        }
+    }
 }

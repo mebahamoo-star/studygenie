@@ -167,12 +167,21 @@ function ExamCheckin() {
     const r = schema.safeParse(payload);
     if (!r.success) return setError(r.error.issues[0]?.message ?? "Check the form");
 
-    const localItem = saveExam(r.data);
+    const enrolledCoursesList = getUserCourses();
+    const cleanCourseName = r.data.course.includes("—") ? r.data.course.split("—").pop()?.trim() || r.data.course.trim() : r.data.course.trim();
+    const matchedCourse = enrolledCoursesList.find((c) => c.name.toLowerCase().trim() === cleanCourseName.toLowerCase().trim() || c.name.toLowerCase().trim() === r.data.course.toLowerCase().trim());
+    const linkedCourseId = matchedCourse?.id;
+
+    const localItem = saveExam({
+      ...r.data,
+      courseId: linkedCourseId,
+    });
 
     if (getStoredAccessToken()) {
       try {
         const created = await examService.createExam({
           course: r.data.course.trim(),
+          courseId: typeof linkedCourseId === "number" ? linkedCourseId : undefined,
           type: r.data.type.trim(),
           date: r.data.date,
           professor: r.data.professor?.trim() || "",
@@ -181,6 +190,7 @@ function ExamCheckin() {
           saveExam({
             id: String(created.id),
             course: created.course,
+            courseId: created.courseId || linkedCourseId,
             type: created.type,
             date: created.date,
             professor: created.professor || "",
@@ -234,12 +244,21 @@ function ExamCheckin() {
     const r = schema.safeParse(payload);
     if (!r.success) return setError(r.error.issues[0]?.message ?? "Check the form");
 
-    const localItem = saveExam(r.data);
+    const enrolledCoursesList = getUserCourses();
+    const cleanCourseName = r.data.course.includes("—") ? r.data.course.split("—").pop()?.trim() || r.data.course.trim() : r.data.course.trim();
+    const matchedCourse = enrolledCoursesList.find((c) => c.name.toLowerCase().trim() === cleanCourseName.toLowerCase().trim() || c.name.toLowerCase().trim() === r.data.course.toLowerCase().trim());
+    const linkedCourseId = matchedCourse?.id;
+
+    const localItem = saveExam({
+      ...r.data,
+      courseId: linkedCourseId,
+    });
 
     if (getStoredAccessToken()) {
       try {
         const created = await examService.createExam({
           course: r.data.course.trim(),
+          courseId: typeof linkedCourseId === "number" ? linkedCourseId : undefined,
           type: r.data.type.trim(),
           date: r.data.date,
           professor: r.data.professor?.trim() || "",
@@ -248,6 +267,7 @@ function ExamCheckin() {
           saveExam({
             id: String(created.id),
             course: created.course,
+            courseId: created.courseId || linkedCourseId,
             type: created.type,
             date: created.date,
             professor: created.professor || "",
@@ -337,19 +357,31 @@ function ExamCheckin() {
                       {toDisplayDate(ex.date)} · {ex.professor}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (ex.id) deleteExam(ex.id);
-                      else deleteExam(ex.course);
-                      setExistingExams(loadExams());
-                      toast.success(`Removed ${ex.course} ${ex.type}`);
-                    }}
-                    className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    title="Remove exam"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-primary hover:text-primary font-semibold"
+                      onClick={() => navigate({ to: "/courses" })}
+                      title="View course chapters and syllabus"
+                    >
+                      View Course & Chapters →
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (ex.id) deleteExam(ex.id);
+                        else deleteExam(ex.course);
+                        setExistingExams(loadExams());
+                        toast.success(`Removed ${ex.course} ${ex.type}`);
+                      }}
+                      className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      title="Remove exam"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -25,6 +25,9 @@ public class DataInitializer implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataInitializer.class);
 
+    @org.springframework.beans.factory.annotation.Value("${app.data-initializer.enabled:true}")
+    private boolean enabled;
+
     private final UniversityRepository universityRepository;
     private final CollegeRepository collegeRepository;
     private final CourseRepository courseRepository;
@@ -46,6 +49,10 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        if (!enabled) {
+            log.info("DataInitializer disabled by config. Skipping data initialization.");
+            return;
+        }
         if (universityRepository.count() > 0) {
             log.info("Database already seeded with universities. Skipping data initialization.");
             return;
@@ -54,13 +61,13 @@ public class DataInitializer implements CommandLineRunner {
         log.info("Seeding initial universities, colleges, and courses into cloud database...");
 
         // 1. King Saud University
-        University ksu = universityRepository.save(University.builder().name("King Saud University").build());
+        University ksu = universityRepository.save(University.builder().name("King Saud University").city("Riyadh").build());
         College ccis = collegeRepository.save(College.builder().name("College of Computer and Information Sciences").university(ksu).build());
         collegeRepository.save(College.builder().name("College of Engineering").university(ksu).build());
         collegeRepository.save(College.builder().name("College of Business Administration").university(ksu).build());
 
         // 2. Stanford University
-        University stanford = universityRepository.save(University.builder().name("Stanford University").build());
+        University stanford = universityRepository.save(University.builder().name("Stanford University").city("Stanford, California").build());
         College stanfordEng = collegeRepository.save(College.builder().name("School of Engineering").university(stanford).build());
 
         // Seed sample ready courses for CCIS

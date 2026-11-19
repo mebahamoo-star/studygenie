@@ -95,6 +95,31 @@ class StudySessionServiceTest {
         assertTrue(ex.getMessage().contains("Duplicate"));
     }
 
+    @Test
+    void testSubmitQuizWithMcqTrueFalseAndShortAnswer() {
+        String kitId = UUID.randomUUID().toString();
+        StoredQuizQuestion mcq = new StoredQuizQuestion("q1", "MCQ", "What is 2+2?", List.of("3", "4", "5"), 1, "4", "Math");
+        StoredQuizQuestion tf = new StoredQuizQuestion("q2", "TRUE_FALSE", "Earth is round.", List.of("True", "False"), 0, "True", "Geography");
+        StoredQuizQuestion sa = new StoredQuizQuestion("q3", "SHORT_ANSWER", "Capital of France?", List.of("Paris"), 0, "Paris", "Geography");
+
+        StoredStudyKit kit = new StoredStudyKit(kitId, 1L, List.of(
+            new StoredTopicKit("t1", List.of(), List.of(mcq, tf, sa))
+        ));
+        kitStore.save(kit);
+
+        QuizSubmissionRequest req = new QuizSubmissionRequest(UUID.randomUUID(), List.of(
+            new QuizSubmissionRequest.QuizAnswer("q1", 1),
+            new QuizSubmissionRequest.QuizAnswer("q2", 0),
+            new QuizSubmissionRequest.QuizAnswer("q3", null, "Paris")
+        ));
+
+        QuizSubmissionResponse res = service.submitQuiz(1L, kitId, req);
+        assertEquals(3, res.score());
+        assertEquals(3, res.total());
+        assertEquals(100.0, res.percentage(), 0.01);
+        assertTrue(res.passed());
+    }
+
     // Fixed clock
     static class FixedClock extends Clock {
         private Instant instant;

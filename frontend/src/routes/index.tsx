@@ -1,19 +1,21 @@
-﻿/**
+/**
  * routes/index.tsx — StudyGenie Landing Page (Book-Pager Edition)
  * - Unauthenticated users -> Interactive 100dvh Book-Pages presentation
  * - Authenticated users   -> Immediate redirect to /dashboard
  * - 100% translated via `t.*`. No hardcoded strings.
  */
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, Link, useNavigate } from "@tanstack/react-router";
 import React, { useEffect, useMemo } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useApp } from "@/lib/app-state";
 import { arTranslations } from "@/components/landing/i18n/ar";
 import { enTranslations } from "@/components/landing/i18n/en";
-import { GenieLogo } from "@/components/Genie";
+import { Genie, GenieLogo } from "@/components/Genie";
 import { ThemeToggle } from "@/components/AppShell";
 import { SoundToggle } from "@/components/landing/sound/SoundToggle";
 import { Button } from "@/components/ui/button";
 import { Globe, User } from "lucide-react";
+import { getStoredAccessToken } from "@/lib/api/client";
 
 import { BookPager } from "@/components/landing/pager/BookPager";
 import type { PageConfig } from "@/components/landing/pager/BookPager";
@@ -29,6 +31,17 @@ import { FaqPage } from "@/components/landing/pages/FaqPage";
 import { FinalCtaPage } from "@/components/landing/pages/FinalCtaPage";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const token = getStoredAccessToken();
+      if (token) {
+        throw redirect({ to: "/dashboard" });
+      }
+      if (Capacitor.isNativePlatform()) {
+        throw redirect({ to: "/login" });
+      }
+    }
+  },
   head: () => ({
     meta: [
       { title: "StudyGenie — Study smarter, with a little magic" },
@@ -55,11 +68,19 @@ function Landing() {
   const { lang, setLang, isAuthenticated } = useApp();
   const navigate = useNavigate();
 
+  const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform();
+
+  const hasStoredSession =
+    isAuthenticated ||
+    (typeof window !== "undefined" && Boolean(getStoredAccessToken()));
+
   useEffect(() => {
-    if (isAuthenticated) {
+    if (hasStoredSession) {
       navigate({ to: "/dashboard", replace: true });
+    } else if (isNative) {
+      navigate({ to: "/login", replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [hasStoredSession, isNative, navigate]);
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -69,7 +90,22 @@ function Landing() {
     }
   }, [lang]);
 
-  if (isAuthenticated) return null;
+  if (hasStoredSession) {
+    return (
+      <div className="min-h-screen w-full grid place-items-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Genie pose="high" className="h-20 w-20 animate-bounce" />
+          <p className="text-sm font-semibold text-muted-foreground animate-pulse">
+            Opening your dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isNative) {
+    return null;
+  }
 
   const t = lang === "ar" ? arTranslations : enTranslations;
   const isRTL = lang === "ar";
@@ -138,7 +174,6 @@ function Landing() {
 
         {/* Ordered controls: [Language] [Theme] [Sound] [Log in] [Get Started] */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          
           {/* 1. Language Switcher */}
           <button
             type="button"
@@ -187,7 +222,6 @@ function Landing() {
               <span className="sm:hidden">{t.nav.getStartedShort}</span>
             </Link>
           </Button>
-
         </div>
       </header>
 

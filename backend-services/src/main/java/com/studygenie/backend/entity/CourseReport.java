@@ -47,6 +47,23 @@ public class CourseReport {
     @Builder.Default
     private String status = "PENDING";
 
+    @Size(max = 2000)
+    @Column(name = "admin_note", length = 2000)
+    private String adminNote;
+
+    @Column(name = "resolved_by_id")
+    private Long resolvedById;
+
+    @Size(max = 150)
+    @Column(name = "resolved_by", length = 150)
+    private String resolvedBy;
+
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

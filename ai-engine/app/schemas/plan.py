@@ -7,7 +7,7 @@ class TopicPlanInput(BaseModel):
     ref: str
     chapter_title: str
     order_index: int = 1
-    estimated_hours: float = Field(default=2.0, ge=0.5, le=60)
+    estimated_hours: float = Field(default=1.0, ge=0.05, le=60)
     importance: int = Field(default=3, ge=1, le=5)
     subtopics: list[str] = Field(default_factory=list)
 
@@ -23,15 +23,15 @@ class TopicPlanInput(BaseModel):
             except (ValueError, TypeError):
                 order = 1
 
-            hours = data.get("estimated_hours") or data.get("estimatedHours") or data.get("hours") or 2.0
+            hours = data.get("estimated_hours") or data.get("estimatedHours") or data.get("hours") or 1.0
             try:
                 hours = float(hours)
-                if hours < 0.5:
-                    hours = 0.5
+                if hours < 0.05:
+                    hours = 0.05
                 elif hours > 60:
                     hours = 60.0
             except (ValueError, TypeError):
-                hours = 2.0
+                hours = 1.0
 
             imp = data.get("importance") or 3
             try:

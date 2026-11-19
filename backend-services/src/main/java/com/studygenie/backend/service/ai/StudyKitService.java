@@ -37,7 +37,7 @@ public class StudyKitService {
                 .collect(Collectors.toList());
                 
             List<StoredQuizQuestion> storedQuizzes = topic.quiz().stream()
-                .map(q -> new StoredQuizQuestion(UUID.randomUUID().toString(), q.type(), q.question(), q.options(), q.correctOptionIndex(), q.explanation()))
+                .map(q -> new StoredQuizQuestion(UUID.randomUUID().toString(), q.type(), q.question(), q.options(), q.correctOptionIndex(), q.correctAnswerText(), q.explanation()))
                 .collect(Collectors.toList());
                 
             return new StoredTopicKit(topic.ref(), storedCards, storedQuizzes);

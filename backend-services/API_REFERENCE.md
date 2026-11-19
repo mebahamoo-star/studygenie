@@ -19,10 +19,48 @@ Errors are wrapped in:
 `
 
 ## Authentication
-POST /api/auth/register - Register a new student
-POST /api/auth/login - Login and get JWT
+POST /api/auth/register - Register a new student (`role` is always `STUDENT`, `status` is always `ACTIVE`)
+POST /api/auth/login - Login and get JWT (`UserSummary` includes `id`, `fullName`, `email`, `role`, `status`; suspended accounts receive `403 Forbidden`)
+POST /api/auth/refresh - Refresh access token (revokes tokens and returns `403` if account is `SUSPENDED`)
+GET /api/auth/me - Get authenticated user's live profile (`id`, `fullName`, `email`, `role`, `status`)
 
-*All endpoints under /api/v1/** require Authorization: Bearer <token>.*
+## Admin API (`/api/admin/**`)
+All `/api/admin/**` endpoints require `Authorization: Bearer <token>` and re-verify the caller's `role` and `status` live against the database on every request.
+- Unauthenticated -> `401 Unauthorized` JSON
+- Insufficient role -> `403 Forbidden` JSON
+- `/api/admin/reports/**` requires `ROLE_ADMIN` or `ROLE_MODERATOR`.
+- All other `/api/admin/**` endpoints require `ROLE_ADMIN`.
+- All paginated endpoints return `AdminPageResponse<T>` (`items`, `page`, `size`, `totalElements`, `totalPages`) with `size` capped at `100`.
+- Every mutation writes an append-only entry to `admin_audit_log` in the same transaction.
+
+### 1. Overview
+- `GET /api/admin/overview` (`ADMIN`): Returns KPI counts (`totalUsers`, `activeUsersToday`, `activeUsers7d`, `newSignupsToday`, `newSignups7d`, `totalCourses`, `enrolledCount`, `uploadsToday`, `openReports`, `failedAnalyses`) and 14-day time series (`dailySignups`, `dailyActivity`).
+
+### 2. Reports Moderation
+- `GET /api/admin/reports` (`ADMIN`, `MODERATOR`): Paginated reports list (`?status=&reason=&courseId=&search=&page=0&size=20`).
+- `GET /api/admin/reports/{id}` (`ADMIN`, `MODERATOR`): Single report detail.
+- `PATCH /api/admin/reports/{id}` (`ADMIN`, `MODERATOR`): Update report `status` (`PENDING`, `IN_REVIEW`, `RESOLVED`, `REJECTED`) and `adminNote`; sets `resolvedById`, `resolvedBy`, and `resolvedAt` when resolved/rejected.
+
+### 3. Courses, Merge, Re-Analyze, Topics & Catalog CRUD
+- `GET /api/admin/courses` (`ADMIN`): Paginated courses list (`?universityId=&collegeId=&status=&minEnrollments=&minTopics=&search=&includeDeleted=false&page=0&size=20`).
+- `GET /api/admin/courses/{id}` (`ADMIN`): Course detail with topics, enrollment count, and open report count.
+- `PATCH /api/admin/courses/{id}` (`ADMIN`): Update `name`, `collegeId`, `status`, `verified`, or `locked`.
+- `DELETE /api/admin/courses/{id}` (`ADMIN`): Soft-delete course (`deletedAt` timestamp).
+- `POST /api/admin/courses/{id}/merge` (`ADMIN`): Transactional, idempotent merge of duplicate source course `{id}` into `{ "targetCourseId": <id> }` (moves enrollments, topics, study plans, exams, and course reports, then soft-deletes source course).
+- `POST /api/admin/courses/{id}/reanalyze` (`ADMIN`): Re-evaluate/trigger syllabus analysis for a course.
+- `PATCH /api/admin/courses/{courseId}/topics/{topicId}` (`ADMIN`): Edit topic `chapterTitle`, `estimatedHours`, or `orderIndex`.
+- `DELETE /api/admin/courses/{courseId}/topics/{topicId}` (`ADMIN`): Delete a topic cascade.
+- `GET / POST / PATCH / DELETE /api/admin/universities/**` and `/api/admin/colleges/**` (`ADMIN`): University and College catalog CRUD.
+
+### 4. Users Management
+- `GET /api/admin/users` (`ADMIN`): Paginated users list (`?search=&role=&status=&universityId=&page=0&size=20`).
+- `GET /api/admin/users/{id}` (`ADMIN`): User profile projection (`id`, `fullName`, `email`, `role`, `status`, `universityId`, `universityName`, `authProvider`, `enrolledCoursesCount`, `geniePoints`, `streakCount`, `longestStreakDays`, `lastStudyDate`, `lastActiveAt`, `createdAt`; never exposes password hashes or tokens).
+- `PATCH /api/admin/users/{id}/role` (`ADMIN`): Change user role (`STUDENT`, `MODERATOR`, `ADMIN`). Blocks self-demotion and demoting the last active admin.
+- `PATCH /api/admin/users/{id}/status` (`ADMIN`): Change account status (`ACTIVE`, `SUSPENDED`). Blocks self-suspension and suspending the last active admin; immediately revokes all refresh tokens when suspended.
+- `POST /api/admin/users/{id}/reset-password` (`ADMIN`): Triggers the forgot-password email flow and revokes active refresh tokens (never sets or returns a password directly).
+
+### 5. Audit Log
+- `GET /api/admin/audit-log` (`ADMIN`): Paginated, filterable (`?adminId=&action=&targetType=&search=&page=0&size=20`) append-only audit log entries.
 
 ## Universities & Colleges (v1)
 GET /api/v1/universities - List all universities

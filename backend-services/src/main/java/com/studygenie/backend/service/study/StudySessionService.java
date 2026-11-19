@@ -157,14 +157,36 @@ public class StudySessionService {
             if (q == null) {
                 throw new IllegalArgumentException("Unknown questionId: " + answer.questionId());
             }
-            if (answer.selectedOptionIndex() < 0 || answer.selectedOptionIndex() >= q.options().size()) {
-                throw new IllegalArgumentException("Option index out of range for question: " + answer.questionId());
+
+            boolean isCorrect;
+            String qType = q.type() != null ? q.type().toUpperCase(Locale.ROOT) : "MCQ";
+
+            if ("SHORT_ANSWER".equals(qType) || "TEXT".equals(qType)) {
+                String expected = q.correctAnswerText() != null ? q.correctAnswerText().trim() :
+                        (q.options() != null && !q.options().isEmpty() ? q.options().get(0).trim() : "");
+                String given = answer.answerText() != null ? answer.answerText().trim() : "";
+
+                isCorrect = isShortAnswerCorrect(given, expected);
+                if (isCorrect) correctCount++;
+                results.add(new QuizSubmissionResponse.QuestionResult(
+                        q.questionId(), isCorrect, q.correctOptionIndex(), expected, q.explanation()));
+            } else {
+                if (answer.selectedOptionIndex() == null || answer.selectedOptionIndex() < 0 ||
+                        (q.options() != null && answer.selectedOptionIndex() >= q.options().size())) {
+                    throw new IllegalArgumentException("Option index out of range for question: " + answer.questionId());
+                }
+
+                isCorrect = (answer.selectedOptionIndex() == q.correctOptionIndex());
+                if (isCorrect) correctCount++;
+
+                String expectedText = q.correctAnswerText();
+                if (expectedText == null && q.options() != null && q.correctOptionIndex() >= 0 && q.correctOptionIndex() < q.options().size()) {
+                    expectedText = q.options().get(q.correctOptionIndex());
+                }
+
+                results.add(new QuizSubmissionResponse.QuestionResult(
+                        q.questionId(), isCorrect, q.correctOptionIndex(), expectedText, q.explanation()));
             }
-
-            boolean isCorrect = (answer.selectedOptionIndex() == q.correctOptionIndex());
-            if (isCorrect) correctCount++;
-
-            results.add(new QuizSubmissionResponse.QuestionResult(q.questionId(), isCorrect, q.correctOptionIndex(), q.explanation()));
         }
 
         // Unanswered questions are implicitly wrong. The total comes from the kit.
@@ -256,5 +278,28 @@ public class StudySessionService {
 
         double avgEf = total == 0 ? 0 : Math.round((sumEf / total) * 100.0) / 100.0;
         return new ProgressResponse(total, newCards, learning, mature, dueToday, avgEf, nextDue);
+    }
+
+    private boolean isShortAnswerCorrect(String given, String expected) {
+        if (given == null || given.isBlank() || expected == null || expected.isBlank()) {
+            return false;
+        }
+        String normGiven = normalizeAnswer(given);
+        String normExpected = normalizeAnswer(expected);
+        if (normGiven.equalsIgnoreCase(normExpected)) {
+            return true;
+        }
+        if (normGiven.contains(normExpected) || (normExpected.length() > 3 && normGiven.length() > 3 && normExpected.contains(normGiven))) {
+            return true;
+        }
+        return false;
+    }
+
+    private String normalizeAnswer(String s) {
+        return s.trim()
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-zA-Z0-9\\s]", "")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 }

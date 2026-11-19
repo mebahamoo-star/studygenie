@@ -130,12 +130,14 @@ public class JpaSyllabusResultStore implements SyllabusResultStore {
                 continue;
             }
 
-            double hrs = item.estimatedHours() > 0 ? item.estimatedHours() : 2.0;
+            double hrs = item.estimatedHours() > 0 ? item.estimatedHours() : 0.5;
+            int imp = item.importance() > 0 ? item.importance() : 3;
             Topic topic = Topic.builder()
                     .syllabus(syllabus)
                     .chapterTitle(rawTitle)
                     .orderIndex(nextOrder++)
                     .estimatedHours(hrs)
+                    .importance(imp)
                     .contentExcerpt(item.contentExcerpt())
                     .build();
             Topic saved = topicRepository.save(topic);

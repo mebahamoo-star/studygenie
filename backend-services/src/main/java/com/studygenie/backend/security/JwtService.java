@@ -1,5 +1,6 @@
 package com.studygenie.backend.security;
 
+import com.studygenie.backend.entity.enums.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -30,13 +31,22 @@ public class JwtService {
     }
 
     /**
-     * Generates an access token for the given user id and email.
+     * Generates an access token for the given user id and email with default STUDENT role.
      */
     public String generateAccessToken(Long userId, String email) {
+        return generateAccessToken(userId, email, Role.STUDENT);
+    }
+
+    /**
+     * Generates an access token for the given user id, email, and role.
+     */
+    public String generateAccessToken(Long userId, String email, Role role) {
+        Role safeRole = role != null ? role : Role.STUDENT;
         long nowMillis = clock.millis();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("email", email)
+                .claim("role", safeRole.name())
                 .claim("typ", "access")
                 .issuer(properties.issuer())
                 .issuedAt(new Date(nowMillis))
@@ -44,6 +54,13 @@ public class JwtService {
                 .id(UUID.randomUUID().toString())
                 .signWith(key)
                 .compact();
+    }
+
+    public Role extractRole(Claims claims) {
+        if (claims == null) {
+            return Role.STUDENT;
+        }
+        return Role.fromNullable(claims.get("role", String.class));
     }
 
     public enum TokenStatus {
