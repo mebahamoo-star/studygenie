@@ -78,7 +78,7 @@ export function AdminShell({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { lang, setLang, logout } = useApp();
+  const { lang, setLang, logout, user: appUser } = useApp();
 
   const hasToken = typeof window !== "undefined" ? Boolean(getStoredAccessToken()) : false;
 
@@ -95,7 +95,7 @@ export function AdminShell({
     retry: false,
   });
 
-  const activeRole = verifiedUser?.role;
+  const activeRole = verifiedUser?.role ?? initialAdminUser?.role ?? appUser?.role;
   const isAuthorizedRole = activeRole === "ADMIN" || activeRole === "MODERATOR";
   const isModeratorRestrictedRoute =
     activeRole === "MODERATOR" && !location.pathname.startsWith("/admin/reports");
@@ -156,7 +156,11 @@ export function AdminShell({
   }
 
   const visibleNav = ADMIN_NAV_ITEMS.filter((item) =>
-    item.roles.includes(activeRole as "ADMIN" | "MODERATOR"),
+    activeRole === "ADMIN"
+      ? true
+      : activeRole === "MODERATOR"
+        ? item.roles.includes("MODERATOR")
+        : false,
   );
 
   const handleLogout = async () => {
@@ -173,7 +177,10 @@ export function AdminShell({
       {/* Sidebar for desktop */}
       <aside className="flex w-full flex-col border-b border-border bg-card/60 md:w-64 md:shrink-0 md:border-b-0 md:border-r">
         <div className="flex h-16 items-center justify-between border-b border-border px-4">
-          <Link to="/admin/overview" className="flex items-center gap-2.5">
+          <Link
+            to={activeRole === "MODERATOR" ? "/admin/reports" : "/admin/overview"}
+            className="flex items-center gap-2.5"
+          >
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-accent shadow-sm">
               <Genie className="h-7 w-7" />
             </div>
@@ -187,7 +194,13 @@ export function AdminShell({
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                {lang === "ar" ? "لوحة التحكم والأمان" : "Security & Operations"}
+                {lang === "ar"
+                  ? activeRole === "MODERATOR"
+                    ? "إدارة البلاغات والمحتوى"
+                    : "لوحة التحكم والأمان"
+                  : activeRole === "MODERATOR"
+                    ? "Reports & Moderation"
+                    : "Security & Operations"}
               </p>
             </div>
           </Link>

@@ -145,7 +145,7 @@ function RoutePreloader() {
             "/leaderboard",
             "/profile",
             "/settings",
-            ...(user?.role === "ADMIN" || user?.role === "MODERATOR"
+            ...(user?.role === "ADMIN"
               ? [
                   "/admin/overview",
                   "/admin/reports",
@@ -153,7 +153,9 @@ function RoutePreloader() {
                   "/admin/users",
                   "/admin/audit-log",
                 ]
-              : []),
+              : user?.role === "MODERATOR"
+                ? ["/admin/reports"]
+                : []),
           ]
         : ["/login", "/signup", "/onboarding", "/forgot-password"];
 

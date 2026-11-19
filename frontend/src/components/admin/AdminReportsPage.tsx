@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { adminService } from "@/lib/api/services";
+import { adminService, authService } from "@/lib/api/services";
 import type { AdminReportDto } from "@/lib/api/types";
 import { useApp } from "@/lib/app-state";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,15 @@ const STATUS_BADGE: Record<string, string> = {
 export default function AdminReportsPage() {
   const { lang, user } = useApp();
   const queryClient = useQueryClient();
-  const isAdmin = user?.role === "ADMIN";
+
+  const { data: verifiedUser } = useQuery({
+    queryKey: ["admin", "auth", "me"],
+    queryFn: () => authService.getMe(),
+    staleTime: 15_000,
+  });
+
+  const activeRole = verifiedUser?.role ?? user?.role;
+  const isAdmin = activeRole === "ADMIN";
 
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>("");

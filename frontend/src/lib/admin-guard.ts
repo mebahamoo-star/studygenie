@@ -8,7 +8,7 @@ export interface AdminGuardDeps {
   getMe?: () => Promise<UserSummary>;
 }
 
-let cachedAdminCheck: { user: UserSummary; ts: number } | null = null;
+let cachedAdminCheck: { user: UserSummary; ts: number; token: string | null } | null = null;
 
 export function clearAdminGuardCache() {
   cachedAdminCheck = null;
@@ -34,8 +34,15 @@ export async function verifyAdminRouteAccess(
     throw redirect({ to: "/login" });
   }
 
-  // If using default getMe and recently verified within 10s, return cached result
-  if (!deps.getMe && cachedAdminCheck && Date.now() - cachedAdminCheck.ts < 10_000) {
+  const currentToken = getStoredAccessToken();
+
+  // If using default getMe and recently verified within 10s with the same token, return cached result
+  if (
+    !deps.getMe &&
+    cachedAdminCheck &&
+    cachedAdminCheck.token === currentToken &&
+    Date.now() - cachedAdminCheck.ts < 10_000
+  ) {
     const cached = cachedAdminCheck.user;
     if (cached.role === "MODERATOR" && !pathname.startsWith("/admin/reports")) {
       throw redirect({ to: "/admin/reports" });
@@ -68,7 +75,7 @@ export async function verifyAdminRouteAccess(
   }
 
   if (!deps.getMe) {
-    cachedAdminCheck = { user: currentUser, ts: Date.now() };
+    cachedAdminCheck = { user: currentUser, ts: Date.now(), token: currentToken };
     try {
       localStorage.setItem("sg_user", JSON.stringify(currentUser));
       if (typeof window !== "undefined") {
