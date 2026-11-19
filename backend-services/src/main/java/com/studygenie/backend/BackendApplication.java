@@ -51,6 +51,11 @@ public class BackendApplication {
 							(value.startsWith("'") && value.endsWith("'"))) {
 							value = value.substring(1, value.length() - 1);
 						}
+						// Ignore any deprecated Neon or Singapore database credentials in local .env
+						if (value.contains("neon.tech") || value.contains("neondb_owner") || value.startsWith("npg_")
+								|| value.contains("oqaosjfdfohopghwqopo") || value.contains("aws-0-ap-southeast-1")) {
+							continue;
+						}
 						if (System.getProperty(key) == null && System.getenv(key) == null) {
 							System.setProperty(key, value);
 						}
@@ -78,12 +83,10 @@ public class BackendApplication {
 			if ((dbUrl.startsWith("\"") && dbUrl.endsWith("\"")) || (dbUrl.startsWith("'") && dbUrl.endsWith("'"))) {
 				dbUrl = dbUrl.substring(1, dbUrl.length() - 1).trim();
 			}
-			// Auto-upgrade legacy Singapore Supabase pooler URLs in local .env to active Zurich pooler
-			if (dbUrl.contains("oqaosjfdfohopghwqopo") || dbUrl.contains("aws-0-ap-southeast-1.pooler.supabase.com")) {
-				log.info("Auto-upgrading legacy Singapore Supabase DATABASE_URL to active Zurich (eu-central-2) pooler");
-				dbUrl = dbUrl
-						.replace("oqaosjfdfohopghwqopo", "uesdceoslpqnsvmijycp")
-						.replace("aws-0-ap-southeast-1.pooler.supabase.com", "aws-0-eu-central-2.pooler.supabase.com");
+			// Ignore deprecated Neon or Singapore URLs in local .env so only the Swiss (eu-central-2) database is used
+			if (dbUrl.contains("neon.tech") || dbUrl.contains("oqaosjfdfohopghwqopo") || dbUrl.contains("aws-0-ap-southeast-1")) {
+				log.info("Ignoring deprecated DATABASE_URL in .env; enforcing Swiss (eu-central-2) Supabase datasource");
+				dbUrl = null;
 			}
 		}
 
