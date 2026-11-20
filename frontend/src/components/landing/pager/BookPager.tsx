@@ -114,7 +114,7 @@ export function BookPager({ pages, lang, t }: BookPagerProps) {
               duration: shouldReduce ? 0.1 : 0.3,
               ease: [0.25, 1, 0.5, 1],
             }}
-            className="h-full w-full overflow-hidden flex flex-col justify-center"
+            className="h-full w-full overflow-y-auto overflow-x-hidden flex flex-col md:justify-center scroll-smooth overscroll-contain"
           >
             {activePage.node}
           </motion.div>

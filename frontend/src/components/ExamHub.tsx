@@ -134,7 +134,7 @@ export function ExamHub({
 
   return (
 
-    <Card className={cn("relative overflow-hidden bg-gradient-to-br from-card via-card p-6 shadow-soft lg:col-span-3 transition-colors border", urgencyStatus === "red" ? "border-red-500/30 to-red-500/5" : urgencyStatus === "orange" ? "border-amber-500/30 to-amber-500/5" : "border-emerald-500/30 to-emerald-500/5")}>
+    <Card className={cn("relative overflow-hidden bg-gradient-to-br from-card via-card p-4 sm:p-6 shadow-soft lg:col-span-3 transition-colors border min-w-0 max-w-full w-full", urgencyStatus === "red" ? "border-red-500/30 to-red-500/5" : urgencyStatus === "orange" ? "border-amber-500/30 to-amber-500/5" : "border-emerald-500/30 to-emerald-500/5")}>
 
       {/* Subtle background ambient blur */}
 
@@ -142,21 +142,21 @@ export function ExamHub({
 
 
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between min-w-0 max-w-full w-full">
 
         {/* Left: Exam Details & Friendly Reminder */}
 
-        <div className="flex items-start gap-4">
+        <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
 
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+          <div className="grid h-11 w-11 sm:h-12 sm:w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
 
-            <Calendar className="h-6 w-6" />
+            <Calendar className="h-5 w-5 sm:h-6 sm:w-6" />
 
           </div>
 
-          <div>
+          <div className="min-w-0 flex-1">
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
 
               <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider", hubBadgeClass)}>
 
@@ -174,7 +174,7 @@ export function ExamHub({
 
 
 
-            <h2 className="mt-1.5 text-2xl font-bold tracking-tight text-foreground">
+            <h2 className="mt-1.5 text-xl sm:text-2xl font-bold tracking-tight text-foreground truncate">
 
               {exam.course}
 
@@ -182,7 +182,7 @@ export function ExamHub({
 
 
 
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-muted-foreground">
 
               <span className="flex items-center gap-1 font-medium text-foreground/80">
 
@@ -224,9 +224,9 @@ export function ExamHub({
 
 
 
-            <p className="mt-3 flex items-center gap-1.5 text-sm font-medium text-foreground/80">
+            <p className="mt-3 flex items-start gap-1.5 text-xs sm:text-sm font-medium text-foreground/80 break-words">
 
-              <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+              <Sparkles className="h-4 w-4 shrink-0 text-primary mt-0.5" />
 
               <span>{reminderMessage}</span>
 

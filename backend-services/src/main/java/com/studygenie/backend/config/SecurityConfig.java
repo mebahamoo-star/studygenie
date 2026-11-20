@@ -30,7 +30,9 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Security configuration.
@@ -176,7 +178,29 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(this.allowedOrigins));
+        List<String> origins = new ArrayList<>(Arrays.asList(this.allowedOrigins));
+        for (String mobileOrigin : Arrays.asList(
+                "http://localhost",
+                "https://localhost",
+                "capacitor://localhost",
+                "ionic://localhost",
+                "http://10.0.2.2:8080",
+                "http://127.0.0.1:8080"
+        )) {
+            if (!origins.contains(mobileOrigin)) {
+                origins.add(mobileOrigin);
+            }
+        }
+        configuration.setAllowedOrigins(origins);
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+                "http://localhost*",
+                "https://localhost*",
+                "capacitor://*",
+                "ionic://*",
+                "http://10.0.2.2*",
+                "http://127.0.0.1*",
+                "http://192.168.*"
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin"));
         configuration.setAllowCredentials(true);

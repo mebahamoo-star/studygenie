@@ -235,7 +235,7 @@ export function HowItWorksPage({ t, lang }: HowItWorksPageProps) {
   return (
     <div
       id="how"
-      className="flex h-full w-full flex-col items-center justify-center gap-2.5 sm:gap-4 px-3 py-2 sm:px-6"
+      className="flex min-h-full w-full flex-col items-center justify-center gap-3 sm:gap-4 px-3 py-4 sm:px-6 my-auto"
     >
       {/* Header */}
       <div className="text-center max-w-xl mx-auto shrink-0">

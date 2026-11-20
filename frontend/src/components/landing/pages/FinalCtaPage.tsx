@@ -39,7 +39,7 @@ export function FinalCtaPage({ t, lang }: FinalCtaPageProps) {
   return (
     <div
       id="cta"
-      className="flex h-full w-full flex-col items-center justify-center gap-3 sm:gap-5 px-3 py-3 sm:px-6 text-center select-none"
+      className="flex min-h-full w-full flex-col items-center justify-center gap-3 sm:gap-5 px-3 py-4 sm:px-6 text-center select-none my-auto"
     >
       {/* Celebratory Mascot & Badge */}
       <div className="flex flex-col items-center gap-2">

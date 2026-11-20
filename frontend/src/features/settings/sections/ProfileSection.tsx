@@ -1,0 +1,349 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslation } from "react-i18next";
+import { Camera, Crop, Lock, Save, Trash2 } from "lucide-react";
+import { SettingsCard } from "../components/SettingsCard";
+import { SettingRow } from "../components/SettingRow";
+import { AvatarCropModal } from "../components/AvatarCropModal";
+import {
+  createProfileSchema,
+  type ProfileFormValues,
+} from "../schemas/settingsSchemas";
+import {
+  MAX_AVATAR_SIZE_BYTES,
+  UNIVERSITIES_CATALOG,
+  type ProfileSettings,
+  type SectionId,
+} from "../constants/settingsConstants";
+import type { NormalizedApiError } from "../api/axiosClient";
+
+export interface ProfileSectionProps {
+  profile: ProfileSettings;
+  isRtl: boolean;
+  onSaveProfile: (updated: ProfileSettings) => Promise<void>;
+  onDirtyChange: (section: SectionId, isDirty: boolean) => void;
+  onShowToast: (type: "success" | "error", message: string) => void;
+}
+
+export function ProfileSection({
+  profile,
+  isRtl,
+  onSaveProfile,
+  onDirtyChange,
+  onShowToast,
+}: ProfileSectionProps) {
+  const { t } = useTranslation();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [rawUploadSrc, setRawUploadSrc] = useState<string | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+
+  const schema = useMemo(() => createProfileSchema(t), [t]);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    setError,
+    formState: { errors, isDirty, isSubmitting },
+  } = useForm<ProfileFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      displayName: profile.displayName,
+      universityId: profile.universityId,
+      collegeId: profile.collegeId,
+      avatarUrl: profile.avatarUrl,
+    },
+  });
+
+  useEffect(() => {
+    reset({
+      displayName: profile.displayName,
+      universityId: profile.universityId,
+      collegeId: profile.collegeId,
+      avatarUrl: profile.avatarUrl,
+    });
+  }, [profile, reset]);
+
+  useEffect(() => {
+    onDirtyChange("profile", isDirty);
+    return () => onDirtyChange("profile", false);
+  }, [isDirty, onDirtyChange]);
+
+  const selectedUniversityId = watch("universityId");
+  const currentAvatarUrl = watch("avatarUrl");
+  const currentDisplayName = watch("displayName");
+
+  const availableColleges = useMemo(() => {
+    const uni = UNIVERSITIES_CATALOG.find((u) => u.id === selectedUniversityId);
+    return uni ? uni.colleges : [];
+  }, [selectedUniversityId]);
+
+  const handleUniversityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextUniId = e.target.value;
+    setValue("universityId", nextUniId, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    const matchedUni = UNIVERSITIES_CATALOG.find((u) => u.id === nextUniId);
+    const firstCollegeId = matchedUni?.colleges[0]?.id || "";
+    setValue("collegeId", firstCollegeId, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_AVATAR_SIZE_BYTES) {
+      onShowToast("error", t("validation.invalidSize"));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setRawUploadSrc(reader.result);
+        setIsCropModalOpen(true);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleApplyCroppedAvatar = (croppedDataUrl: string) => {
+    setValue("avatarUrl", croppedDataUrl, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setIsCropModalOpen(false);
+  };
+
+  const handleRemoveAvatar = () => {
+    setValue("avatarUrl", null, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setRawUploadSrc(null);
+  };
+
+  const onSubmit = async (values: ProfileFormValues) => {
+    try {
+      await onSaveProfile({
+        ...profile,
+        displayName: values.displayName.trim(),
+        universityId: values.universityId,
+        collegeId: values.collegeId,
+        avatarUrl: values.avatarUrl,
+      });
+      reset(values);
+      onDirtyChange("profile", false);
+      onShowToast("success", t("toasts.profileSaved"));
+    } catch (err) {
+      const apiErr = err as NormalizedApiError;
+      if (apiErr.fieldErrors) {
+        Object.entries(apiErr.fieldErrors).forEach(([field, msg]) => {
+          setError(field as keyof ProfileFormValues, { message: msg });
+        });
+      }
+      onShowToast("error", apiErr.message || t("toasts.saveError"));
+    }
+  };
+
+  const initials = useMemo(() => {
+    const parts = (currentDisplayName || "SG").trim().split(/\s+/);
+    return parts
+      .map((p) => p[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  }, [currentDisplayName]);
+
+  return (
+    <form
+      id="profile-form"
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-6"
+      noValidate
+    >
+      {/* Card 1: Personal Identity & Avatar */}
+      <SettingsCard
+        title={t("profile.cardTitle")}
+        description={t("profile.cardDescription")}
+      >
+        {/* Avatar Row */}
+        <SettingRow
+          label={t("profile.avatarLabel")}
+          helperText={t("profile.avatarHelper")}
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-indigo-50">
+              {currentAvatarUrl ? (
+                <img
+                  src={currentAvatarUrl}
+                  alt={currentDisplayName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-base font-bold text-indigo-700">
+                  {initials}
+                </div>
+              )}
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleFileChange}
+              className="hidden"
+              aria-label={t("profile.uploadPhoto")}
+            />
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 rounded-[12px] border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+            >
+              <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t("profile.uploadPhoto")}</span>
+            </button>
+
+            {currentAvatarUrl && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRawUploadSrc(currentAvatarUrl);
+                    setIsCropModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-[12px] border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors duration-150 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+                >
+                  <Crop className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t("profile.cropPhoto")}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRemoveAvatar}
+                  className="inline-flex items-center gap-1.5 rounded-[12px] border border-red-200 bg-red-50/50 px-3 py-2 text-xs font-medium text-red-700 transition-colors duration-150 hover:bg-red-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t("profile.removePhoto")}</span>
+                </button>
+              </>
+            )}
+          </div>
+        </SettingRow>
+
+        {/* Display Name Row */}
+        <SettingRow
+          id="profile-display-name"
+          label={t("profile.displayNameLabel")}
+          helperText={t("profile.displayNameHelper")}
+          error={errors.displayName?.message}
+        >
+          <input
+            id="profile-display-name"
+            type="text"
+            placeholder={t("profile.displayNamePlaceholder")}
+            {...register("displayName")}
+            className="w-full rounded-[12px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-2xs transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 sm:w-72"
+          />
+        </SettingRow>
+
+        {/* Read-only Email Row with Lock Icon */}
+        <SettingRow
+          id="profile-email-readonly"
+          label={t("profile.emailLabel")}
+          helperText={t("profile.emailHelper")}
+          badge={
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              {t("page.readOnly")}
+            </span>
+          }
+        >
+          <div className="flex w-full items-center justify-between gap-2 rounded-[12px] border border-slate-200/80 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-500 sm:w-72">
+            <span className="truncate">{profile.email}</span>
+            <Lock className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+          </div>
+        </SettingRow>
+      </SettingsCard>
+
+      {/* Card 2: Cascading University -> College Affiliation */}
+      <SettingsCard
+        title={t("profile.academicCardTitle")}
+        description={t("profile.academicCardDescription")}
+        footer={
+          <button
+            type="submit"
+            disabled={!isDirty || isSubmitting}
+            className="inline-flex items-center gap-2 rounded-[12px] bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition-all duration-150 hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            <Save className="h-4 w-4" aria-hidden="true" />
+            <span>
+              {isSubmitting ? t("page.saving") : t("page.saveChanges")}
+            </span>
+          </button>
+        }
+      >
+        {/* University Select */}
+        <SettingRow
+          id="profile-university-select"
+          label={t("profile.universityLabel")}
+          helperText={t("profile.universityHelper")}
+          error={errors.universityId?.message}
+        >
+          <select
+            id="profile-university-select"
+            value={selectedUniversityId}
+            onChange={handleUniversityChange}
+            className="w-full rounded-[12px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-2xs transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 sm:w-72"
+          >
+            <option value="">{t("profile.universityPlaceholder")}</option>
+            {UNIVERSITIES_CATALOG.map((uni) => (
+              <option key={uni.id} value={uni.id}>
+                {isRtl ? uni.nameAr : uni.nameEn}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
+
+        {/* Cascading College Select */}
+        <SettingRow
+          id="profile-college-select"
+          label={t("profile.collegeLabel")}
+          helperText={t("profile.collegeHelper")}
+          error={errors.collegeId?.message}
+        >
+          <select
+            id="profile-college-select"
+            disabled={!selectedUniversityId || availableColleges.length === 0}
+            {...register("collegeId")}
+            className="w-full rounded-[12px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-2xs transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 disabled:cursor-not-allowed disabled:bg-slate-100 sm:w-72"
+          >
+            <option value="">{t("profile.collegePlaceholder")}</option>
+            {availableColleges.map((col) => (
+              <option key={col.id} value={col.id}>
+                {isRtl ? col.nameAr : col.nameEn}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
+      </SettingsCard>
+
+      {/* Avatar Crop Modal */}
+      <AvatarCropModal
+        isOpen={isCropModalOpen}
+        imageSrc={rawUploadSrc}
+        onApply={handleApplyCroppedAvatar}
+        onClose={() => setIsCropModalOpen(false)}
+      />
+    </form>
+  );
+}

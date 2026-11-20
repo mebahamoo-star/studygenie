@@ -76,7 +76,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" },
       { title: "StudyGenie — Your magical study companion" },
       { name: "description", content: "Gamified study plans, flashcards, quizzes and streaks for university students." },
       { property: "og:title", content: "StudyGenie — Your magical study companion" },

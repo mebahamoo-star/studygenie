@@ -31,17 +31,6 @@ import { FaqPage } from "@/components/landing/pages/FaqPage";
 import { FinalCtaPage } from "@/components/landing/pages/FinalCtaPage";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: () => {
-    if (typeof window !== "undefined") {
-      const token = getStoredAccessToken();
-      if (token) {
-        throw redirect({ to: "/dashboard" });
-      }
-      if (Capacitor.isNativePlatform()) {
-        throw redirect({ to: "/login" });
-      }
-    }
-  },
   head: () => ({
     meta: [
       { title: "StudyGenie — Study smarter, with a little magic" },
@@ -68,19 +57,23 @@ function Landing() {
   const { lang, setLang, isAuthenticated } = useApp();
   const navigate = useNavigate();
 
-  const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform();
-
-  const hasStoredSession =
-    isAuthenticated ||
-    (typeof window !== "undefined" && Boolean(getStoredAccessToken()));
-
   useEffect(() => {
+    const hasStoredSession =
+      isAuthenticated ||
+      (typeof window !== "undefined" && Boolean(getStoredAccessToken()));
+
+    if (Capacitor.isNativePlatform()) {
+      if (hasStoredSession) {
+        navigate({ to: "/dashboard", replace: true });
+      } else {
+        navigate({ to: "/login", replace: true });
+      }
+      return;
+    }
     if (hasStoredSession) {
       navigate({ to: "/dashboard", replace: true });
-    } else if (isNative) {
-      navigate({ to: "/login", replace: true });
     }
-  }, [hasStoredSession, isNative, navigate]);
+  }, [isAuthenticated, navigate]);
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -89,23 +82,6 @@ function Landing() {
       document.title = lang === "ar" ? arTranslations.meta.title : enTranslations.meta.title;
     }
   }, [lang]);
-
-  if (hasStoredSession) {
-    return (
-      <div className="min-h-screen w-full grid place-items-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <Genie pose="high" className="h-20 w-20 animate-bounce" />
-          <p className="text-sm font-semibold text-muted-foreground animate-pulse">
-            Opening your dashboard...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isNative) {
-    return null;
-  }
 
   const t = lang === "ar" ? arTranslations : enTranslations;
   const isRTL = lang === "ar";
@@ -163,13 +139,13 @@ function Landing() {
       dir={isRTL ? "rtl" : "ltr"}
       className="relative flex h-screen h-dvh max-h-dvh flex-col overflow-hidden bg-background text-foreground transition-colors duration-300 font-sans"
     >
-      {/* Sticky Header with Unclipped Exact Ordered Controls */}
-      <header className="shrink-0 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-2 border-b border-border/40 bg-background/85 px-2.5 sm:px-6 backdrop-blur-md z-40">
+      {/* Sticky Header with Safe-Area Top & Unclipped Exact Ordered Controls */}
+      <header className="shrink-0 min-h-14 sm:min-h-16 pt-[env(safe-area-inset-top,0px)] flex items-center justify-between gap-1 sm:gap-2 border-b border-border/40 bg-background/85 px-2 sm:px-6 backdrop-blur-md z-40">
         <Link
           to="/"
           className="flex items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-primary rounded-lg shrink min-w-0"
         >
-          <GenieLogo />
+          <GenieLogo textClassName="hidden md:inline" />
         </Link>
 
         {/* Ordered controls: [Language] [Theme] [Sound] [Log in] [Get Started] */}

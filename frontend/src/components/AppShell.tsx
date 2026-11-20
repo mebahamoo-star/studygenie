@@ -59,7 +59,7 @@ const studySub = [
   { to: "/quiz", label: "Quiz" },
 ] as const;
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   let appState: ReturnType<typeof useApp> | null = null;
   try {
     appState = useApp();
@@ -91,9 +91,12 @@ export function ThemeToggle() {
     <button
       onClick={toggleDark}
       aria-label="Toggle Focus Mode"
-      className="grid h-10 w-10 place-items-center rounded-xl bg-card text-foreground shadow-soft transition hover:scale-105"
+      className={cn(
+        "grid h-9 w-9 sm:h-10 sm:w-10 place-items-center rounded-xl bg-card text-foreground shadow-soft transition hover:scale-105",
+        className
+      )}
     >
-      {dark ? <Sun className="h-5 w-5 text-gold" /> : <Moon className="h-5 w-5 text-primary" />}
+      {dark ? <Sun className="h-4 w-4 sm:h-5 sm:w-5 text-gold" /> : <Moon className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />}
     </button>
   );
 }
@@ -334,33 +337,36 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset>
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/80 px-4 md:px-6 backdrop-blur">
-          {/* Live Exam News Ticker */}
+      <SidebarInset className="min-w-0 max-w-full overflow-x-hidden">
+        <header className="sticky top-0 z-20 flex h-16 w-full max-w-full items-center justify-between gap-2 sm:gap-3 border-b bg-background/80 px-3 sm:px-4 md:px-6 backdrop-blur min-w-0 overflow-x-hidden">
+          {/* Left Header Area: Mobile Brand Logo / Desktop Live Exam News Ticker */}
           <div className="flex min-w-0 flex-1 items-center gap-3 mr-4">
             <SidebarTrigger className="-ml-1 hidden md:flex" />
-            <Link to="/dashboard" className="flex md:hidden items-center shrink-0 mr-1">
-              <Genie className="h-7 w-7" />
+            <Link to="/dashboard" className="flex md:hidden items-center gap-2 shrink-0">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-accent shadow-xs">
+                <Genie className="h-7 w-7" />
+              </div>
+              <span className="font-display text-base font-bold text-gradient-magic leading-none">
+                StudyGenie
+              </span>
             </Link>
-            <Separator orientation="vertical" className="mr-1 h-5 hidden sm:block" />
+            <Separator orientation="vertical" className="mr-1 h-5 hidden md:block" />
 
-            <div className={cn("flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold shadow-sm transition-colors", tickerBadgeStyle)}>
+            {/* Desktop-only Exam News Bar (hidden on mobile) */}
+            <div className={cn("hidden md:flex shrink-0 items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs font-bold shadow-sm transition-colors", tickerBadgeStyle)}>
               <span className="relative flex h-2 w-2 items-center justify-center">
                 {tickerPointConfig.showPing && (
                   <span className={cn("absolute inline-flex h-full w-full rounded-full", tickerPointConfig.pingClass)}></span>
                 )}
                 <span className={cn("relative inline-flex h-2 w-2 rounded-full", tickerPointConfig.dotClass)}></span>
               </span>
-              <span className="hidden sm:inline tracking-wider uppercase text-[10px]">
+              <span className="tracking-wider uppercase text-[10px]">
                 {tickerStatus === "red" ? "EXAM TICKER · DANGER" : tickerStatus === "orange" ? "EXAM TICKER · MODERATE" : "EXAM TICKER · SAFE"}
-              </span>
-              <span className="sm:hidden text-[10px] tracking-wider uppercase font-extrabold">
-                {tickerStatus === "red" ? "DANGER" : tickerStatus === "orange" ? "MODERATE" : "SAFE"}
               </span>
             </div>
 
             {exams.length > 0 ? (
-              <div className="relative flex-1 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)]">
+              <div className="hidden md:flex relative flex-1 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-16px),transparent)]">
                 <div className="animate-ticker flex items-center gap-6 py-1 whitespace-nowrap">
                   {(exams.length === 1
                     ? [...exams, ...exams, ...exams, ...exams]
@@ -414,11 +420,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
+              <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground truncate">
                 <span className="flex h-2 w-2 rounded-full bg-emerald-500 shadow-sm" />
                 <span className="font-semibold text-emerald-600 dark:text-emerald-400">All clear</span>
-                <span className="hidden md:inline text-muted-foreground/50">•</span>
-                <span className="hidden md:inline truncate">
+                <span className="text-muted-foreground/50">•</span>
+                <span className="truncate">
                   No exams within 30 days. Add exams from Dashboard to show your live ticker!
                 </span>
               </div>
@@ -426,7 +432,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           {/* Right Controls */}
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
             {isBackendOnline !== null && (
               <span
                 className={`hidden md:inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -437,24 +443,45 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {isBackendOnline ? "API Online" : "Offline Demo"}
               </span>
             )}
-            <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
+            <div className="hidden sm:flex items-center gap-1.5 rounded-xl bg-card px-2.5 py-1.5 text-xs sm:text-sm font-bold shadow-soft">
               <Flame className="h-4 w-4 text-gold" /> <CountingNumber number={streak} fromNumber={0} className="tabular-nums" />
-              <span className="hidden sm:inline font-normal text-muted-foreground">day streak</span>
+              <span className="hidden md:inline font-normal text-muted-foreground">day streak</span>
             </div>
-            <div className="flex items-center gap-1.5 rounded-xl bg-card px-3 py-2 text-sm font-bold shadow-soft">
-              <Star className="h-4 w-4 fill-gold text-gold" /> <CountingNumber number={points} fromNumber={0} className="tabular-nums" thousandSeparator="," />
+            <div className="flex items-center gap-1 rounded-xl bg-card px-2 sm:px-2.5 py-1.5 text-xs sm:text-sm font-bold shadow-soft">
+              <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-gold text-gold" /> <CountingNumber number={points} fromNumber={0} className="tabular-nums" thousandSeparator="," />
             </div>
-            <ThemeToggle />
+            {/* Dark mode toggle on desktop header only; on mobile it is managed inside Settings */}
+            <ThemeToggle className="hidden md:grid" />
+            {/* Settings button on mobile upper panel only (desktop uses main sidebar) */}
+            <Link
+              to="/settings"
+              aria-label="Settings"
+              title="Settings"
+              className="grid md:hidden h-9 w-9 sm:h-10 sm:w-10 place-items-center rounded-xl bg-card text-muted-foreground shadow-soft transition hover:scale-105 hover:text-primary"
+            >
+              <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Link>
             <Link
               to="/profile"
-              className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-magic font-bold text-primary-foreground shadow-soft"
+              aria-label="Profile"
+              title="Profile"
+              className="grid h-9 w-9 sm:h-10 sm:w-10 place-items-center rounded-xl bg-gradient-magic text-xs sm:text-sm font-bold text-primary-foreground shadow-soft transition hover:scale-105"
             >
               {initials}
             </Link>
+            {/* Log out button on mobile upper panel only (desktop uses main sidebar) */}
+            <button
+              onClick={handleLogout}
+              aria-label="Sign out"
+              title="Sign out"
+              className="grid md:hidden h-9 w-9 sm:h-10 sm:w-10 place-items-center rounded-xl bg-card text-muted-foreground shadow-soft transition hover:scale-105 hover:bg-destructive/10 hover:text-destructive"
+            >
+              <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
           </div>
         </header>
 
-        <main className="flex-1 p-4 pb-28 sm:p-8 sm:pb-8">{children}</main>
+        <main className="w-full max-w-full min-w-0 flex-1 p-3 pb-28 sm:p-6 sm:pb-8 lg:p-8 overflow-x-hidden">{children}</main>
         <MobileBottomNav />
       </SidebarInset>
     </SidebarProvider>
@@ -463,7 +490,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("rounded-2xl border bg-card p-6 text-card-foreground shadow-soft", className)}>
+    <div className={cn("min-w-0 max-w-full rounded-2xl border bg-card p-4 sm:p-6 text-card-foreground shadow-soft", className)}>
       {children}
     </div>
   );

@@ -87,7 +87,7 @@ export function HeroPage({ t, lang }: HeroPageProps) {
 
   return (
     <div
-      className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden px-4 py-3 sm:px-6"
+      className="relative flex min-h-full w-full flex-col items-center justify-center px-3.5 py-4 sm:px-6 my-auto"
       onMouseMove={handleMouseMove}
     >
       {/* Background ambient gradients */}

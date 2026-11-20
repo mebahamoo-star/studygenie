@@ -79,13 +79,21 @@ export function Genie({ pose = "idle", className }: { pose?: GeniePose; classNam
   );
 }
 
-export function GenieLogo() {
+export function GenieLogo({
+  className,
+  textClassName,
+}: {
+  className?: string;
+  textClassName?: string;
+} = {}) {
   return (
-    <span className="flex items-center gap-2">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent">
-        <Genie className="h-9 w-9" />
+    <span className={cn("flex items-center gap-2", className)}>
+      <span className="grid h-9 w-9 sm:h-10 sm:w-10 place-items-center rounded-xl bg-accent shrink-0">
+        <Genie className="h-8 w-8 sm:h-9 sm:w-9" />
       </span>
-      <span className="font-display text-xl font-semibold text-gradient-magic">StudyGenie</span>
+      <span className={cn("font-display text-lg sm:text-xl font-semibold text-gradient-magic", textClassName)}>
+        StudyGenie
+      </span>
     </span>
   );
 }

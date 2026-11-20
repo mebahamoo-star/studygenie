@@ -1753,11 +1753,11 @@ function Dashboard() {
 
   return (
 
-    <div className="grid gap-6 lg:grid-cols-3">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden grid gap-4 sm:gap-6 lg:grid-cols-3">
 
       {exams.length > 0 && activeExam ? (
 
-        <div className="lg:col-span-3 flex flex-col gap-3">
+        <div className="lg:col-span-3 min-w-0 max-w-full flex flex-col gap-3">
 
           {/* Header controls for scrolling between exams and adding more */}
 
@@ -1863,7 +1863,7 @@ function Dashboard() {
 
           {exams.length > 1 && (
 
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none w-full max-w-full min-w-0">
 
               {exams.map((ex, idx) => {
 
@@ -2057,15 +2057,15 @@ function Dashboard() {
 
 
 
-      <Card className="lg:col-span-2">
+      <Card className="lg:col-span-2 min-w-0 max-w-full">
 
-        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4 min-w-0 max-w-full">
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
 
-            <Genie pose={pose} className="h-20 w-20 shrink-0" />
+            <Genie pose={pose} className="h-16 w-16 sm:h-20 sm:w-20 shrink-0" />
 
-            <div>
+            <div className="min-w-0 flex-1">
 
               <div className="text-xs font-bold uppercase tracking-wider text-primary">
 
@@ -2073,15 +2073,15 @@ function Dashboard() {
 
               </div>
 
-              <h1 className="font-display text-2xl font-bold tracking-tight">
+              <h1 className="font-display text-xl sm:text-2xl font-bold tracking-tight truncate">
 
                 Welcome back, {firstName}
 
               </h1>
 
-              <p className="mt-1 text-sm text-muted-foreground">{line}</p>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground line-clamp-2">{line}</p>
 
-              <div className="mt-2.5 flex items-center gap-2">
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
 
                 <span className="text-xs font-semibold text-muted-foreground">Current Progress:</span>
 
@@ -2107,7 +2107,7 @@ function Dashboard() {
 
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 shrink-0">
 
             <ProgressRing value={displayProgress} size={84} stroke={8}>
 
@@ -2676,7 +2676,7 @@ function Dashboard() {
 
           {/* 7 Days Interactive Strip */}
 
-          <div className="grid grid-cols-7 gap-1.5">
+          <div className="grid grid-cols-7 gap-1 sm:gap-1.5 min-w-0 max-w-full">
 
             {week.map((w) => {
 
@@ -2886,7 +2886,7 @@ function Dashboard() {
 
       {/* SPACE DOWN THE DASHBOARD: CAMPUS EXAM CHALLENGES */}
 
-      <div className="lg:col-span-3 flex flex-col gap-4 mt-2">
+      <div className="lg:col-span-3 flex flex-col gap-4 mt-2 min-w-0 max-w-full">
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
 
@@ -2980,7 +2980,7 @@ function Dashboard() {
 
         ) : (
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 min-w-0 max-w-full">
 
             {challenges.map((ch) => {
 

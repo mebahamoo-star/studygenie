@@ -9,6 +9,7 @@ import {
   Lock,
   Moon,
   Rocket,
+  Settings,
   Star,
   Target,
   Trophy,
@@ -19,9 +20,9 @@ import { Genie } from "@/components/Genie";
 import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
 import { useApp } from "@/lib/app-state";
 import { getUserAcademicProfile, getQuizScores, type SavedQuizScore } from "@/lib/courses-util";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, LogOut } from "lucide-react";
 import { pageHead } from "@/lib/head";
 import { gamificationService } from "@/lib/api/services";
 import type { GamificationProfile } from "@/lib/api/types";
@@ -45,7 +46,8 @@ const allBadges = [
 ];
 
 function Profile() {
-  const { user, points, streak } = useApp();
+  const navigate = useNavigate();
+  const { user, points, streak, logout } = useApp();
   const [profileData, setProfileData] = useState<GamificationProfile | null>(null);
   const [uniName, setUniName] = useState<string>("");
   const [majorName, setMajorName] = useState<string>("");
@@ -244,6 +246,30 @@ function Profile() {
           </div>
         )}
       </Card>
+
+      <div className="pt-2 pb-6 space-y-3">
+        <Button
+          variant="outline"
+          asChild
+          className="w-full gap-2 rounded-2xl py-6 text-base font-bold shadow-soft transition hover:scale-[1.01]"
+        >
+          <Link to="/settings">
+            <Settings className="h-5 w-5 text-primary" />
+            Settings & Study Preferences
+          </Link>
+        </Button>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            await logout();
+            navigate({ to: "/login" });
+          }}
+          className="w-full gap-2 rounded-2xl border-destructive/30 py-6 text-base font-bold text-destructive hover:bg-destructive/10 hover:text-destructive shadow-soft"
+        >
+          <LogOut className="h-5 w-5" />
+          Sign Out
+        </Button>
+      </div>
     </div>
   );
 }

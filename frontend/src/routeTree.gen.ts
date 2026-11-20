@@ -32,6 +32,7 @@ import { Route as AdminAdminCoursesRouteImport } from './routes/_admin.admin.cou
 import { Route as AdminAdminOverviewRouteImport } from './routes/_admin.admin.overview'
 import { Route as AdminAdminReportsRouteImport } from './routes/_admin.admin.reports'
 import { Route as AdminAdminUsersRouteImport } from './routes/_admin.admin.users'
+import { Route as ShellSettingsTabRouteImport } from './routes/_shell.settings.$tab'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -146,6 +147,11 @@ const AdminAdminUsersRoute = AdminAdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => AdminRoute,
 } as any)
+const ShellSettingsTabRoute = ShellSettingsTabRouteImport.update({
+  id: '/$tab',
+  path: '/$tab',
+  getParentRoute: () => ShellSettingsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -162,12 +168,13 @@ export interface FileRoutesByFullPath {
   '/pomodoro': typeof ShellPomodoroRoute
   '/profile': typeof ShellProfileRoute
   '/quiz': typeof ShellQuizRoute
-  '/settings': typeof ShellSettingsRoute
+  '/settings': typeof ShellSettingsRouteWithChildren
   '/admin/audit-log': typeof AdminAdminAuditLogRoute
   '/admin/courses': typeof AdminAdminCoursesRoute
   '/admin/overview': typeof AdminAdminOverviewRoute
   '/admin/reports': typeof AdminAdminReportsRoute
   '/admin/users': typeof AdminAdminUsersRoute
+  '/settings/$tab': typeof ShellSettingsTabRoute
   '/admin/': typeof AdminAdminIndexRoute
 }
 export interface FileRoutesByTo {
@@ -185,12 +192,13 @@ export interface FileRoutesByTo {
   '/pomodoro': typeof ShellPomodoroRoute
   '/profile': typeof ShellProfileRoute
   '/quiz': typeof ShellQuizRoute
-  '/settings': typeof ShellSettingsRoute
+  '/settings': typeof ShellSettingsRouteWithChildren
   '/admin/audit-log': typeof AdminAdminAuditLogRoute
   '/admin/courses': typeof AdminAdminCoursesRoute
   '/admin/overview': typeof AdminAdminOverviewRoute
   '/admin/reports': typeof AdminAdminReportsRoute
   '/admin/users': typeof AdminAdminUsersRoute
+  '/settings/$tab': typeof ShellSettingsTabRoute
   '/admin': typeof AdminAdminIndexRoute
 }
 export interface FileRoutesById {
@@ -211,12 +219,13 @@ export interface FileRoutesById {
   '/_shell/pomodoro': typeof ShellPomodoroRoute
   '/_shell/profile': typeof ShellProfileRoute
   '/_shell/quiz': typeof ShellQuizRoute
-  '/_shell/settings': typeof ShellSettingsRoute
+  '/_shell/settings': typeof ShellSettingsRouteWithChildren
   '/_admin/admin/audit-log': typeof AdminAdminAuditLogRoute
   '/_admin/admin/courses': typeof AdminAdminCoursesRoute
   '/_admin/admin/overview': typeof AdminAdminOverviewRoute
   '/_admin/admin/reports': typeof AdminAdminReportsRoute
   '/_admin/admin/users': typeof AdminAdminUsersRoute
+  '/_shell/settings/$tab': typeof ShellSettingsTabRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
 }
 export interface FileRouteTypes {
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/admin/overview'
     | '/admin/reports'
     | '/admin/users'
+    | '/settings/$tab'
     | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -265,6 +275,7 @@ export interface FileRouteTypes {
     | '/admin/overview'
     | '/admin/reports'
     | '/admin/users'
+    | '/settings/$tab'
     | '/admin'
   id:
     | '__root__'
@@ -290,6 +301,7 @@ export interface FileRouteTypes {
     | '/_admin/admin/overview'
     | '/_admin/admin/reports'
     | '/_admin/admin/users'
+    | '/_shell/settings/$tab'
     | '/_admin/admin/'
   fileRoutesById: FileRoutesById
 }
@@ -467,6 +479,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAdminUsersRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/_shell/settings/$tab': {
+      id: '/_shell/settings/$tab'
+      path: '/$tab'
+      fullPath: '/settings/$tab'
+      preLoaderRoute: typeof ShellSettingsTabRouteImport
+      parentRoute: typeof ShellSettingsRoute
+    }
   }
 }
 
@@ -490,6 +509,18 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface ShellSettingsRouteChildren {
+  ShellSettingsTabRoute: typeof ShellSettingsTabRoute
+}
+
+const ShellSettingsRouteChildren: ShellSettingsRouteChildren = {
+  ShellSettingsTabRoute: ShellSettingsTabRoute,
+}
+
+const ShellSettingsRouteWithChildren = ShellSettingsRoute._addFileChildren(
+  ShellSettingsRouteChildren,
+)
+
 interface ShellRouteChildren {
   ShellCoursesRoute: typeof ShellCoursesRoute
   ShellDashboardRoute: typeof ShellDashboardRoute
@@ -499,7 +530,7 @@ interface ShellRouteChildren {
   ShellPomodoroRoute: typeof ShellPomodoroRoute
   ShellProfileRoute: typeof ShellProfileRoute
   ShellQuizRoute: typeof ShellQuizRoute
-  ShellSettingsRoute: typeof ShellSettingsRoute
+  ShellSettingsRoute: typeof ShellSettingsRouteWithChildren
 }
 
 const ShellRouteChildren: ShellRouteChildren = {
@@ -511,7 +542,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellPomodoroRoute: ShellPomodoroRoute,
   ShellProfileRoute: ShellProfileRoute,
   ShellQuizRoute: ShellQuizRoute,
-  ShellSettingsRoute: ShellSettingsRoute,
+  ShellSettingsRoute: ShellSettingsRouteWithChildren,
 }
 
 const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)

@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "StudyGenie",
   webDir: ".output/public",
   server: {
-    androidScheme: "https",
+    androidScheme: "http",
     cleartext: true,
   },
 };
