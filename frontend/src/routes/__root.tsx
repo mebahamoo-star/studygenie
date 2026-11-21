@@ -13,6 +13,8 @@ import { Capacitor } from "@capacitor/core";
 
 import appCss from "../styles.css?url";
 import { AppProvider, themeInitScript, useApp } from "../lib/app-state";
+import { GenieProvider } from "../lib/genie-context";
+import { GenieAssistant, GenieFloatButton } from "../components/GenieAssistant";
 import { Toaster } from "../components/ui/sonner";
 
 function NotFoundComponent() {
@@ -181,9 +183,13 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AppProvider>
-        <RoutePreloader />
-        <Outlet />
-        <Toaster position="top-center" />
+        <GenieProvider>
+          <RoutePreloader />
+          <Outlet />
+          <GenieAssistant />
+          <GenieFloatButton />
+          <Toaster position="top-center" />
+        </GenieProvider>
       </AppProvider>
     </QueryClientProvider>
   );

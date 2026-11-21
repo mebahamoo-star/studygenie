@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { pageHead } from "@/lib/head";
 import { studyService } from "@/lib/api/services";
 import { useApp } from "@/lib/app-state";
+import { useGenie } from "@/lib/genie-context";
 import {
   hasUserEnrolledCourses,
   hasUserUploadedMaterial,
@@ -40,6 +41,7 @@ interface QuestionItem {
 
 function Quiz() {
   const { addPoints, refreshGamification } = useApp();
+  const { triggerCelebration, triggerEncourage, triggerWarn } = useGenie();
   const [hasCourses, setHasCourses] = useState<boolean | null>(null);
   const [hasMaterial, setHasMaterial] = useState<boolean | null>(null);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);

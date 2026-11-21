@@ -8,11 +8,13 @@ cd /d "%~dp0"
 
 :: 1. Free ports 5173, 8080, 8000 if previously occupied by lingering processes
 echo [0/3] Checking and clearing ports 5173, 8080, 8000...
-powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5173,8080,8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5173,8080,8000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Where-Object { $_ -gt 0 } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 :: 2. Auto-detect & normalize JAVA_HOME for Java 17
 if not defined JAVA_HOME (
-    if exist "C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot" (
+    if exist "C:\Program Files\JetBrains\IntelliJ IDEA 2025.2.3\jbr" (
+        set "JAVA_HOME=C:\Program Files\JetBrains\IntelliJ IDEA 2025.2.3\jbr"
+    ) else if exist "C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot" (
         set "JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot"
     ) else if exist "C:\Program Files\Java\jdk-17" (
         set "JAVA_HOME=C:\Program Files\Java\jdk-17"
@@ -45,11 +47,11 @@ start "StudyGenie - AI Engine" /D "%~dp0ai-engine" cmd /k "title StudyGenie - AI
 
 :: 5. Start Backend Services (Spring Boot on http://127.0.0.1:8080)
 echo [2/3] Starting Backend Services (Spring Boot on http://127.0.0.1:8080)...
-start "StudyGenie - Backend" /D "%~dp0backend-services" cmd /k "title StudyGenie - Backend && set ADMIN_BOOTSTRAP_EMAIL=momo@gmail.com && call .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev" "-Dmaven.test.skip=true""
+start "StudyGenie - Backend" /D "%~dp0backend-services" cmd /k "title StudyGenie - Backend && set ADMIN_BOOTSTRAP_EMAIL=ahmadalhrini4@gmail.com && call .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev" "-Dmaven.test.skip=true""
 
 :: 6. Wait for Backend & AI Engine to initialize before opening Frontend
 echo.
-echo Waiting for Backend & AI Engine to connect and start listening...
+echo Waiting for Backend and AI Engine to connect and start listening...
 echo (Connecting to Supabase PostgreSQL and starting Tomcat...)
 
 set RETRIES=0
@@ -83,7 +85,7 @@ start http://localhost:5173
 
 echo.
 echo ========================================================
-echo        All StudyGenie Services Are Live & Ready!
+echo        All StudyGenie Services Are Live and Ready!
 echo ========================================================
 echo - Frontend:    http://localhost:5173 (Opened in browser)
 echo - Backend API: http://localhost:8080

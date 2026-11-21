@@ -76,6 +76,8 @@ import { Switch } from "@/components/ui/switch";
 
 import { useApp } from "@/lib/app-state";
 
+import { useGenie } from "@/lib/genie-context";
+
 import { pageHead } from "@/lib/head";
 
 import { deduplicateTopics, getUserCourses, getUserStoragePrefix, getUserTaskKits, saveUserCourses, saveUserTaskKits, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile, isCourseMaterialUploaded, hasUserUploadedMaterial } from "@/lib/courses-util";
@@ -245,6 +247,7 @@ function Dashboard() {
   const nav = useNavigate();
 
   const { user, points, streak } = useApp();
+  const { triggerCelebration, triggerEncourage } = useGenie();
 
   const todayStr = toLocalDateStr(new Date());
 
@@ -845,6 +848,7 @@ function Dashboard() {
       setSuccessModalOpen(true);
 
       toast.success(`Joined "${ch.courseName}" challenge! Syllabus, plan, cards & quizzes ready ✨`);
+      triggerCelebration(`🎓 انضممت لـ "${ch.courseName}"! خطتك الدراسية جاهزة. يلا نبدأ! 🚀`);
 
     } catch (err: any) {
 
@@ -1641,6 +1645,19 @@ function Dashboard() {
     const isDone = currentList.includes(taskId);
 
     const nextList = isDone ? currentList.filter((id) => id !== taskId) : [...currentList, taskId];
+
+    // Genie reactions on task completion
+    if (!isDone) {
+      const completedCount = nextList.length;
+      const totalCount = tasks.length || 1;
+      if (completedCount === totalCount && totalCount > 0) {
+        triggerCelebration(`🎉 مبروك! أكملت كل مهام اليوم! أنت نجم حقيقي يا ${user?.fullName?.split(" ")[0] || "بطل"}! 🌟`);
+      } else if (completedCount === Math.ceil(totalCount / 2)) {
+        triggerEncourage(`💪 نصف الطريق! أكملت ${completedCount} من ${totalCount} مهام — استمر، أنت رائع!`);
+      } else if (completedCount === 1) {
+        triggerEncourage(`🚀 بداية رائعة! أول مهمة خلصت — المومنتم بيبدأ هيك!`);
+      }
+    }
 
 
 

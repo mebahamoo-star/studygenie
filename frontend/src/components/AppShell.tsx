@@ -1,5 +1,6 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useGenie } from "@/lib/genie-context";
 import {
   BookOpen,
   Brain,
@@ -107,6 +108,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { points, streak, lang, user, isBackendOnline, logout } = useApp();
   const inStudy = studySub.some((s) => path.startsWith(s.to));
   const [exams, setExams] = useState<Exam[]>([]);
+  const { triggerPageWelcome } = useGenie();
+
+  // Trigger Genie welcome message on each page navigation
+  useEffect(() => {
+    triggerPageWelcome(path, user?.fullName);
+  }, [path, triggerPageWelcome, user?.fullName]);
 
   useEffect(() => {
     const updateExams = async () => {
