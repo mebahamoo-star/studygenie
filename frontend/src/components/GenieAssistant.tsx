@@ -1,189 +1,319 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { Genie } from "@/components/Genie";
 import { useGenie } from "@/lib/genie-context";
-import { X } from "lucide-react";
+import { X, Sparkles, HelpCircle, Compass, Lightbulb } from "lucide-react";
 
 /**
- * GenieAssistant — floating interactive Genie bubble.
- * Fixed to the bottom-right corner of the viewport.
- * Shows context-aware messages with smooth animations.
+ * GenieAssistant — Interactive Floating Companion.
+ * Features:
+ * - Contextual guided speech bubble with structured bullets and titles
+ * - Realistic animated typewriter reveal for dialogue
+ * - Quick action pills (explain page, study tips, close)
+ * - Click-to-poke reactions
  */
 export function GenieAssistant() {
-  const { message, isVisible, dismiss } = useGenie();
+  const { message, isVisible, dismiss, pokeGenie, explainPage } = useGenie();
+  const path = useRouterState({ select: (s) => s.location.pathname });
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const [displayedText, setDisplayedText] = useState("");
 
-  // Click-outside to dismiss
+  // Smooth typewriter reveal effect for realism
   useEffect(() => {
-    if (!isVisible) return;
-    const handler = (e: MouseEvent) => {
-      if (bubbleRef.current && !bubbleRef.current.contains(e.target as Node)) {
-        dismiss();
+    if (!message?.text) {
+      setDisplayedText("");
+      return;
+    }
+    const full = message.text;
+    // For very long text, reveal faster so student doesn't wait
+    const step = full.length > 120 ? 4 : 2;
+    let curr = 0;
+    setDisplayedText(full.slice(0, Math.min(step, full.length)));
+
+    const interval = setInterval(() => {
+      curr += step;
+      if (curr >= full.length) {
+        setDisplayedText(full);
+        clearInterval(interval);
+      } else {
+        setDisplayedText(full.slice(0, curr));
       }
-    };
-    // Delay to avoid dismissing on the same click that triggered it
-    const tid = setTimeout(() => document.addEventListener("mousedown", handler), 200);
-    return () => {
-      clearTimeout(tid);
-      document.removeEventListener("mousedown", handler);
-    };
-  }, [isVisible, dismiss]);
+    }, 18);
+
+    return () => clearInterval(interval);
+  }, [message?.text]);
 
   if (!message) return null;
 
-  const typeStyles: Record<string, string> = {
-    welcome: "from-blue-600/20 via-indigo-500/15 to-blue-400/10 border-blue-400/40",
-    celebrate: "from-amber-500/20 via-yellow-400/15 to-orange-400/10 border-amber-400/40",
-    encourage: "from-emerald-500/20 via-green-400/15 to-teal-400/10 border-emerald-400/40",
-    tip: "from-indigo-500/20 via-purple-400/15 to-blue-400/10 border-indigo-400/40",
-    guide: "from-cyan-500/20 via-sky-400/15 to-blue-400/10 border-cyan-400/40",
-    warn: "from-orange-500/20 via-amber-400/15 to-yellow-400/10 border-orange-400/40",
-    idle: "from-violet-500/20 via-purple-400/15 to-indigo-400/10 border-violet-400/40",
+  const typeConfig: Record<
+    string,
+    { border: string; glow: string; badge: string; emoji: string; titleColor: string }
+  > = {
+    welcome: {
+      border: "border-blue-400/40 dark:border-blue-500/40",
+      glow: "from-blue-600/20 via-indigo-500/15 to-blue-400/10",
+      badge: "bg-blue-500/20 text-blue-600 dark:text-blue-300",
+      emoji: "👋",
+      titleColor: "text-blue-600 dark:text-blue-300",
+    },
+    celebrate: {
+      border: "border-amber-400/50 dark:border-amber-500/50",
+      glow: "from-amber-500/25 via-yellow-400/20 to-orange-400/10",
+      badge: "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+      emoji: "🎉",
+      titleColor: "text-amber-600 dark:text-amber-300",
+    },
+    encourage: {
+      border: "border-emerald-400/40 dark:border-emerald-500/40",
+      glow: "from-emerald-500/20 via-green-400/15 to-teal-400/10",
+      badge: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+      emoji: "💪",
+      titleColor: "text-emerald-600 dark:text-emerald-300",
+    },
+    tip: {
+      border: "border-indigo-400/40 dark:border-indigo-500/40",
+      glow: "from-indigo-500/20 via-purple-400/15 to-blue-400/10",
+      badge: "bg-indigo-500/20 text-indigo-700 dark:text-indigo-300",
+      emoji: "💡",
+      titleColor: "text-indigo-600 dark:text-indigo-300",
+    },
+    guide: {
+      border: "border-cyan-400/40 dark:border-cyan-500/40",
+      glow: "from-cyan-500/20 via-sky-400/15 to-blue-400/10",
+      badge: "bg-cyan-500/20 text-cyan-700 dark:text-cyan-300",
+      emoji: "🧭",
+      titleColor: "text-cyan-600 dark:text-cyan-300",
+    },
+    feature: {
+      border: "border-violet-400/40 dark:border-violet-500/40",
+      glow: "from-violet-500/20 via-purple-400/15 to-indigo-400/10",
+      badge: "bg-violet-500/20 text-violet-700 dark:text-violet-300",
+      emoji: "✨",
+      titleColor: "text-violet-600 dark:text-violet-300",
+    },
+    warn: {
+      border: "border-orange-400/50 dark:border-orange-500/50",
+      glow: "from-orange-500/20 via-amber-400/15 to-yellow-400/10",
+      badge: "bg-orange-500/20 text-orange-700 dark:text-orange-300",
+      emoji: "⚠️",
+      titleColor: "text-orange-600 dark:text-orange-300",
+    },
+    idle: {
+      border: "border-blue-400/30 dark:border-blue-500/30",
+      glow: "from-blue-500/15 via-indigo-500/10 to-transparent",
+      badge: "bg-blue-500/15 text-blue-600 dark:text-blue-300",
+      emoji: "🧞‍♂️",
+      titleColor: "text-foreground",
+    },
   };
 
-  const badgeEmoji: Record<string, string> = {
-    welcome: "👋",
-    celebrate: "🎉",
-    encourage: "💪",
-    tip: "💡",
-    guide: "🗺️",
-    warn: "⚠️",
-    idle: "✨",
-  };
-
-  const style = typeStyles[message.type] || typeStyles.idle;
-  const emoji = badgeEmoji[message.type] || "✨";
+  const currentType = typeConfig[message.type] || typeConfig.idle;
 
   return (
-    <div
+    <aside
       ref={bubbleRef}
+      aria-label="Genie Assistant Bubble"
       className={cn(
-        // Positioning: fixed bottom-right, above mobile bottom nav on small screens
-        "fixed z-50 flex items-end gap-3",
-        "bottom-20 right-4 md:bottom-8 md:right-6",
-        "max-w-[min(calc(100vw-2rem),340px)]",
-        // Animated transitions
-        "transition-all duration-350 ease-out",
+        // Placement: fixed bottom-right, clears mobile navigation bar
+        "fixed z-50 flex items-end gap-3 pointer-events-auto",
+        "bottom-20 right-4 sm:bottom-8 sm:right-6",
+        "max-w-[min(calc(100vw-2rem),380px)]",
+        "transition-all duration-300 ease-out",
         isVisible
           ? "opacity-100 translate-y-0 scale-100"
           : "opacity-0 translate-y-4 scale-95 pointer-events-none"
       )}
     >
-      {/* Speech bubble */}
+      {/* 1. Speech Bubble Box */}
       <div
         className={cn(
-          "relative flex flex-col gap-2 rounded-2xl border bg-gradient-to-br p-3.5 shadow-xl backdrop-blur-md",
-          "text-sm text-foreground",
-          style
+          "relative flex flex-col gap-2 rounded-2xl border bg-card/95 p-4 shadow-2xl backdrop-blur-md",
+          "text-sm text-foreground ring-1 ring-black/5 dark:ring-white/10",
+          currentType.border
         )}
       >
-        {/* Dismiss button */}
-        <button
-          onClick={dismiss}
-          className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full bg-muted/60 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          aria-label="Dismiss"
-        >
-          <X className="h-3 w-3" />
-        </button>
+        {/* Soft background glow */}
+        <div
+          aria-hidden="true"
+          className={cn(
+            "absolute inset-0 -z-10 rounded-2xl bg-gradient-to-br opacity-80",
+            currentType.glow
+          )}
+        />
 
-        {/* Type badge */}
-        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground/70">
-          <span>{emoji}</span>
-          <span>
-            {{
-              welcome: "مرحبا",
-              celebrate: "أحسنت!",
-              encourage: "يلا!",
-              tip: "نصيحة",
-              guide: "دليل",
-              warn: "تنبيه",
-              idle: "معلومة",
-            }[message.type] || "جني"}
-          </span>
-        </span>
+        {/* Header row: Badge, Title & Close */}
+        <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold shrink-0",
+                currentType.badge
+              )}
+            >
+              <span>{currentType.emoji}</span>
+              <span>
+                {{
+                  welcome: "مرحباً",
+                  celebrate: "إنجاز!",
+                  encourage: "تشجيع",
+                  tip: "نصيحة",
+                  guide: "دليل الميزة",
+                  feature: "استكشاف",
+                  warn: "تنبيه",
+                  idle: "جني",
+                }[message.type] || "جني"}
+              </span>
+            </span>
+            {message.title && (
+              <span className={cn("text-xs font-bold truncate", currentType.titleColor)}>
+                {message.title}
+              </span>
+            )}
+          </div>
 
-        {/* Message text */}
-        <p className="pr-4 leading-snug">{message.text}</p>
+          <button
+            onClick={dismiss}
+            className="grid h-6 w-6 place-items-center rounded-full bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground transition shrink-0"
+            aria-label="Close message"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
 
-        {/* Action buttons */}
+        {/* Message body with formatted lines and typewriter reveal */}
+        <div className="leading-relaxed whitespace-pre-line text-[13px] text-foreground/90 max-h-60 overflow-y-auto pr-1">
+          {displayedText}
+        </div>
+
+        {/* Action Buttons Row */}
         {message.actions && message.actions.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {message.actions.map((a, i) => (
+          <div className="mt-1 flex flex-wrap gap-2 pt-2 border-t border-border/40">
+            {message.actions.map((act, idx) => (
               <button
-                key={i}
-                onClick={() => {
-                  a.onClick();
-                  dismiss();
-                }}
-                className="rounded-lg bg-primary/15 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/25"
+                key={idx}
+                onClick={act.onClick}
+                className={cn(
+                  "rounded-xl px-3 py-1.5 text-xs font-semibold transition-all shadow-xs active:scale-95",
+                  act.variant === "primary"
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "bg-accent/80 hover:bg-accent text-accent-foreground border border-border/50"
+                )}
               >
-                {a.label}
+                {act.label}
               </button>
             ))}
           </div>
         )}
 
-        {/* Tail pointing right → toward the genie */}
-        <div className="absolute -right-2.5 bottom-6 h-0 w-0 border-y-[8px] border-l-[10px] border-y-transparent border-l-current opacity-20" />
+        {/* Speech Bubble Arrow pointing towards the Genie on the right */}
+        <div className="absolute -right-2 bottom-6 h-0 w-0 border-y-[7px] border-l-[8px] border-y-transparent border-l-card" />
       </div>
 
-      {/* Genie figure — clickable to toggle bubble */}
-      <div className="flex shrink-0 flex-col items-center gap-1">
+      {/* 2. Interactive Character Figure */}
+      <div className="flex shrink-0 flex-col items-center gap-1 group">
         <Genie
           pose={message.pose}
-          className="h-20 w-20 cursor-pointer transition-transform hover:scale-105 active:scale-95"
-          onClick={dismiss}
+          className="h-20 w-20 cursor-pointer transition-transform group-hover:scale-105 active:scale-95"
+          onClick={() => pokeGenie(path)}
         />
-        <span className="text-[9px] font-semibold tracking-wide text-muted-foreground">
-          Genie AI
-        </span>
+        <button
+          onClick={() => pokeGenie(path)}
+          className="text-[10px] font-bold text-muted-foreground hover:text-primary transition flex items-center gap-0.5"
+          title="اضغط للتحدث مع الجني"
+        >
+          <Sparkles className="h-2.5 w-2.5 text-gold" />
+          <span>اسألني</span>
+        </button>
       </div>
-    </div>
+    </aside>
   );
 }
 
 /**
- * GenieFloatButton — a compact floating button when no message is showing.
- * Tap it to get a tip.
+ * GenieFloatButton — Floating magic button shown when Genie bubble is idle.
+ * Tapping it lets the student ask questions or get an instant explanation.
  */
 export function GenieFloatButton() {
-  const { message, triggerTip } = useGenie();
+  const { message, pokeGenie, explainPage } = useGenie();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  if (message) return null; // hide when a message is already shown
+  // If Genie is currently talking with a full bubble, hide the compact button
+  if (message) return null;
 
-  const TIPS = [
-    "💡 راجع ملاحظاتك قبل النوم — ذاكرتك تعمل وأنت نايم!",
-    "🔥 الاستمرارية أهم من الكمال — دقيقة دراسة أفضل من لا شيء.",
-    "🧠 جرب تشرح الموضوع لصديق — هذا يثبت المعلومة عندك.",
-    "⏱️ كل 25 دقيقة دراسة استرح 5 دقائق — Pomodoro technique!",
-    "🎯 حدد 3 أهداف صغيرة لكل يوم وحققها واحدة واحدة.",
-  ];
+  // On auth pages (login, signup, forgot-password), AuthGeniePresenter handles onboarding
+  if (path === "/login" || path === "/signup" || path === "/forgot-password") {
+    return null;
+  }
 
   return (
-    <button
-      onClick={() => {
-        const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
-        triggerTip(tip);
-      }}
-      className={cn(
-        "fixed z-40 flex items-center justify-center",
-        "bottom-20 right-4 md:bottom-8 md:right-6",
-        "h-14 w-14 rounded-full shadow-xl",
-        "bg-gradient-to-tr from-blue-600/80 to-indigo-500/80 backdrop-blur-sm",
-        "border border-blue-400/30",
-        "transition-all duration-200 hover:scale-110 active:scale-95",
-        "group"
+    <div className="fixed z-40 bottom-20 right-4 sm:bottom-8 sm:right-6 flex flex-col items-end gap-2">
+      {/* Quick Menu Popover on Tap */}
+      {menuOpen && (
+        <div
+          role="menu"
+          aria-label="Genie Quick Options"
+          className="flex flex-col gap-1.5 rounded-2xl border border-primary/25 bg-card/95 p-2 shadow-2xl backdrop-blur-md text-xs font-semibold w-52 mb-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
+        >
+          <div className="px-2 py-1 text-[11px] font-bold text-muted-foreground border-b border-border/40 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Sparkles className="h-3 w-3 text-gold" />
+              <span>مساعدك الدراسي</span>
+            </span>
+            <button
+              onClick={() => setMenuOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => {
+              setMenuOpen(false);
+              explainPage(path);
+            }}
+            className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-accent text-foreground transition"
+          >
+            <Compass className="h-3.5 w-3.5 text-cyan-500" />
+            <span>ماذا أفعل في هذه الصفحة؟</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setMenuOpen(false);
+              pokeGenie(path);
+            }}
+            className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-accent text-foreground transition"
+          >
+            <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
+            <span>نصيحة دراسية سريعة 💡</span>
+          </button>
+        </div>
       )}
-      aria-label="Ask Genie"
-    >
-      <div className="relative">
-        <Genie pose="idle" className="h-11 w-11" />
-        {/* Ping dot */}
-        <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
-          <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-400" />
-        </span>
-      </div>
-    </button>
+
+      {/* Floating Orb Button */}
+      <button
+        onClick={() => setMenuOpen((o) => !o)}
+        className={cn(
+          "relative flex items-center justify-center",
+          "h-15 w-15 rounded-full shadow-2xl",
+          "bg-gradient-to-tr from-blue-600 via-indigo-600 to-amber-500 p-0.5",
+          "transition-all duration-300 hover:scale-110 active:scale-95 group"
+        )}
+        aria-label="Open Genie Guide"
+      >
+        <div className="relative flex h-full w-full items-center justify-center rounded-full bg-card/90 backdrop-blur-sm">
+          <Genie pose="idle" className="h-12 w-12" showAura={false} />
+
+          {/* Pulsing magical ring */}
+          <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-amber-400 border-2 border-background" />
+          </span>
+        </div>
+      </button>
+    </div>
   );
 }

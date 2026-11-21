@@ -512,11 +512,25 @@ export function PageTitle({
   sub?: string;
   right?: ReactNode;
 }) {
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const { explainPage } = useGenie();
+
   return (
-    <div className="mb-6 flex items-end justify-between gap-4">
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 className="text-3xl font-semibold">{title}</h1>
-        {sub && <p className="mt-1 text-muted-foreground">{sub}</p>}
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-2xl sm:text-3xl font-semibold">{title}</h1>
+          <button
+            type="button"
+            onClick={() => explainPage(path)}
+            className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary transition-all hover:bg-primary/20 hover:scale-105 active:scale-95 shadow-2xs cursor-pointer"
+            title="اضغط لطلب شرح تفاعلي من الجني لهذه الصفحة"
+          >
+            <Sparkles className="h-3 w-3 text-gold" />
+            <span>دليل الجني 🧞‍♂️</span>
+          </button>
+        </div>
+        {sub && <p className="mt-1 text-sm text-muted-foreground">{sub}</p>}
       </div>
       {right}
     </div>

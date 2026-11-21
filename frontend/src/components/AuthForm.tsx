@@ -4,6 +4,7 @@ import { AlertCircle, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Genie, GenieLogo } from "./Genie";
+import { AuthGenieDesktopPresenter, AuthGenieMobilePresenter } from "./AuthGeniePresenter";
 import { ThemeToggle } from "./AppShell";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -230,8 +231,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   return (
     <div className="grid min-h-screen md:grid-cols-2">
       <div
-        className="relative hidden flex-col items-center justify-center gap-6 bg-gradient-magic p-12 text-primary-foreground md:flex overflow-hidden cursor-pointer select-none"
-        onPointerDown={(e) => {
+        className="relative hidden flex-col items-center justify-center bg-gradient-magic p-12 text-primary-foreground md:flex overflow-hidden select-none"
+        onPointerDown={() => {
           // Play organic water drop sound when clicking the background
           playWaterDropSound();
         }}
@@ -246,22 +247,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
           interactive={true}
           onPointerDown={() => playWaterDropSound()}
         />
-        <div
-          className="relative z-10 flex flex-col items-center justify-center gap-6 pointer-events-auto cursor-pointer"
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            playWaterDropSound();
-          }}
-        >
-          <Genie
-            pose={signup ? "high" : "mid"}
-            className="h-72 w-72 animate-float drop-shadow-2xl active:scale-95 transition-transform"
-          />
-          <h2 className="text-3xl font-semibold text-center">{signup ? "Make your first wish." : "Welcome back, scholar."}</h2>
-          <span className="text-xs opacity-75 font-medium flex items-center gap-1.5 bg-black/15 dark:bg-white/15 px-3 py-1 rounded-full backdrop-blur-xs">
-            💧 Tap background or Genie for water drop
-          </span>
-        </div>
+        <AuthGenieDesktopPresenter isSignup={signup} />
       </div>
       <div className="flex flex-col bg-background p-8">
         <div className="flex items-center justify-between">
@@ -284,6 +270,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </div>
 
         <div className="mx-auto my-auto flex w-full max-w-sm flex-col gap-4">
+          <AuthGenieMobilePresenter isSignup={signup} />
           <div>
             <h1 className="text-3xl font-semibold">{signup ? "Create account" : "Log in"}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
