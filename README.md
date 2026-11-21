@@ -44,6 +44,12 @@ studygenie/
 
 Setup instructions for each service are documented within their respective subdirectories as they are implemented.
 
+## Getting the latest code
+
+On Windows, double-click `update-studygenie.bat` from the repository root to safely stash local uncommitted work, pull the latest `master` updates, restore your changes, install frontend dependencies if needed, and verify the build.
+
+For the full team workflow, rules, and conflict-resolution steps, see [docs/TEAM_GIT_WORKFLOW.md](docs/TEAM_GIT_WORKFLOW.md).
+
 ## Documentation
 
 Full academic documentation, including system analysis, requirements, and design chapters, is maintained under `docs/`.
