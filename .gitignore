@@ -81,3 +81,13 @@ scratch/
 .wrangler/
 frontend/.env
 .neon
+
+### Additional Local, Build & IDE Ignores ###
+!**/.env.example
+*.local
+out/
+.vite/
+.vs/
+*.suo
+*.user
+*.code-workspace
