@@ -186,7 +186,7 @@ export function useBookPager(total: number, isRTL: boolean): UseBookPagerReturn 
     };
   }, [next, prev, isRTL]);
 
-  // ── Browser Back / Forward (hash change) ────────────────────────────────
+  // ── Browser Back / Forward (hash change) & Custom Navigation ────────────
   useEffect(() => {
     const handler = () => {
       const i = hashToIndex(window.location.hash, total);
@@ -195,9 +195,21 @@ export function useBookPager(total: number, isRTL: boolean): UseBookPagerReturn 
         setIndex(i);
       }
     };
+    const handleGoToEvent = (e: Event) => {
+      const custom = e as CustomEvent<{ index?: number; hash?: string }>;
+      if (typeof custom.detail?.index === "number") {
+        goTo(custom.detail.index);
+      } else if (custom.detail?.hash) {
+        goTo(hashToIndex(custom.detail.hash, total));
+      }
+    };
     window.addEventListener("hashchange", handler);
-    return () => window.removeEventListener("hashchange", handler);
-  }, [index, total]);
+    window.addEventListener("sg-pager-goto", handleGoToEvent);
+    return () => {
+      window.removeEventListener("hashchange", handler);
+      window.removeEventListener("sg-pager-goto", handleGoToEvent);
+    };
+  }, [index, total, goTo]);
 
   return { index, direction, next, prev, goTo, total, isTransitioning };
 }
