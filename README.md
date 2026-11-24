@@ -46,7 +46,7 @@ Setup instructions for each service are documented within their respective subdi
 
 ## Getting the latest code
 
-On Windows, double-click `update-studygenie.bat` from the repository root to safely stash local uncommitted work, pull the latest `master` updates, restore your changes, install frontend dependencies if needed, and verify the build.
+On Windows, double-click `start-studygenie.bat` to automatically check for updates (5-second `Y/N` prompt, defaults to `Y`) and start all services, or double-click `update-studygenie.bat` directly to safely stash local uncommitted work, pull `master`, restore your changes, install changed frontend/AI dependencies, and verify the frontend build.
 
 For the full team workflow, rules, and conflict-resolution steps, see [docs/TEAM_GIT_WORKFLOW.md](docs/TEAM_GIT_WORKFLOW.md).
 
