@@ -9,14 +9,6 @@ export const createProfileSchema = (t: TFunction) =>
       .trim()
       .min(2, { message: t("validation.displayNameMin") })
       .max(60, { message: t("validation.displayNameMax") }),
-    universityId: z
-      .string()
-      .trim()
-      .min(1, { message: t("validation.universityRequired") }),
-    collegeId: z
-      .string()
-      .trim()
-      .min(1, { message: t("validation.collegeRequired") }),
     avatarUrl: z.string().nullable(),
   });
 

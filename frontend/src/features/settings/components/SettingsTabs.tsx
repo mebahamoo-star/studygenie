@@ -126,16 +126,16 @@ export function SettingsTabs({
   }
 
   return (
-    <div className="sticky top-16 z-10 -mx-3 mb-6 hidden border-b border-slate-200/85 bg-[#F7F8FA]/95 px-3 backdrop-blur-xs md:block sm:-mx-6 sm:px-6">
+    <div className="sticky top-16 z-10 -mx-3 mb-6 hidden border-b border-slate-200/85 dark:border-border bg-[#F7F8FA]/95 dark:bg-background/95 px-3 backdrop-blur-xs md:block sm:-mx-6 sm:px-6">
       <div className="relative mx-auto max-w-[800px]">
         {/* Fade edges on mobile (<768px) as horizontal scroll hints */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-[#F7F8FA] to-transparent md:hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-[#F7F8FA] dark:from-background to-transparent md:hidden"
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-[#F7F8FA] to-transparent md:hidden"
+          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-[#F7F8FA] dark:from-background to-transparent md:hidden"
         />
 
         {/* Horizontally scrollable tab list */}
@@ -166,15 +166,15 @@ export function SettingsTabs({
                 onKeyDown={(e) => handleKeyDown(e, index)}
                 className={`group relative flex shrink-0 items-center gap-2 whitespace-nowrap rounded-t-[10px] px-4 py-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-inset ${
                   isActive
-                    ? "text-indigo-600 font-semibold"
-                    : "text-slate-600 hover:bg-slate-200/40 hover:text-slate-900"
+                    ? "text-indigo-600 dark:text-primary font-semibold"
+                    : "text-slate-600 dark:text-muted-foreground hover:bg-slate-200/40 dark:hover:bg-muted/50 hover:text-slate-900 dark:hover:text-foreground"
                 }`}
               >
                 <Icon
                   className={`h-4 w-4 shrink-0 transition-colors duration-150 ${
                     isActive
-                      ? "text-indigo-600"
-                      : "text-slate-400 group-hover:text-slate-600"
+                      ? "text-indigo-600 dark:text-primary"
+                      : "text-slate-400 dark:text-muted-foreground group-hover:text-slate-600 dark:group-hover:text-foreground"
                   }`}
                   aria-hidden="true"
                 />

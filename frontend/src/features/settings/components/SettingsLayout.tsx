@@ -74,15 +74,15 @@ export function SettingsLayout({
       <div
         dir={isRtl ? "rtl" : "ltr"}
         style={{ fontFamily }}
-        className="min-h-screen w-full bg-[#F7F8FA] px-4 py-6 text-slate-900 pb-[max(2rem,env(safe-area-inset-bottom))]"
+        className="sg-settings-root min-h-screen w-full bg-[#F7F8FA] dark:bg-background px-4 py-6 text-slate-900 dark:text-foreground pb-[max(2rem,env(safe-area-inset-bottom))]"
       >
         {/* Header */}
         <header className="mb-6 flex flex-col justify-between gap-3">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-foreground">
               {t("page.title")}
             </h1>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-2xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-border bg-white dark:bg-card px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-muted-foreground shadow-2xs">
               <span
                 className={`h-2 w-2 rounded-full ${
                   USE_MOCK_API ? "bg-indigo-500" : "bg-emerald-500"
@@ -91,11 +91,11 @@ export function SettingsLayout({
               {USE_MOCK_API ? t("page.apiModeMock") : t("page.apiModeLive")}
             </span>
           </div>
-          <p className="text-sm text-slate-600">{t("page.description")}</p>
+          <p className="text-sm text-slate-600 dark:text-muted-foreground">{t("page.description")}</p>
         </header>
 
         {/* Rounded Card Group (iOS-settings style) */}
-        <div className="overflow-hidden rounded-[16px] border border-slate-200/80 bg-white shadow-2xs divide-y divide-slate-100">
+        <div className="overflow-hidden rounded-[16px] border border-slate-200/80 dark:border-border bg-white dark:bg-card shadow-2xs divide-y divide-slate-100 dark:divide-border">
           {SETTINGS_SECTION_ITEMS.map((sec) => {
             const Icon = sec.icon;
             const isDirty = Boolean(dirtyTabs[sec.id]);
@@ -106,7 +106,7 @@ export function SettingsLayout({
                 key={sec.id}
                 type="button"
                 onClick={() => onNavigateToSection?.(sec.id)}
-                className="flex min-h-[60px] w-full items-center justify-between p-4 text-start transition-colors duration-150 hover:bg-slate-50/80 active:bg-slate-100"
+                className="flex min-h-[60px] w-full items-center justify-between p-4 text-start transition-colors duration-150 hover:bg-slate-50/80 dark:hover:bg-muted/60 active:bg-slate-100 dark:active:bg-muted"
               >
                 <div className="flex min-w-0 items-center gap-3.5 pe-3">
                   <span
@@ -116,7 +116,7 @@ export function SettingsLayout({
                   </span>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-900">
+                      <span className="text-sm font-semibold text-slate-900 dark:text-foreground">
                         {t(`tabs.${sec.id}`)}
                       </span>
                       {isDirty && (
@@ -127,7 +127,7 @@ export function SettingsLayout({
                       )}
                     </div>
                     {summary && (
-                      <p className="truncate text-xs text-slate-500">
+                      <p className="truncate text-xs text-slate-500 dark:text-muted-foreground">
                         {summary}
                       </p>
                     )}
@@ -135,7 +135,7 @@ export function SettingsLayout({
                 </div>
 
                 <ChevronRight
-                  className="h-5 w-5 shrink-0 text-slate-400 rtl:rotate-180"
+                  className="h-5 w-5 shrink-0 text-slate-400 dark:text-muted-foreground rtl:rotate-180"
                   aria-hidden="true"
                 />
               </button>
@@ -152,20 +152,20 @@ export function SettingsLayout({
       <div
         dir={isRtl ? "rtl" : "ltr"}
         style={{ fontFamily }}
-        className="min-h-screen w-full bg-[#F7F8FA] text-slate-900 pb-[max(5rem,env(safe-area-inset-bottom))]"
+        className="sg-settings-root min-h-screen w-full bg-[#F7F8FA] dark:bg-background text-slate-900 dark:text-foreground pb-[max(5rem,env(safe-area-inset-bottom))]"
       >
         {/* Sticky Top Bar: Back button, Section Title, Save button when dirty */}
-        <header className="sticky top-0 z-30 flex min-h-[56px] items-center justify-between border-b border-slate-200/90 bg-white/95 px-3 py-2 shadow-2xs backdrop-blur-md">
+        <header className="sticky top-0 z-30 flex min-h-[56px] items-center justify-between border-b border-slate-200/90 dark:border-border bg-white/95 dark:bg-card/95 px-3 py-2 shadow-2xs backdrop-blur-md">
           <button
             type="button"
             onClick={onNavigateBack}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-slate-700 transition-colors hover:bg-slate-100 active:bg-slate-200"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-slate-700 dark:text-foreground transition-colors hover:bg-slate-100 dark:hover:bg-muted active:bg-slate-200 dark:active:bg-muted"
             aria-label={t("common.back", "Back to settings")}
           >
             <ArrowLeft className="h-5 w-5 rtl:rotate-180" aria-hidden="true" />
           </button>
 
-          <h2 className="mx-2 truncate text-base font-bold text-slate-900">
+          <h2 className="mx-2 truncate text-base font-bold text-slate-900 dark:text-foreground">
             {t(`tabs.${activeTab}`)}
           </h2>
 
@@ -221,12 +221,12 @@ export function SettingsLayout({
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/90 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_20px_rgba(0,0,0,0.08)] backdrop-blur-md"
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/90 dark:border-border bg-white/95 dark:bg-card/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_20px_rgba(0,0,0,0.08)] backdrop-blur-md"
           >
             <div className="mx-auto flex max-w-[800px] items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-amber-500" />
-                <span className="text-xs font-semibold text-slate-700">
+                <span className="text-xs font-semibold text-slate-700 dark:text-foreground">
                   {t("page.unsavedBadge")}
                 </span>
               </div>
@@ -257,29 +257,29 @@ export function SettingsLayout({
     <div
       dir={isRtl ? "rtl" : "ltr"}
       style={{ fontFamily }}
-      className="min-h-screen w-full rounded-[20px] bg-[#F7F8FA] px-3 py-6 text-slate-900 sm:px-6 lg:px-8"
+      className="sg-settings-root min-h-screen w-full rounded-[20px] bg-[#F7F8FA] dark:bg-background px-3 py-6 text-slate-900 dark:text-foreground sm:px-6 lg:px-8"
     >
       {/* Top Header: Centered max-width ~800px */}
       <header className="mx-auto mb-3 flex w-full max-w-[800px] flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">
               {t("page.title")}
             </h1>
             {isCurrentTabDirty && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                 {t("page.unsavedBadge")}
               </span>
             )}
           </div>
-          <p className="mt-1.5 max-w-2xl text-sm text-slate-600">
+          <p className="mt-1.5 max-w-2xl text-sm text-slate-600 dark:text-muted-foreground">
             {t("page.description")}
           </p>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-2xs">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-border bg-white dark:bg-card px-3 py-1 text-xs font-medium text-slate-600 dark:text-muted-foreground shadow-2xs">
             <span
               className={`h-2 w-2 rounded-full ${
                 USE_MOCK_API ? "bg-indigo-500" : "bg-emerald-500"

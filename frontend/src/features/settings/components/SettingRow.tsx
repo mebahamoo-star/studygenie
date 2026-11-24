@@ -31,19 +31,19 @@ export function SettingRow({
         <div className="flex flex-wrap items-center gap-2">
           <label
             htmlFor={id}
-            className="text-sm font-medium text-slate-900 cursor-pointer"
+            className="text-sm font-medium text-slate-900 dark:text-foreground cursor-pointer"
           >
             {label}
           </label>
           {badge}
         </div>
         {helperText && (
-          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-muted-foreground">
             {helperText}
           </p>
         )}
         {error && (
-          <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">
+          <p role="alert" className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
             {error}
           </p>
         )}

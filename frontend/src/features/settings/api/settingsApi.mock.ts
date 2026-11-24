@@ -153,6 +153,9 @@ export const mockSettingsApi = {
       profile: {
         ...current.profile,
         ...(partial.profile || {}),
+        // Academic affiliation is permanently locked after onboarding
+        universityId: current.profile.universityId,
+        collegeId: current.profile.collegeId,
       },
       studyPreferences: {
         ...current.studyPreferences,

@@ -76,6 +76,36 @@ function SettingsPageContent({ initialTab }: SettingsPageProps) {
   const [pendingTabTarget, setPendingTabTarget] =
     useState<SettingsTabId | null>(null);
   const [pendingBackModal, setPendingBackModal] = useState<boolean>(false);
+  const [localDark, setLocalDark] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return (
+        localStorage.getItem("sg-theme") === "dark" ||
+        document.documentElement.classList.contains("dark")
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  const isDarkMode = appCtx ? appCtx.dark : localDark;
+
+  const handleToggleDarkMode = useCallback(() => {
+    const nextDark = !isDarkMode;
+    setLocalDark(nextDark);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("sg-theme", nextDark ? "dark" : "light");
+      } catch {
+        // Ignore storage errors
+      }
+      document.documentElement.classList.toggle("dark", nextDark);
+    }
+    if (appCtx?.toggleDark) {
+      appCtx.toggleDark();
+    }
+    pushToast("success", t("toasts.autoSaved"));
+  }, [isDarkMode, appCtx, t]);
 
   const {
     settings,
@@ -409,11 +439,8 @@ function SettingsPageContent({ initialTab }: SettingsPageProps) {
           <div className="space-y-6">
             <PrivacySection
               privacy={settings.privacy}
-              darkModeEnabled={Boolean(appCtx?.dark)}
-              onToggleDarkMode={() => {
-                appCtx?.toggleDark();
-                pushToast("success", t("toasts.autoSaved"));
-              }}
+              darkModeEnabled={isDarkMode}
+              onToggleDarkMode={handleToggleDarkMode}
               onAutoSavePrivacy={handleAutoSavePrivacy}
             />
             <LanguageSection
@@ -444,7 +471,7 @@ function SettingsPageContent({ initialTab }: SettingsPageProps) {
   };
 
   return (
-    <>
+    <div className="sg-settings-root">
       <SettingsLayout
         activeTab={activeTab}
         dirtyTabs={dirtyTabs}
@@ -485,7 +512,7 @@ function SettingsPageContent({ initialTab }: SettingsPageProps) {
 
       {/* Accessible Auto-Dismissing Toasts */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-    </>
+    </div>
   );
 }
 

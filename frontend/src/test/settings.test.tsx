@@ -28,6 +28,7 @@ function renderSettingsPage() {
 describe("StudyGenie Settings Page (5-Tab Layout)", () => {
   beforeEach(() => {
     localStorage.clear();
+    document.documentElement.classList.remove("dark");
     window.history.replaceState(null, "", "/settings/study");
   });
 
@@ -99,6 +100,10 @@ describe("StudyGenie Settings Page (5-Tab Layout)", () => {
     expect(window.location.pathname).toBe("/settings/profile");
     expect(screen.getByText("Public Student Profile")).toBeInTheDocument();
     expect(screen.getByText("Academic Affiliation")).toBeInTheDocument();
+    expect(screen.getByText("Locked Record")).toBeInTheDocument();
+    expect(
+      screen.getByText(/permanently locked after onboarding/i)
+    ).toBeInTheDocument();
     expect(screen.getByText("Change Password")).toBeInTheDocument();
     expect(screen.getByText("Device Sessions")).toBeInTheDocument();
 
@@ -113,6 +118,23 @@ describe("StudyGenie Settings Page (5-Tab Layout)", () => {
     expect(
       screen.getByText("Language & Regional Formatting")
     ).toBeInTheDocument();
+
+    // Verify Dark Mode switch toggles html.dark and localStorage sg-theme
+    const darkModeSwitch = screen.getByRole("switch", {
+      name: /Dark Mode/i,
+    });
+    expect(darkModeSwitch).toHaveAttribute("aria-checked", "false");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+
+    fireEvent.click(darkModeSwitch);
+    expect(darkModeSwitch).toHaveAttribute("aria-checked", "true");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(localStorage.getItem("sg-theme")).toBe("dark");
+
+    fireEvent.click(darkModeSwitch);
+    expect(darkModeSwitch).toHaveAttribute("aria-checked", "false");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(localStorage.getItem("sg-theme")).toBe("light");
   });
 
   describe("Mobile Layout (<768px)", () => {

@@ -2,7 +2,16 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
-import { Camera, Crop, Lock, Save, Trash2 } from "lucide-react";
+import {
+  Camera,
+  Crop,
+  GraduationCap,
+  Landmark,
+  Lock,
+  Save,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react";
 import { SettingsCard } from "../components/SettingsCard";
 import { SettingRow } from "../components/SettingRow";
 import { AvatarCropModal } from "../components/AvatarCropModal";
@@ -52,8 +61,6 @@ export function ProfileSection({
     resolver: zodResolver(schema),
     defaultValues: {
       displayName: profile.displayName,
-      universityId: profile.universityId,
-      collegeId: profile.collegeId,
       avatarUrl: profile.avatarUrl,
     },
   });
@@ -61,8 +68,6 @@ export function ProfileSection({
   useEffect(() => {
     reset({
       displayName: profile.displayName,
-      universityId: profile.universityId,
-      collegeId: profile.collegeId,
       avatarUrl: profile.avatarUrl,
     });
   }, [profile, reset]);
@@ -72,28 +77,25 @@ export function ProfileSection({
     return () => onDirtyChange("profile", false);
   }, [isDirty, onDirtyChange]);
 
-  const selectedUniversityId = watch("universityId");
   const currentAvatarUrl = watch("avatarUrl");
   const currentDisplayName = watch("displayName");
 
-  const availableColleges = useMemo(() => {
-    const uni = UNIVERSITIES_CATALOG.find((u) => u.id === selectedUniversityId);
-    return uni ? uni.colleges : [];
-  }, [selectedUniversityId]);
-
-  const handleUniversityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextUniId = e.target.value;
-    setValue("universityId", nextUniId, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-    const matchedUni = UNIVERSITIES_CATALOG.find((u) => u.id === nextUniId);
-    const firstCollegeId = matchedUni?.colleges[0]?.id || "";
-    setValue("collegeId", firstCollegeId, {
-      shouldDirty: true,
-      shouldValidate: true,
-    });
-  };
+  const resolvedAcademicAffiliation = useMemo(() => {
+    const uni = UNIVERSITIES_CATALOG.find((u) => u.id === profile.universityId);
+    const col = uni?.colleges.find((c) => c.id === profile.collegeId);
+    return {
+      universityLabel: uni
+        ? isRtl
+          ? uni.nameAr
+          : uni.nameEn
+        : profile.universityId || "—",
+      collegeLabel: col
+        ? isRtl
+          ? col.nameAr
+          : col.nameEn
+        : profile.collegeId || "—",
+    };
+  }, [profile.universityId, profile.collegeId, isRtl]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -136,8 +138,8 @@ export function ProfileSection({
       await onSaveProfile({
         ...profile,
         displayName: values.displayName.trim(),
-        universityId: values.universityId,
-        collegeId: values.collegeId,
+        universityId: profile.universityId,
+        collegeId: profile.collegeId,
         avatarUrl: values.avatarUrl,
       });
       reset(values);
@@ -174,6 +176,18 @@ export function ProfileSection({
       <SettingsCard
         title={t("profile.cardTitle")}
         description={t("profile.cardDescription")}
+        footer={
+          <button
+            type="submit"
+            disabled={!isDirty || isSubmitting}
+            className="inline-flex items-center gap-2 rounded-[12px] bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition-all duration-150 hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+          >
+            <Save className="h-4 w-4" aria-hidden="true" />
+            <span>
+              {isSubmitting ? t("page.saving") : t("page.saveChanges")}
+            </span>
+          </button>
+        }
       >
         {/* Avatar Row */}
         <SettingRow
@@ -275,65 +289,93 @@ export function ProfileSection({
         </SettingRow>
       </SettingsCard>
 
-      {/* Card 2: Cascading University -> College Affiliation */}
+      {/* Card 2: Permanently Locked Academic Affiliation */}
       <SettingsCard
         title={t("profile.academicCardTitle")}
         description={t("profile.academicCardDescription")}
-        footer={
-          <button
-            type="submit"
-            disabled={!isDirty || isSubmitting}
-            className="inline-flex items-center gap-2 rounded-[12px] bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition-all duration-150 hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-          >
-            <Save className="h-4 w-4" aria-hidden="true" />
-            <span>
-              {isSubmitting ? t("page.saving") : t("page.saveChanges")}
-            </span>
-          </button>
+        headerAction={
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{t("profile.academicLockedBadge")}</span>
+          </span>
         }
       >
-        {/* University Select */}
+        {/* Academic Protection Notice */}
+        <div className="py-4">
+          <div className="flex items-start gap-3 rounded-[12px] border border-amber-200/90 bg-amber-50/70 p-3.5 text-xs leading-relaxed text-amber-900">
+            <ShieldAlert
+              className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+              aria-hidden="true"
+            />
+            <div>
+              <span className="font-semibold">
+                {t("profile.academicLockedNoticeTitle")}
+              </span>{" "}
+              <span>{t("profile.academicLockedNoticeBody")}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Read-only University Row */}
         <SettingRow
-          id="profile-university-select"
+          id="profile-university-readonly"
           label={t("profile.universityLabel")}
           helperText={t("profile.universityHelper")}
-          error={errors.universityId?.message}
+          badge={
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              {t("page.readOnly")}
+            </span>
+          }
         >
-          <select
-            id="profile-university-select"
-            value={selectedUniversityId}
-            onChange={handleUniversityChange}
-            className="w-full rounded-[12px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-2xs transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 sm:w-72"
+          <div
+            id="profile-university-readonly"
+            className="flex w-full items-center justify-between gap-2 rounded-[12px] border border-slate-200/80 bg-slate-50 px-3.5 py-2.5 text-sm font-medium text-slate-600 sm:w-80 select-none"
           >
-            <option value="">{t("profile.universityPlaceholder")}</option>
-            {UNIVERSITIES_CATALOG.map((uni) => (
-              <option key={uni.id} value={uni.id}>
-                {isRtl ? uni.nameAr : uni.nameEn}
-              </option>
-            ))}
-          </select>
+            <div className="flex min-w-0 items-center gap-2">
+              <Landmark
+                className="h-4 w-4 shrink-0 text-indigo-600"
+                aria-hidden="true"
+              />
+              <span className="truncate">
+                {resolvedAcademicAffiliation.universityLabel}
+              </span>
+            </div>
+            <span className="shrink-0 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+              {t("profile.verifiedBadge")}
+            </span>
+          </div>
         </SettingRow>
 
-        {/* Cascading College Select */}
+        {/* Read-only College Row */}
         <SettingRow
-          id="profile-college-select"
+          id="profile-college-readonly"
           label={t("profile.collegeLabel")}
           helperText={t("profile.collegeHelper")}
-          error={errors.collegeId?.message}
+          badge={
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              {t("page.readOnly")}
+            </span>
+          }
         >
-          <select
-            id="profile-college-select"
-            disabled={!selectedUniversityId || availableColleges.length === 0}
-            {...register("collegeId")}
-            className="w-full rounded-[12px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-2xs transition-colors duration-150 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 disabled:cursor-not-allowed disabled:bg-slate-100 sm:w-72"
+          <div
+            id="profile-college-readonly"
+            className="flex w-full items-center justify-between gap-2 rounded-[12px] border border-slate-200/80 bg-slate-50 px-3.5 py-2.5 text-sm font-medium text-slate-600 sm:w-80 select-none"
           >
-            <option value="">{t("profile.collegePlaceholder")}</option>
-            {availableColleges.map((col) => (
-              <option key={col.id} value={col.id}>
-                {isRtl ? col.nameAr : col.nameEn}
-              </option>
-            ))}
-          </select>
+            <div className="flex min-w-0 items-center gap-2">
+              <GraduationCap
+                className="h-4 w-4 shrink-0 text-indigo-600"
+                aria-hidden="true"
+              />
+              <span className="truncate">
+                {resolvedAcademicAffiliation.collegeLabel}
+              </span>
+            </div>
+            <span className="shrink-0 rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+              {t("profile.verifiedBadge")}
+            </span>
+          </div>
         </SettingRow>
       </SettingsCard>
 

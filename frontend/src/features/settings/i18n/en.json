@@ -112,12 +112,16 @@
     "emailLabel": "University Email",
     "emailHelper": "Verified academic email address. Cannot be changed.",
     "academicCardTitle": "Academic Affiliation",
-    "academicCardDescription": "Select your university and faculty to align your AI syllabus catalog.",
+    "academicCardDescription": "Your verified university and faculty tied to your course catalog and syllabus engine.",
+    "academicLockedBadge": "Locked Record",
+    "academicLockedNoticeTitle": "Academic Affiliation Notice:",
+    "academicLockedNoticeBody": "Your University and College are permanently locked after onboarding to preserve your course catalogs, syllabus databases, and leaderboard cohorts. To request an institutional transfer, please contact student support.",
+    "verifiedBadge": "Verified",
     "universityLabel": "University",
     "universityHelper": "Your primary accredited higher-education institution.",
     "universityPlaceholder": "Select university...",
     "collegeLabel": "College / Faculty",
-    "collegeHelper": "Cascades based on your selected university.",
+    "collegeHelper": "Your verified college or faculty within the university.",
     "collegePlaceholder": "Select college..."
   },
   "security": {
