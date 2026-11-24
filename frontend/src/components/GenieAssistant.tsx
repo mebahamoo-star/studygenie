@@ -3,7 +3,8 @@ import { useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { Genie } from "@/components/Genie";
 import { useGenie } from "@/lib/genie-context";
-import { X, Sparkles, HelpCircle, Compass, Lightbulb } from "lucide-react";
+import { useOptionalApp } from "@/lib/app-state";
+import { X, Sparkles, Compass, Lightbulb } from "lucide-react";
 
 /**
  * GenieAssistant — Interactive Floating Companion.
@@ -15,6 +16,8 @@ import { X, Sparkles, HelpCircle, Compass, Lightbulb } from "lucide-react";
  */
 export function GenieAssistant() {
   const { message, isVisible, dismiss, pokeGenie, explainPage } = useGenie();
+  const lang = useOptionalApp()?.lang ?? "en";
+  const isAr = lang === "ar";
   const path = useRouterState({ select: (s) => s.location.pathname });
   const bubbleRef = useRef<HTMLDivElement>(null);
   const [displayedText, setDisplayedText] = useState("");
@@ -127,6 +130,7 @@ export function GenieAssistant() {
     >
       {/* 1. Speech Bubble Box */}
       <div
+        dir={isAr ? "rtl" : "ltr"}
         className={cn(
           "relative flex flex-col gap-2 rounded-2xl border bg-card/95 p-4 shadow-2xl backdrop-blur-md",
           "text-sm text-foreground ring-1 ring-black/5 dark:ring-white/10",
@@ -153,16 +157,27 @@ export function GenieAssistant() {
             >
               <span>{currentType.emoji}</span>
               <span>
-                {{
-                  welcome: "مرحباً",
-                  celebrate: "إنجاز!",
-                  encourage: "تشجيع",
-                  tip: "نصيحة",
-                  guide: "دليل الميزة",
-                  feature: "استكشاف",
-                  warn: "تنبيه",
-                  idle: "جني",
-                }[message.type] || "جني"}
+                {(isAr
+                  ? {
+                      welcome: "مرحباً",
+                      celebrate: "إنجاز!",
+                      encourage: "تشجيع",
+                      tip: "نصيحة",
+                      guide: "دليل الميزة",
+                      feature: "استكشاف",
+                      warn: "تنبيه",
+                      idle: "جني",
+                    }
+                  : {
+                      welcome: "Welcome",
+                      celebrate: "Awesome!",
+                      encourage: "Keep Going",
+                      tip: "Tip",
+                      guide: "Page Guide",
+                      feature: "Explore",
+                      warn: "Alert",
+                      idle: "Genie",
+                    })[message.type] || (isAr ? "جني" : "Genie")}
               </span>
             </span>
             {message.title && (
@@ -220,10 +235,10 @@ export function GenieAssistant() {
         <button
           onClick={() => pokeGenie(path)}
           className="text-[10px] font-bold text-muted-foreground hover:text-primary transition flex items-center gap-0.5"
-          title="اضغط للتحدث مع الجني"
+          title={isAr ? "اضغط للتحدث مع الجني" : "Click to chat with Genie"}
         >
           <Sparkles className="h-2.5 w-2.5 text-gold" />
-          <span>اسألني</span>
+          <span>{isAr ? "اسألني" : "Ask me"}</span>
         </button>
       </div>
     </aside>
@@ -236,6 +251,8 @@ export function GenieAssistant() {
  */
 export function GenieFloatButton() {
   const { message, pokeGenie, explainPage } = useGenie();
+  const lang = useOptionalApp()?.lang ?? "en";
+  const isAr = lang === "ar";
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -253,13 +270,14 @@ export function GenieFloatButton() {
       {menuOpen && (
         <div
           role="menu"
+          dir={isAr ? "rtl" : "ltr"}
           aria-label="Genie Quick Options"
-          className="flex flex-col gap-1.5 rounded-2xl border border-primary/25 bg-card/95 p-2 shadow-2xl backdrop-blur-md text-xs font-semibold w-52 mb-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className="flex flex-col gap-1.5 rounded-2xl border border-primary/25 bg-card/95 p-2 shadow-2xl backdrop-blur-md text-xs font-semibold w-56 mb-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
         >
           <div className="px-2 py-1 text-[11px] font-bold text-muted-foreground border-b border-border/40 flex items-center justify-between">
             <span className="flex items-center gap-1">
               <Sparkles className="h-3 w-3 text-gold" />
-              <span>مساعدك الدراسي</span>
+              <span>{isAr ? "مساعدك الدراسي" : "Your Study Assistant"}</span>
             </span>
             <button
               onClick={() => setMenuOpen(false)}
@@ -274,10 +292,13 @@ export function GenieFloatButton() {
               setMenuOpen(false);
               explainPage(path);
             }}
-            className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-accent text-foreground transition"
+            className={cn(
+              "flex items-center gap-2 rounded-xl px-2.5 py-2 hover:bg-accent text-foreground transition",
+              isAr ? "text-right" : "text-left"
+            )}
           >
-            <Compass className="h-3.5 w-3.5 text-cyan-500" />
-            <span>ماذا أفعل في هذه الصفحة؟</span>
+            <Compass className="h-3.5 w-3.5 text-cyan-500 shrink-0" />
+            <span>{isAr ? "ماذا أفعل في هذه الصفحة؟" : "What can I do here?"}</span>
           </button>
 
           <button
@@ -285,10 +306,13 @@ export function GenieFloatButton() {
               setMenuOpen(false);
               pokeGenie(path);
             }}
-            className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-accent text-foreground transition"
+            className={cn(
+              "flex items-center gap-2 rounded-xl px-2.5 py-2 hover:bg-accent text-foreground transition",
+              isAr ? "text-right" : "text-left"
+            )}
           >
-            <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-            <span>نصيحة دراسية سريعة 💡</span>
+            <Lightbulb className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span>{isAr ? "نصيحة دراسية سريعة 💡" : "Quick study tip 💡"}</span>
           </button>
         </div>
       )}

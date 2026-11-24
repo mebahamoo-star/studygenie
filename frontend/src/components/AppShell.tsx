@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Genie } from "./Genie";
-import { useApp } from "@/lib/app-state";
+import { useApp, useOptionalApp } from "@/lib/app-state";
 import { fetchAndSyncExams, loadExamsForUser, isCourseEnrolled, type Exam } from "@/lib/exam";
 import { hasUserEnrolledCourses, getUserCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
@@ -514,6 +514,8 @@ export function PageTitle({
 }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { explainPage } = useGenie();
+  const lang = useOptionalApp()?.lang ?? "en";
+  const isAr = lang === "ar";
 
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -524,10 +526,14 @@ export function PageTitle({
             type="button"
             onClick={() => explainPage(path)}
             className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary transition-all hover:bg-primary/20 hover:scale-105 active:scale-95 shadow-2xs cursor-pointer"
-            title="اضغط لطلب شرح تفاعلي من الجني لهذه الصفحة"
+            title={
+              isAr
+                ? "اضغط لطلب شرح تفاعلي من الجني لهذه الصفحة"
+                : "Click for an interactive Genie guide of this page"
+            }
           >
             <Sparkles className="h-3 w-3 text-gold" />
-            <span>دليل الجني 🧞‍♂️</span>
+            <span>{isAr ? "دليل الجني 🧞‍♂️" : "Genie Guide 🧞‍♂️"}</span>
           </button>
         </div>
         {sub && <p className="mt-1 text-sm text-muted-foreground">{sub}</p>}

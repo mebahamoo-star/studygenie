@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import type { GeniePose } from "@/components/Genie";
+import { useOptionalApp } from "@/lib/app-state";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -51,9 +52,12 @@ interface GenieCtx {
   triggerWarn: (text: string) => void;
 }
 
-const GenieCtxRef = createContext<GenieCtx | null>(null);
+const GLOBAL_GENIE_CTX_KEY = "__studygenie_genie_ctx__";
+const GenieCtxRef: ReturnType<typeof createContext<GenieCtx | null>> =
+  (globalThis as Record<string, any>)[GLOBAL_GENIE_CTX_KEY] ??
+  ((globalThis as Record<string, any>)[GLOBAL_GENIE_CTX_KEY] = createContext<GenieCtx | null>(null));
 
-// ─── Rich Contextual Page Guides ─────────────────────────────────────────────
+// ─── Rich Contextual Page Guides (Bilingual AR / EN) ─────────────────────────
 
 interface PageGuideData {
   title: string;
@@ -65,7 +69,7 @@ interface PageGuideData {
   capabilities: string[];
 }
 
-const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
+const PAGE_GUIDES_AR: Record<string, (name: string) => PageGuideData> = {
   "/login": () => ({
     title: "شاشة تسجيل الدخول 🔑",
     text: "أهلاً بك في بوابة تسجيل الدخول إلى StudyGenie! هنا يمكنك الدخول إلى حسابك الدراسي لمتابعة خطتك وامتحاناتك وبطاقاتك وموادك.",
@@ -171,9 +175,9 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
     ],
   }),
 
-  "/plan": (n) => ({
+  "/plan": () => ({
     title: "جدولك الدراسي المخصص 🗓️",
-    text: `هذه خطتك الدراسية الذكية! تم تصميمها لتوزيع الجهد بالتساوي حتى موعد الاختبار، مع مراعاة أيام المراجعة والراحة.`,
+    text: "هذه خطتك الدراسية الذكية! تم تصميمها لتوزيع الجهد بالتساوي حتى موعد الاختبار، مع مراعاة أيام المراجعة والراحة.",
     pose: "mid",
     type: "guide",
     duration: 9000,
@@ -188,9 +192,9 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
     ],
   }),
 
-  "/flashcards": (n) => ({
+  "/flashcards": () => ({
     title: "البطاقات التعليمية والاسترجاع النشط 🃏",
-    text: `مرحباً بك في أقوى تقنية لتثبيت الحفظ! نظام البطاقات التعليمية يعتمد على الاسترجاع النشط والتكرار المتباعد.`,
+    text: "مرحباً بك في أقوى تقنية لتثبيت الحفظ! نظام البطاقات التعليمية يعتمد على الاسترجاع النشط والتكرار المتباعد.",
     pose: "studying",
     type: "feature",
     duration: 9000,
@@ -205,9 +209,9 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
     ],
   }),
 
-  "/quiz": (n) => ({
+  "/quiz": () => ({
     title: "قاعة الاختبارات والتقييم الذاتي 🧠",
-    text: `وقت التحدي الحقيقي! هنا تختبر مدى فهمك واستيعابك للمادة قبل دخول الامتحان الفعلي.`,
+    text: "وقت التحدي الحقيقي! هنا تختبر مدى فهمك واستيعابك للمادة قبل دخول الامتحان الفعلي.",
     pose: "high",
     type: "feature",
     duration: 9000,
@@ -222,9 +226,9 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
     ],
   }),
 
-  "/pomodoro": (n) => ({
+  "/pomodoro": () => ({
     title: "مؤقت بومودورو للتركيز العميق ⏱️",
-    text: `تخلص من التسويف والتشتت! تقنية بومودورو تقسم وقتك إلى جلسات تركيز مكثفة مدتها 25 دقيقة تفصل بينها فترات راحة قصيرة.`,
+    text: "تخلص من التسويف والتشتت! تقنية بومودورو تقسم وقتك إلى جلسات تركيز مكثفة مدتها 25 دقيقة تفصل بينها فترات راحة قصيرة.",
     pose: "mid",
     type: "guide",
     duration: 9000,
@@ -239,9 +243,9 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
     ],
   }),
 
-  "/leaderboard": (n) => ({
+  "/leaderboard": () => ({
     title: "لوحة الشرف والمتصدرين 🏆",
-    text: `ساحة المنافسة الإيجابية! تعرف على ترتيبك بين طلبة كليتك وجامعتك وتحدى نفسك للوصول للقمة.`,
+    text: "ساحة المنافسة الإيجابية! تعرف على ترتيبك بين طلبة كليتك وجامعتك وتحدى نفسك للوصول للقمة.",
     pose: "high",
     type: "encourage",
     duration: 8000,
@@ -255,9 +259,9 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
     ],
   }),
 
-  "/profile": (n) => ({
+  "/profile": () => ({
     title: "ملفك الأكاديمي وإنجازاتك 👤",
-    text: `سجلك الشخصي الذي يوثق رحلتك! هنا ترى ملخص ساعات دراستك، أوسمتك، ومستواك الأكاديمي.`,
+    text: "سجلك الشخصي الذي يوثق رحلتك! هنا ترى ملخص ساعات دراستك، أوسمتك، ومستواك الأكاديمي.",
     pose: "idle",
     type: "guide",
     duration: 7000,
@@ -271,9 +275,9 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
     ],
   }),
 
-  "/settings": (n) => ({
+  "/settings": () => ({
     title: "إعدادات التجربة الدراسية ⚙️",
-    text: `خصص رفيقك الدراسي StudyGenie ليناسب أسلوب حياتك تماماً!`,
+    text: "خصص رفيقك الدراسي StudyGenie ليناسب أسلوب حياتك تماماً!",
     pose: "idle",
     type: "tip",
     duration: 7000,
@@ -287,9 +291,9 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
     ],
   }),
 
-  "/exam-checkin": (n) => ({
+  "/exam-checkin": () => ({
     title: "تسجيل جدول الامتحانات 📝",
-    text: `الخطوة الأولى للنجاح! حدد مواعيد امتحاناتك لنبني لك جدولاً زمنياً يحميك من تراكم المواد.`,
+    text: "الخطوة الأولى للنجاح! حدد مواعيد امتحاناتك لنبني لك جدولاً زمنياً يحميك من تراكم المواد.",
     pose: "studying",
     type: "guide",
     duration: 8000,
@@ -318,17 +322,270 @@ const PAGE_GUIDES: Record<string, (name: string) => PageGuideData> = {
   }),
 };
 
+const PAGE_GUIDES_EN: Record<string, (name: string) => PageGuideData> = {
+  "/login": () => ({
+    title: "Sign In Screen 🔑",
+    text: "Welcome to the StudyGenie sign-in portal! Log in to access your study plan, upcoming exams, flashcards, and courses.",
+    pose: "mid",
+    type: "guide",
+    duration: 9000,
+    capabilities: [
+      "Sign in directly with your email and password",
+      "One-click sign in with Google or Microsoft",
+      "Enable 'Remember me' to stay signed in on this device",
+      "Reset a forgotten password via the 'Forgot password?' link",
+      "Switch to 'Create account' if you're new and want to start for free",
+    ],
+    tips: [
+      "Use your university email to automatically match your college courses and peers!",
+      "You can toggle dark/light mode or switch language from the top bar.",
+    ],
+  }),
+
+  "/signup": () => ({
+    title: "Create Your Study Account ✨",
+    text: "Welcome to StudyGenie! Creating your account is the first step toward organizing your courses, summarizing slides, and acing your exams.",
+    pose: "high",
+    type: "welcome",
+    duration: 9000,
+    capabilities: [
+      "Register with your name, email, and a secure password",
+      "Instant one-click sign up using Google or Microsoft",
+      "Link your account to your university, faculty, and major",
+      "Start building study plans, flashcards, and quizzes immediately for free",
+    ],
+    tips: [
+      "Signing up is completely free and takes less than a minute!",
+    ],
+  }),
+
+  "/forgot-password": () => ({
+    title: "Password Recovery 🔐",
+    text: "No worries! Enter your email address and we'll send you a secure link to reset your password right away.",
+    pose: "studying",
+    type: "tip",
+    duration: 8000,
+    capabilities: [
+      "Enter the email address registered to your account",
+      "Receive a secure password reset link within seconds",
+      "Return to the login screen as soon as you're done",
+    ],
+    tips: [
+      "If you don't see the email within a minute, check your Spam/Junk folder.",
+    ],
+  }),
+
+  "/": () => ({
+    title: "Welcome to StudyGenie! 🧞‍♂️✨",
+    text: "Your AI-powered smart study companion for university students! Organize your time, summarize lectures, and ace your exams.",
+    pose: "high",
+    type: "welcome",
+    duration: 9000,
+    capabilities: [
+      "Turn lecture slides & PDFs into active-recall flashcards and smart summaries",
+      "Build balanced daily study plans with a smart countdown to exam day",
+      "Practice in an interactive quiz arena with MCQs and short-answer questions",
+      "Stay focused with a Pomodoro timer and friendly leaderboard competition",
+    ],
+    tips: [
+      "Click 'Get Started' or 'Sign In' to start organizing your courses right away!",
+    ],
+  }),
+
+  "/dashboard": (n) => ({
+    title: "Dashboard & Command Center 🧭",
+    text: `Welcome back, ${n}! This is your main dashboard to track daily progress, remaining tasks, and upcoming exam countdowns.`,
+    pose: "high",
+    type: "guide",
+    duration: 9000,
+    capabilities: [
+      "Track and complete daily tasks to earn XP points",
+      "Monitor your daily Streak bar to build a consistent habit",
+      "View smart countdowns for each upcoming exam by urgency",
+      "Join course challenges with classmates at your university",
+    ],
+    tips: [
+      "Completing just one task a day keeps your Streak alive!",
+      "Click any course to join the challenge and generate an instant study plan.",
+    ],
+  }),
+
+  "/courses": (n) => ({
+    title: "Courses & Materials Library 📚",
+    text: `Here is your course hub, ${n}! Browse your courses, upload lecture files, and extract smart chapters with AI.`,
+    pose: "studying",
+    type: "feature",
+    duration: 9000,
+    capabilities: [
+      "Add courses tailored to your university and faculty",
+      "Upload lecture slides and textbooks in PDF or PPTX format",
+      "Extract chapters and key topics automatically with AI",
+      "Generate complete study packs (flashcards + quizzes) in one click",
+    ],
+    tips: [
+      "The cleaner your uploaded slides, the more accurate your generated cards and questions!",
+      "Check course status anytime to make sure your study plan is ready.",
+    ],
+  }),
+
+  "/plan": () => ({
+    title: "Your Personalized Study Plan 🗓️",
+    text: "Here is your smart study schedule! It distributes your workload evenly until exam day while leaving room for review and rest.",
+    pose: "mid",
+    type: "guide",
+    duration: 9000,
+    capabilities: [
+      "Spread chapters day by day based on your exam dates",
+      "Reserve focused review blocks in the final days before exams",
+      "Adjust daily study hours and rest days to fit your routine",
+    ],
+    tips: [
+      "Two focused hours beat six distracted hours every time.",
+      "Check off daily tasks in your plan to log progress and earn XP.",
+    ],
+  }),
+
+  "/flashcards": () => ({
+    title: "Flashcards & Active Recall 🃏",
+    text: "Welcome to the most effective way to lock in memory! Flashcards use active recall and spaced repetition.",
+    pose: "studying",
+    type: "feature",
+    duration: 9000,
+    capabilities: [
+      "Flip cards to test your memory before revealing the answer",
+      "Rate card difficulty so harder concepts reappear more often",
+      "Earn instant XP with every card you master",
+    ],
+    tips: [
+      "Try saying or writing the answer out loud before flipping the card!",
+      "Review tricky cards in the morning or right before sleep for stronger retention.",
+    ],
+  }),
+
+  "/quiz": () => ({
+    title: "Quiz Arena & Self-Assessment 🧠",
+    text: "Challenge time! Test how well you truly understand the material before walking into the real exam.",
+    pose: "high",
+    type: "feature",
+    duration: 9000,
+    capabilities: [
+      "Practice with multiple-choice, true/false, and short-answer questions",
+      "Get instant grading with clear explanations for every answer",
+      "Save past scores and track your improvement over time",
+    ],
+    tips: [
+      "Every mistake in a practice quiz is a gap caught early before exam day!",
+      "Scoring 80%+ earns bonus XP and unlocks mastery badges.",
+    ],
+  }),
+
+  "/pomodoro": () => ({
+    title: "Pomodoro Deep Focus Timer ⏱️",
+    text: "Beat procrastination and distractions! Pomodoro splits your study time into 25-minute deep focus sprints with short breaks.",
+    pose: "mid",
+    type: "guide",
+    duration: 9000,
+    capabilities: [
+      "25-minute distraction-free focus sessions",
+      "5-minute breaks to refresh your mind and hydrate",
+      "Longer break after every 4 completed focus sessions",
+    ],
+    tips: [
+      "Put your phone on airplane mode during each 25-minute sprint.",
+      "Use your 5-minute break to stand up and step away from the screen.",
+    ],
+  }),
+
+  "/leaderboard": () => ({
+    title: "Leaderboard & Hall of Fame 🏆",
+    text: "Friendly competition! See how you rank among students in your faculty and university, and push yourself to the top.",
+    pose: "high",
+    type: "encourage",
+    duration: 8000,
+    capabilities: [
+      "View overall rankings by total XP earned",
+      "Compete weekly for top spots and achievement badges",
+      "Filter rankings by major and university",
+    ],
+    tips: [
+      "Daily consistency and quizzes give you the fastest XP boost up the ranks!",
+    ],
+  }),
+
+  "/profile": () => ({
+    title: "Your Academic Profile & Achievements 👤",
+    text: "Your personal journey log! View your total study hours, earned badges, and academic level.",
+    pose: "idle",
+    type: "guide",
+    duration: 7000,
+    capabilities: [
+      "Review total study hours and experience points (XP)",
+      "Browse unlocked badges and achievement milestones",
+      "Verify your university and faculty details",
+    ],
+    tips: [
+      "Every badge reflects a real study habit you built!",
+    ],
+  }),
+
+  "/settings": () => ({
+    title: "Study Experience Settings ⚙️",
+    text: "Customize StudyGenie to match your study style, language, and daily schedule!",
+    pose: "idle",
+    type: "tip",
+    duration: 7000,
+    capabilities: [
+      "Adjust your preferred daily study hours",
+      "Switch between Dark Mode, Light Mode, and language",
+      "Manage exam and review reminder notifications",
+    ],
+    tips: [
+      "Dark Mode helps reduce eye strain during late-night study sessions.",
+    ],
+  }),
+
+  "/exam-checkin": () => ({
+    title: "Exam Schedule Check-In 📝",
+    text: "First step to success! Enter your exam dates so we can build a timeline that prevents last-minute cramming.",
+    pose: "studying",
+    type: "guide",
+    duration: 8000,
+    capabilities: [
+      "Add midterm and final exam dates",
+      "Automatically calculate days left and activate urgency alerts",
+    ],
+    tips: [
+      "Even if an exam is a month away, adding it early gives you a stress-free plan!",
+    ],
+  }),
+
+  "/onboarding": () => ({
+    title: "University Profile Setup 🎓",
+    text: "Let's get started! Choose your university, faculty, and major so we can tailor courses and tools for your studies.",
+    pose: "high",
+    type: "welcome",
+    duration: 8000,
+    capabilities: [
+      "Select your university, faculty, and academic year",
+      "Auto-personalize your recommended courses",
+    ],
+    tips: [
+      "Make sure to pick your exact faculty so you can see shared courses with classmates!",
+    ],
+  }),
+};
+
 // ─── Path Resolver ────────────────────────────────────────────────────────────
 
-function resolveGuideKey(path: string): string | null {
+function resolveGuideKey(path: string, guides: Record<string, (name: string) => PageGuideData>): string | null {
   if (!path) return null;
   const clean = path.split("?")[0].replace(/\/+$/, "") || "/";
 
   // 1. Direct exact match
-  if (PAGE_GUIDES[clean]) return clean;
+  if (guides[clean]) return clean;
 
   // 2. Prefix matching ordered by longest key to shortest
-  const sortedKeys = Object.keys(PAGE_GUIDES).sort((a, b) => b.length - a.length);
+  const sortedKeys = Object.keys(guides).sort((a, b) => b.length - a.length);
   for (const k of sortedKeys) {
     if (k === "/") continue;
     if (clean.startsWith(k)) return k;
@@ -342,7 +599,7 @@ function resolveGuideKey(path: string): string | null {
 
 // ─── Playful Poking & Dialogue Lines ─────────────────────────────────────────
 
-const POKE_RESPONSES = [
+const POKE_RESPONSES_AR = [
   { text: "أهلاً بك! معك الجني السحري 🧞‍♂️✨ جاهز للدراسة والتألق؟", pose: "high" as GeniePose },
   { text: "تذكر: خطوة صغيرة يومياً تبني مستقبلك الكبير! أنا معك بكل خطوة 💪", pose: "mid" as GeniePose },
   { text: "هل واجهت مفهوماً صعباً؟ افتح البطاقات أو الكويز وسأساعدك تثبته في ثوانٍ!", pose: "studying" as GeniePose },
@@ -351,9 +608,19 @@ const POKE_RESPONSES = [
   { text: "أنا فخور بجهدك والتزامك! يلا نكسب نقاط XP جديدة اليوم 🌟", pose: "high" as GeniePose },
 ];
 
+const POKE_RESPONSES_EN = [
+  { text: "Hey there! Magic Genie here 🧞‍♂️✨ Ready to study and shine?", pose: "high" as GeniePose },
+  { text: "Remember: one small step each day builds your big future! I'm right here with you 💪", pose: "mid" as GeniePose },
+  { text: "Stuck on a tough concept? Open Flashcards or Quiz and let's lock it in!", pose: "studying" as GeniePose },
+  { text: "Top grades aren't about all-nighters — they're about smart consistency and timed breaks ⏱️", pose: "studying" as GeniePose },
+  { text: "Not sure what to do on this page? Click 'Explain this page' and I'll walk you through it! 🧭", pose: "mid" as GeniePose },
+  { text: "I'm proud of your effort! Let's earn some fresh XP today 🌟", pose: "high" as GeniePose },
+];
+
 // ─── Provider Implementation ─────────────────────────────────────────────────
 
 export function GenieProvider({ children }: { children: ReactNode }) {
+  const lang = useOptionalApp()?.lang ?? "en";
   const [message, setMessage] = useState<GenieMessage | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -369,6 +636,11 @@ export function GenieProvider({ children }: { children: ReactNode }) {
     setIsVisible(false);
     setTimeout(() => setMessage(null), 300);
   }, [clearTimers]);
+
+  // Dismiss any open bubble when language changes so stale-language text isn't left on screen
+  useEffect(() => {
+    dismiss();
+  }, [lang, dismiss]);
 
   const showMessage = useCallback(
     (msg: Omit<GenieMessage, "id">) => {
@@ -389,24 +661,29 @@ export function GenieProvider({ children }: { children: ReactNode }) {
 
   const explainPage = useCallback(
     (page: string, userName?: string) => {
-      const n = userName ? userName.split(" ")[0] : "يا صديقي";
-      const key = resolveGuideKey(page);
+      const isAr = lang === "ar";
+      const guides = isAr ? PAGE_GUIDES_AR : PAGE_GUIDES_EN;
+      const n = userName ? userName.split(" ")[0] : isAr ? "يا صديقي" : "friend";
+      const key = resolveGuideKey(page, guides);
 
-      if (!key || !PAGE_GUIDES[key]) {
-        // Fallback for general pages (admin or custom routes)
+      if (!key || !guides[key]) {
         showMessage({
-          title: "رفيقك الدراسي StudyGenie 🧞‍♂️",
-          text: `أهلاً بك يا ${n}! أنا جنيك الدراسي ومساعدك في المنصة. إذا كان لديك أي استفسار أو احتجت نصيحة دراسية أنا معك دائماً!`,
+          title: isAr ? "رفيقك الدراسي StudyGenie 🧞‍♂️" : "Your StudyGenie Companion 🧞‍♂️",
+          text: isAr
+            ? `أهلاً بك يا ${n}! أنا جنيك الدراسي ومساعدك في المنصة. إذا كان لديك أي استفسار أو احتجت نصيحة دراسية أنا معك دائماً!`
+            : `Hey ${n}! I'm your StudyGenie companion. Anytime you need guidance or a quick study tip, I'm right here!`,
           pose: "idle",
           type: "guide",
           duration: 7000,
           actions: [
             {
-              label: "أعطني نصيحة دراسية 💡",
+              label: isAr ? "أعطني نصيحة دراسية 💡" : "Give me a study tip 💡",
               onClick: () => {
                 showMessage({
-                  title: "نصيحة دراسية 💡",
-                  text: "💡 الاستمرارية الهادئة والتكرار المتباعد سر تثبيت أي مادة معقدة!",
+                  title: isAr ? "نصيحة دراسية 💡" : "Study Tip 💡",
+                  text: isAr
+                    ? "💡 الاستمرارية الهادئة والتكرار المتباعد سر تثبيت أي مادة معقدة!"
+                    : "💡 Steady consistency and spaced repetition are the secret to mastering any tough subject!",
                   pose: "studying",
                   type: "tip",
                   duration: 6000,
@@ -414,7 +691,7 @@ export function GenieProvider({ children }: { children: ReactNode }) {
               },
             },
             {
-              label: "فهمت عليك 👍",
+              label: isAr ? "فهمت عليك 👍" : "Got it 👍",
               onClick: () => dismiss(),
               variant: "primary",
             },
@@ -423,9 +700,10 @@ export function GenieProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const data = PAGE_GUIDES[key](n);
+      const data = guides[key](n);
       const bulletPoints = data.capabilities.map((c) => `• ${c}`).join("\n");
-      const fullText = `${data.text}\n\nماذا يمكنك أن تفعل هنا:\n${bulletPoints}`;
+      const heading = isAr ? "ماذا يمكنك أن تفعل هنا:" : "What you can do here:";
+      const fullText = `${data.text}\n\n${heading}\n${bulletPoints}`;
 
       showMessage({
         title: data.title,
@@ -435,11 +713,11 @@ export function GenieProvider({ children }: { children: ReactNode }) {
         duration: 0, // sticky until user interacts
         actions: [
           {
-            label: "💡 أعطني نصيحة",
+            label: isAr ? "💡 أعطني نصيحة" : "💡 Give me a tip",
             onClick: () => {
               const tip = data.tips[Math.floor(Math.random() * data.tips.length)];
               showMessage({
-                title: "نصيحة سريعة من الجني 💡",
+                title: isAr ? "نصيحة سريعة من الجني 💡" : "Quick Genie Tip 💡",
                 text: tip,
                 pose: "studying",
                 type: "tip",
@@ -448,14 +726,14 @@ export function GenieProvider({ children }: { children: ReactNode }) {
             },
           },
           {
-            label: "فهمت عليك 👍",
+            label: isAr ? "فهمت عليك 👍" : "Got it 👍",
             onClick: () => dismiss(),
             variant: "primary",
           },
         ],
       });
     },
-    [showMessage, dismiss]
+    [lang, showMessage, dismiss]
   );
 
   const triggerPageWelcome = useCallback(
@@ -465,15 +743,17 @@ export function GenieProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const key = `${page}-${userName || ""}`;
+      const isAr = lang === "ar";
+      const guides = isAr ? PAGE_GUIDES_AR : PAGE_GUIDES_EN;
+      const key = `${page}-${userName || ""}-${lang}`;
       if (shownPagesRef.current.has(key)) return;
       shownPagesRef.current.add(key);
 
-      const guideKey = resolveGuideKey(page);
-      if (!guideKey || !PAGE_GUIDES[guideKey]) return;
+      const guideKey = resolveGuideKey(page, guides);
+      if (!guideKey || !guides[guideKey]) return;
 
-      const n = userName ? userName.split(" ")[0] : "أيها العالم";
-      const guide = PAGE_GUIDES[guideKey](n);
+      const n = userName ? userName.split(" ")[0] : isAr ? "أيها العالم" : "scholar";
+      const guide = guides[guideKey](n);
 
       setTimeout(() => {
         showMessage({
@@ -484,11 +764,11 @@ export function GenieProvider({ children }: { children: ReactNode }) {
           duration: guide.duration || 8000,
           actions: [
             {
-              label: "ماذا أستطيع أن أفعل هنا؟ 🧭",
+              label: isAr ? "ماذا أستطيع أن أفعل هنا؟ 🧭" : "What can I do here? 🧭",
               onClick: () => explainPage(page, userName),
             },
             {
-              label: "شكراً يا جني ✨",
+              label: isAr ? "شكراً يا جني ✨" : "Thanks, Genie ✨",
               onClick: () => dismiss(),
               variant: "primary",
             },
@@ -496,17 +776,19 @@ export function GenieProvider({ children }: { children: ReactNode }) {
         });
       }, 700);
     },
-    [showMessage, explainPage, dismiss]
+    [lang, showMessage, explainPage, dismiss]
   );
 
   const pokeGenie = useCallback(
     (currentPage?: string) => {
-      const idx = pokeIndexRef.current % POKE_RESPONSES.length;
+      const isAr = lang === "ar";
+      const pool = isAr ? POKE_RESPONSES_AR : POKE_RESPONSES_EN;
+      const idx = pokeIndexRef.current % pool.length;
       pokeIndexRef.current++;
-      const resp = POKE_RESPONSES[idx];
+      const resp = pool[idx];
 
       showMessage({
-        title: "حديث مع الجني 🧞‍♂️",
+        title: isAr ? "حديث مع الجني 🧞‍♂️" : "Chat with Genie 🧞‍♂️",
         text: resp.text,
         pose: resp.pose,
         type: "encourage",
@@ -514,70 +796,70 @@ export function GenieProvider({ children }: { children: ReactNode }) {
         actions: currentPage
           ? [
               {
-                label: "اشرح لي هذه الصفحة 📖",
+                label: isAr ? "اشرح لي هذه الصفحة 📖" : "Explain this page 📖",
                 onClick: () => explainPage(currentPage),
               },
               {
-                label: "أحسنت! 🚀",
+                label: isAr ? "أحسنت! 🚀" : "Awesome! 🚀",
                 onClick: () => dismiss(),
               },
             ]
           : undefined,
       });
     },
-    [showMessage, explainPage, dismiss]
+    [lang, showMessage, explainPage, dismiss]
   );
 
   const triggerCelebration = useCallback(
     (text: string, title?: string) => {
       showMessage({
-        title: title || "إنجاز رائع! 🎉",
+        title: title || (lang === "ar" ? "إنجاز رائع! 🎉" : "Great Achievement! 🎉"),
         text,
         pose: "high",
         type: "celebrate",
         duration: 7000,
       });
     },
-    [showMessage]
+    [lang, showMessage]
   );
 
   const triggerEncourage = useCallback(
     (text: string) => {
       showMessage({
-        title: "واصل يا بطل! 💪",
+        title: lang === "ar" ? "واصل يا بطل! 💪" : "Keep Going, Champ! 💪",
         text,
         pose: "mid",
         type: "encourage",
         duration: 6500,
       });
     },
-    [showMessage]
+    [lang, showMessage]
   );
 
   const triggerTip = useCallback(
     (text: string) => {
       showMessage({
-        title: "نصيحة دراسية 💡",
+        title: lang === "ar" ? "نصيحة دراسية 💡" : "Study Tip 💡",
         text,
         pose: "studying",
         type: "tip",
         duration: 7000,
       });
     },
-    [showMessage]
+    [lang, showMessage]
   );
 
   const triggerWarn = useCallback(
     (text: string) => {
       showMessage({
-        title: "تنبيه هام ⚠️",
+        title: lang === "ar" ? "تنبيه هام ⚠️" : "Heads Up ⚠️",
         text,
         pose: "low",
         type: "warn",
         duration: 8000,
       });
     },
-    [showMessage]
+    [lang, showMessage]
   );
 
   return (

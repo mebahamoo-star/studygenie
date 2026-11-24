@@ -246,7 +246,7 @@ function Dashboard() {
 
   const nav = useNavigate();
 
-  const { user, points, streak } = useApp();
+  const { user, points, streak, lang } = useApp();
   const { triggerCelebration, triggerEncourage } = useGenie();
 
   const todayStr = toLocalDateStr(new Date());
@@ -848,7 +848,11 @@ function Dashboard() {
       setSuccessModalOpen(true);
 
       toast.success(`Joined "${ch.courseName}" challenge! Syllabus, plan, cards & quizzes ready ✨`);
-      triggerCelebration(`🎓 انضممت لـ "${ch.courseName}"! خطتك الدراسية جاهزة. يلا نبدأ! 🚀`);
+      triggerCelebration(
+        lang === "ar"
+          ? `🎓 انضممت لـ "${ch.courseName}"! خطتك الدراسية جاهزة. يلا نبدأ! 🚀`
+          : `🎓 Joined "${ch.courseName}"! Your study plan is ready. Let's go! 🚀`
+      );
 
     } catch (err: any) {
 
@@ -1650,12 +1654,25 @@ function Dashboard() {
     if (!isDone) {
       const completedCount = nextList.length;
       const totalCount = tasks.length || 1;
+      const firstName = user?.fullName?.split(" ")[0];
       if (completedCount === totalCount && totalCount > 0) {
-        triggerCelebration(`🎉 مبروك! أكملت كل مهام اليوم! أنت نجم حقيقي يا ${user?.fullName?.split(" ")[0] || "بطل"}! 🌟`);
+        triggerCelebration(
+          lang === "ar"
+            ? `🎉 مبروك! أكملت كل مهام اليوم! أنت نجم حقيقي يا ${firstName || "بطل"}! 🌟`
+            : `🎉 Congrats! You completed all of today's tasks! You're a star, ${firstName || "champ"}! 🌟`
+        );
       } else if (completedCount === Math.ceil(totalCount / 2)) {
-        triggerEncourage(`💪 نصف الطريق! أكملت ${completedCount} من ${totalCount} مهام — استمر، أنت رائع!`);
+        triggerEncourage(
+          lang === "ar"
+            ? `💪 نصف الطريق! أكملت ${completedCount} من ${totalCount} مهام — استمر، أنت رائع!`
+            : `💪 Halfway there! You've finished ${completedCount} of ${totalCount} tasks — keep it up!`
+        );
       } else if (completedCount === 1) {
-        triggerEncourage(`🚀 بداية رائعة! أول مهمة خلصت — المومنتم بيبدأ هيك!`);
+        triggerEncourage(
+          lang === "ar"
+            ? `🚀 بداية رائعة! أول مهمة خلصت — المومنتم بيبدأ هيك!`
+            : `🚀 Great start! First task done — that's how momentum begins!`
+        );
       }
     }
 

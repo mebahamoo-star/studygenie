@@ -3,6 +3,7 @@ import { Genie, type GeniePose } from "@/components/Genie";
 import { Sparkles, ChevronRight, ChevronLeft, BookOpen, Clock, Trophy } from "lucide-react";
 import { playWaterDropSound } from "@/lib/sound";
 import { cn } from "@/lib/utils";
+import { useOptionalApp } from "@/lib/app-state";
 
 interface FeatureTour {
   id: number;
@@ -14,7 +15,7 @@ interface FeatureTour {
   accent: string;
 }
 
-const TOUR_FEATURES: FeatureTour[] = [
+const TOUR_FEATURES_AR: FeatureTour[] = [
   {
     id: 1,
     title: "تلخيص المواد وتوليد البطاقات تلقائياً",
@@ -47,11 +48,51 @@ const TOUR_FEATURES: FeatureTour[] = [
   },
 ];
 
-const POKE_QUOTES = [
+const TOUR_FEATURES_EN: FeatureTour[] = [
+  {
+    id: 1,
+    title: "Auto-Summarize Slides & Generate Flashcards",
+    tag: "Smart AI Engine 📚",
+    pose: "studying",
+    description:
+      "Upload your lecture slides and PDFs (PDF or PPTX), and I'll extract chapters and generate smart active-recall flashcards in seconds.",
+    icon: BookOpen,
+    accent: "from-sky-500/20 to-blue-600/10 border-sky-400/30 text-sky-400",
+  },
+  {
+    id: 2,
+    title: "Balanced Study Plans & Exam Countdowns",
+    tag: "Smart Scheduling ⏱️",
+    pose: "mid",
+    description:
+      "Log your exam dates and I'll build a daily plan that balances workload, review days, and breaks so you're ready without last-minute cramming.",
+    icon: Clock,
+    accent: "from-amber-500/20 to-orange-600/10 border-amber-400/30 text-amber-400",
+  },
+  {
+    id: 3,
+    title: "Interactive Quizzes, XP Points & Challenges",
+    tag: "Motivating & Fun 🏆",
+    pose: "high",
+    description:
+      "Test your understanding with instant grading and clear explanations, earn XP, keep your Streak alive, and climb your college leaderboard!",
+    icon: Trophy,
+    accent: "from-emerald-500/20 to-teal-600/10 border-emerald-400/30 text-emerald-400",
+  },
+];
+
+const POKE_QUOTES_AR = [
   "✨ مرحباً يا بطل! أنا جاهز لمساعدتك في رحلتك الدراسية!",
   "🧞‍♂️ اضغط على الميزات لتتعرف أكثر على ما يمكنني فعله لأجلك!",
   "💡 هل تعلم أن الدراسة 25 دقيقة يومياً بانتظام تضاعف حفظك؟",
   "🌟 دراستك معي ستكون أسهل وأمتع بكثير!",
+];
+
+const POKE_QUOTES_EN = [
+  "✨ Hey champ! I'm ready to help you crush your study goals!",
+  "🧞‍♂️ Click through the features to see everything I can do for you!",
+  "💡 Did you know studying 25 focused minutes daily doubles retention?",
+  "🌟 Studying with me is faster, calmer, and way more fun!",
 ];
 
 /**
@@ -59,25 +100,35 @@ const POKE_QUOTES = [
  * Provides desktop interactive showcase and mobile adaptive banner.
  */
 export function AuthGenieDesktopPresenter({ isSignup = false }: { isSignup?: boolean }) {
+  const lang = useOptionalApp()?.lang ?? "en";
+  const isAr = lang === "ar";
+  const features = isAr ? TOUR_FEATURES_AR : TOUR_FEATURES_EN;
+  const pokeQuotes = isAr ? POKE_QUOTES_AR : POKE_QUOTES_EN;
+
   const [activeIdx, setActiveIdx] = useState(0);
   const [pokeQuote, setPokeQuote] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // Auto-cycle through features every 7 seconds unless user interacted
+  // Clear poke quote when language changes
+  useEffect(() => {
+    setPokeQuote(null);
+  }, [lang]);
+
+  // Auto-cycle through features every 7.5 seconds
   useEffect(() => {
     const timer = setInterval(() => {
-      setActiveIdx((prev) => (prev + 1) % TOUR_FEATURES.length);
+      setActiveIdx((prev) => (prev + 1) % features.length);
     }, 7500);
     return () => clearInterval(timer);
-  }, []);
+  }, [features.length]);
 
-  const feature = TOUR_FEATURES[activeIdx];
+  const feature = features[activeIdx];
 
   const handleNext = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsAnimating(true);
     playWaterDropSound();
-    setActiveIdx((prev) => (prev + 1) % TOUR_FEATURES.length);
+    setActiveIdx((prev) => (prev + 1) % features.length);
     setTimeout(() => setIsAnimating(false), 250);
   };
 
@@ -85,19 +136,22 @@ export function AuthGenieDesktopPresenter({ isSignup = false }: { isSignup?: boo
     e.stopPropagation();
     setIsAnimating(true);
     playWaterDropSound();
-    setActiveIdx((prev) => (prev - 1 + TOUR_FEATURES.length) % TOUR_FEATURES.length);
+    setActiveIdx((prev) => (prev - 1 + features.length) % features.length);
     setTimeout(() => setIsAnimating(false), 250);
   };
 
   const handleGeniePoke = () => {
     playWaterDropSound();
-    const randomQuote = POKE_QUOTES[Math.floor(Math.random() * POKE_QUOTES.length)];
+    const randomQuote = pokeQuotes[Math.floor(Math.random() * pokeQuotes.length)];
     setPokeQuote(randomQuote);
     setTimeout(() => setPokeQuote(null), 5000);
   };
 
   return (
-    <div className="relative z-10 flex flex-col items-center justify-center gap-6 max-w-lg w-full px-6 select-none">
+    <div
+      dir={isAr ? "rtl" : "ltr"}
+      className="relative z-10 flex flex-col items-center justify-center gap-6 max-w-lg w-full px-6 select-none"
+    >
       {/* 1. Interactive Speech Bubble Above Character */}
       <div
         className={cn(
@@ -112,11 +166,17 @@ export function AuthGenieDesktopPresenter({ isSignup = false }: { isSignup?: boo
         <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/15 text-white">
             <Sparkles className="h-3 w-3 text-amber-300" />
-            <span>{pokeQuote ? "رسالة خاصة من الجني" : feature.tag}</span>
+            <span>
+              {pokeQuote
+                ? isAr
+                  ? "رسالة خاصة من الجني"
+                  : "Special message from Genie"
+                : feature.tag}
+            </span>
           </span>
 
           <span className="text-[11px] font-semibold text-white/70">
-            {activeIdx + 1} / {TOUR_FEATURES.length}
+            {activeIdx + 1} / {features.length}
           </span>
         </div>
 
@@ -146,7 +206,7 @@ export function AuthGenieDesktopPresenter({ isSignup = false }: { isSignup?: boo
         <div className="flex items-center justify-between pt-3 mt-2 border-t border-white/10">
           {/* Dots */}
           <div className="flex items-center gap-1.5">
-            {TOUR_FEATURES.map((_, i) => (
+            {features.map((_, i) => (
               <button
                 key={i}
                 onClick={(e) => {
@@ -170,14 +230,14 @@ export function AuthGenieDesktopPresenter({ isSignup = false }: { isSignup?: boo
               className="grid h-7 w-7 place-items-center rounded-lg bg-white/10 hover:bg-white/20 text-white transition active:scale-95"
               aria-label="Previous Feature"
             >
-              <ChevronRight className="h-4 w-4" />
+              {isAr ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
             </button>
             <button
               onClick={handleNext}
               className="grid h-7 w-7 place-items-center rounded-lg bg-white/10 hover:bg-white/20 text-white transition active:scale-95"
               aria-label="Next Feature"
             >
-              <ChevronLeft className="h-4 w-4" />
+              {isAr ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
           </div>
         </div>
@@ -193,7 +253,7 @@ export function AuthGenieDesktopPresenter({ isSignup = false }: { isSignup?: boo
         {/* Poke hint pill below character */}
         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 whitespace-nowrap">
           <span className="text-[11px] font-semibold text-white/80 bg-black/35 backdrop-blur-xs px-3 py-1 rounded-full border border-white/10 flex items-center gap-1.5 shadow-md">
-            <span>✨ اضغط على الجني للتفاعل</span>
+            <span>{isAr ? "✨ اضغط على الجني للتفاعل" : "✨ Click Genie to interact"}</span>
           </span>
         </div>
       </div>
@@ -201,10 +261,18 @@ export function AuthGenieDesktopPresenter({ isSignup = false }: { isSignup?: boo
       {/* 3. Bottom Welcome Heading */}
       <div className="text-center mt-1">
         <h2 className="text-2xl font-bold text-white drop-shadow-md">
-          {isSignup ? "ابدأ رحلة تفوقك الدراسي مع StudyGenie" : "أهلاً بك مجدداً يا بطل!"}
+          {isAr
+            ? isSignup
+              ? "ابدأ رحلة تفوقك الدراسي مع StudyGenie"
+              : "أهلاً بك مجدداً يا بطل!"
+            : isSignup
+              ? "Start Your Study Journey with StudyGenie"
+              : "Welcome Back, Scholar!"}
         </h2>
         <p className="text-xs text-white/70 mt-1">
-          رفيقك الذكي لتنظيم الوقت، تلخيص السلايدات والتفوق في الامتحانات
+          {isAr
+            ? "رفيقك الذكي لتنظيم الوقت، تلخيص السلايدات والتفوق في الامتحانات"
+            : "Your AI companion to manage time, summarize slides, and ace exams"}
         </p>
       </div>
     </div>
@@ -215,13 +283,17 @@ export function AuthGenieDesktopPresenter({ isSignup = false }: { isSignup?: boo
  * AuthGenieMobilePresenter — Welcoming Genie banner on smaller mobile screens.
  */
 export function AuthGenieMobilePresenter({ isSignup = false }: { isSignup?: boolean }) {
+  const lang = useOptionalApp()?.lang ?? "en";
+  const isAr = lang === "ar";
+  const features = isAr ? TOUR_FEATURES_AR : TOUR_FEATURES_EN;
+
   const [expanded, setExpanded] = useState(false);
   const [featureIdx, setFeatureIdx] = useState(0);
 
-  const feature = TOUR_FEATURES[featureIdx];
+  const feature = features[featureIdx];
 
   return (
-    <div className="md:hidden w-full mb-4">
+    <div dir={isAr ? "rtl" : "ltr"} className="md:hidden w-full mb-4">
       <div className="relative rounded-2xl border border-primary/20 bg-card/70 p-3.5 shadow-sm backdrop-blur-md">
         <div className="flex items-center gap-3">
           {/* Animated Mascot */}
@@ -242,9 +314,13 @@ export function AuthGenieMobilePresenter({ isSignup = false }: { isSignup?: bool
               <span>StudyGenie AI</span>
             </div>
             <p className="text-xs text-foreground/85 leading-snug font-medium mt-0.5">
-              {isSignup
-                ? "مرحباً بك! أنا رفيقك الدراسي لمساعدتك في تنظيم موادك والتفوق."
-                : "أهلاً بعودتك! سجل دخولك لمتابعة خطتك الدراسية وامتحاناتك."}
+              {isAr
+                ? isSignup
+                  ? "مرحباً بك! أنا رفيقك الدراسي لمساعدتك في تنظيم موادك والتفوق."
+                  : "أهلاً بعودتك! سجل دخولك لمتابعة خطتك الدراسية وامتحاناتك."
+                : isSignup
+                  ? "Welcome! I'm your study companion to help organize courses and ace exams."
+                  : "Welcome back! Sign in to continue your study plan and exam prep."}
             </p>
             <button
               onClick={() => {
@@ -253,7 +329,15 @@ export function AuthGenieMobilePresenter({ isSignup = false }: { isSignup?: bool
               }}
               className="mt-1.5 text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
             >
-              <span>{expanded ? "إخفاء الدليل ▲" : "ماذا يفعل StudyGenie؟ ▼"}</span>
+              <span>
+                {isAr
+                  ? expanded
+                    ? "إخفاء الدليل ▲"
+                    : "ماذا يفعل StudyGenie؟ ▼"
+                  : expanded
+                    ? "Hide Guide ▲"
+                    : "What does StudyGenie do? ▼"}
+              </span>
             </button>
           </div>
         </div>
@@ -267,7 +351,7 @@ export function AuthGenieMobilePresenter({ isSignup = false }: { isSignup?: bool
                 <span>{feature.title}</span>
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {featureIdx + 1} / {TOUR_FEATURES.length}
+                {featureIdx + 1} / {features.length}
               </span>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -275,7 +359,7 @@ export function AuthGenieMobilePresenter({ isSignup = false }: { isSignup?: bool
             </p>
             <div className="flex items-center justify-between pt-1">
               <div className="flex gap-1">
-                {TOUR_FEATURES.map((_, i) => (
+                {features.map((_, i) => (
                   <span
                     key={i}
                     className={cn(
@@ -286,10 +370,10 @@ export function AuthGenieMobilePresenter({ isSignup = false }: { isSignup?: bool
                 ))}
               </div>
               <button
-                onClick={() => setFeatureIdx((i) => (i + 1) % TOUR_FEATURES.length)}
+                onClick={() => setFeatureIdx((i) => (i + 1) % features.length)}
                 className="text-[11px] font-bold text-primary hover:underline"
               >
-                الميزة التالية ❯
+                {isAr ? "الميزة التالية ❯" : "Next Feature ❯"}
               </button>
             </div>
           </div>

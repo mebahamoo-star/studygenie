@@ -430,4 +430,8 @@ export function useApp() {
   return c;
 }
 
+export function useOptionalApp() {
+  return useContext(AppCtx);
+}
+
 export const themeInitScript = `try{if(localStorage.getItem('sg-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}`;
