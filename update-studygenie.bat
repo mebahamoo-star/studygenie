@@ -4,7 +4,14 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 set "NO_PAUSE=0"
+set "SKIP_BUILD=0"
+:PARSE_ARGS
+if "%~1"=="" goto :ARGS_DONE
 if /i "%~1"=="--no-pause" set "NO_PAUSE=1"
+if /i "%~1"=="--skip-build" set "SKIP_BUILD=1"
+shift
+goto :PARSE_ARGS
+:ARGS_DONE
 
 echo ========================================================
 echo              StudyGenie Safe Auto-Updater
@@ -48,7 +55,7 @@ if "!IS_DIRTY!"=="1" (
         echo.
         echo [ERROR] Failed to stash your local changes. Nothing was modified.
         echo         Please check "git status" and try again.
-        goto :FAIL_EXIT
+        goto :CONFLICT_EXIT
     )
 
     set "STASH_AFTER="
@@ -80,7 +87,7 @@ if !errorlevel! neq 0 (
             echo [OK] Your local changes have been restored.
         )
     )
-    goto :FAIL_EXIT
+    goto :PULL_FAIL_EXIT
 )
 echo [OK] Pulled latest commits from origin/master.
 
@@ -108,7 +115,7 @@ if "!STASHED!"=="1" (
         echo   2. Stage your resolved files:  git add .
         echo   3. Drop the backup stash:      git stash drop
         echo ========================================================
-        goto :FAIL_EXIT
+        goto :CONFLICT_EXIT
     )
     echo [OK] Local changes restored cleanly.
 ) else (
@@ -116,9 +123,39 @@ if "!STASHED!"=="1" (
 )
 
 echo.
-echo [4/4] Checking frontend dependencies and building...
+echo [4/4] Checking dependencies and building...
 set "NEW_HEAD="
 for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set "NEW_HEAD=%%h"
+
+set "BUILD_STATUS=OK"
+set "EXIT_CODE=0"
+
+set "NEED_PIP_INSTALL=0"
+if not "!OLD_HEAD!"=="!NEW_HEAD!" (
+    for /f "delims=" %%p in ('git diff --name-only !OLD_HEAD! !NEW_HEAD! -- ai-engine/requirements.txt 2^>nul') do (
+        set "NEED_PIP_INSTALL=1"
+    )
+)
+
+if "!NEED_PIP_INSTALL!"=="1" (
+    set "AI_PYTHON=python"
+    if exist "%~dp0ai-engine\.venv\Scripts\python.exe" (
+        set "AI_PYTHON=%~dp0ai-engine\.venv\Scripts\python.exe"
+    ) else if exist "%~dp0ai-engine\.venv2\Scripts\python.exe" (
+        set "AI_PYTHON=%~dp0ai-engine\.venv2\Scripts\python.exe"
+    )
+    echo AI Engine requirements.txt changed. Installing Python dependencies...
+    call "!AI_PYTHON!" -m pip install -r "%~dp0ai-engine\requirements.txt"
+    if !errorlevel! neq 0 (
+        echo [ERROR] pip install failed for ai-engine/requirements.txt!
+        set "BUILD_STATUS=FAILED"
+        set "EXIT_CODE=1"
+    ) else (
+        echo [OK] AI Engine dependencies updated.
+    )
+) else (
+    echo [OK] ai-engine/requirements.txt unchanged ^(skipping pip install^).
+)
 
 set "NEED_INSTALL=0"
 if not exist "%~dp0frontend\node_modules" (
@@ -129,9 +166,6 @@ if not exist "%~dp0frontend\node_modules" (
     )
 )
 
-set "BUILD_STATUS=OK"
-set "EXIT_CODE=0"
-
 pushd "%~dp0frontend" >nul 2>&1
 if !errorlevel! neq 0 (
     echo [ERROR] Could not find the frontend directory.
@@ -139,26 +173,33 @@ if !errorlevel! neq 0 (
     set "EXIT_CODE=1"
 ) else (
     if "!NEED_INSTALL!"=="1" (
-        echo Package changes detected or node_modules missing. Running npm install...
+        echo Frontend package changes detected or node_modules missing. Running npm install...
         call npm.cmd install
         if !errorlevel! neq 0 (
             echo [ERROR] npm install failed!
             set "BUILD_STATUS=FAILED"
             set "EXIT_CODE=1"
+        ) else (
+            echo [OK] Frontend dependencies updated.
         )
     ) else (
-        echo [OK] package.json unchanged ^(skipping npm install^).
+        echo [OK] frontend/package.json unchanged ^(skipping npm install^).
     )
 
-    if "!BUILD_STATUS!"=="OK" (
-        echo Building frontend bundle...
-        call npm.cmd run build
-        if !errorlevel! neq 0 (
-            echo [ERROR] Frontend build failed!
-            set "BUILD_STATUS=FAILED"
-            set "EXIT_CODE=1"
+    if "!EXIT_CODE!"=="0" (
+        if "!SKIP_BUILD!"=="1" (
+            set "BUILD_STATUS=SKIPPED"
+            echo [OK] Skipping production build ^(--skip-build^).
         ) else (
-            echo [OK] Frontend build succeeded!
+            echo Building frontend bundle...
+            call npm.cmd run build
+            if !errorlevel! neq 0 (
+                echo [ERROR] Frontend build failed!
+                set "BUILD_STATUS=FAILED"
+                set "EXIT_CODE=1"
+            ) else (
+                echo [OK] Frontend build succeeded!
+            )
         )
     )
     popd
@@ -175,15 +216,29 @@ echo  Build Status : !BUILD_STATUS!
 echo ========================================================
 if "!BUILD_STATUS!"=="OK" (
     echo  Status: Sync complete and frontend build is OK.
+) else if "!BUILD_STATUS!"=="SKIPPED" (
+    echo  Status: Sync complete ^(production build skipped^).
 ) else (
-    echo  Status: Code synced, but frontend build FAILED! See errors above.
+    echo  Status: Code synced, but setup/build FAILED! See errors above.
 )
 echo.
 
-if not "!EXIT_CODE!"=="0" goto :FAIL_EXIT
+if "!EXIT_CODE!"=="1" goto :FAIL_EXIT
+if "!EXIT_CODE!"=="2" goto :CONFLICT_EXIT
+if "!EXIT_CODE!"=="3" goto :PULL_FAIL_EXIT
+
+:OK_EXIT
 if "!NO_PAUSE!"=="0" pause
 endlocal & exit /b 0
 
 :FAIL_EXIT
 if "!NO_PAUSE!"=="0" pause
 endlocal & exit /b 1
+
+:CONFLICT_EXIT
+if "!NO_PAUSE!"=="0" pause
+endlocal & exit /b 2
+
+:PULL_FAIL_EXIT
+if "!NO_PAUSE!"=="0" pause
+endlocal & exit /b 3
