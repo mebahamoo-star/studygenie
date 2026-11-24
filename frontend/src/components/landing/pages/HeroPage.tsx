@@ -29,11 +29,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GenieTrigger } from "../genie/Genie";
+import { useSound } from "../sound/useSound";
 import type { LandingTranslations } from "../i18n/types";
 
 interface HeroPageProps {
   t: LandingTranslations;
   lang: "ar" | "en";
+  onSeeHowItWorks?: () => void;
 }
 
 const TOPIC_ICONS = [BookOpen, Calculator, Atom, Code2, CheckCircle2];
@@ -63,12 +65,26 @@ const topicVariants: Variants = {
   },
 };
 
-export function HeroPage({ t, lang }: HeroPageProps) {
+export function HeroPage({ t, lang, onSeeHowItWorks }: HeroPageProps) {
   const shouldReduce = useReducedMotion();
+  const sound = useSound();
   const isRTL = lang === "ar";
   const FwdArrow = isRTL ? ArrowLeft : ArrowRight;
 
   const [replayKey, setReplayKey] = useState(0);
+
+  const handleSeeHowItWorks = useCallback(() => {
+    sound.playForward();
+    if (onSeeHowItWorks) {
+      onSeeHowItWorks();
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("sg-pager-goto", { detail: { index: 1 } }),
+      );
+    }
+  }, [onSeeHowItWorks, sound]);
 
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
@@ -143,15 +159,14 @@ export function HeroPage({ t, lang }: HeroPageProps) {
             </GenieTrigger>
 
             <Button
+              type="button"
               variant="outline"
               size="default"
-              asChild
-              className="gap-2 h-11 px-4 text-sm font-semibold border-border/80 bg-card hover:bg-accent"
+              onClick={handleSeeHowItWorks}
+              className="gap-2 h-11 px-4 text-sm font-semibold border-border/80 bg-card hover:bg-accent cursor-pointer"
             >
-              <Link to="/login">
-                <Play className="h-3.5 w-3.5 fill-current" />
-                <span>{t.hero.secondaryCta}</span>
-              </Link>
+              <Play className="h-3.5 w-3.5 fill-current" />
+              <span>{t.hero.secondaryCta}</span>
             </Button>
           </div>
 
