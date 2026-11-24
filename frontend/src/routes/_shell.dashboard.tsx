@@ -53,6 +53,7 @@ import {
 import { toast } from "sonner";
 
 import { daysUntil, fetchAndSyncExams, loadExamsForUser, saveExam, type Exam } from "@/lib/exam";
+import { postExamApi } from "@/features/post-exam/api/postExamApi";
 
 import { ExamHub } from "@/components/ExamHub";
 
@@ -395,7 +396,9 @@ function Dashboard() {
 
       const remote = await examService.getCommunityChallenges(collegeId);
 
-      const list = (remote || []).map((item) => {
+      const list = (remote || [])
+        .filter((item) => !item.examDate || daysUntil(item.examDate) >= 0)
+        .map((item) => {
 
         const key = item.courseName.toLowerCase().trim();
 
@@ -643,33 +646,37 @@ function Dashboard() {
 
 
 
-      const topicsPayload = topics.map((t, idx) => ({
+      let courseFeedback = { dominantDifficulty: "MEDIUM", heavilyTestedTopicIds: [] as number[], hardTopicIds: [] as number[] };
+      try {
+        courseFeedback = await postExamApi.getCourseFeedbackSummary(course?.name || course?.id);
+      } catch {}
 
-        ref: String(t.id || idx + 1),
+      const testedSet = new Set((courseFeedback?.heavilyTestedTopicIds || []).map(Number));
+      const hardSet = new Set((courseFeedback?.hardTopicIds || []).map(Number));
 
-        topicRef: String(t.id || idx + 1),
+      const topicsPayload = topics.map((t, idx) => {
+        const topicId = Number(t.id || idx + 1);
+        const isTested = testedSet.has(topicId);
+        const isHard = hardSet.has(topicId);
 
-        topic_ref: String(t.id || idx + 1),
-
-        chapterTitle: t.name,
-
-        chapter_title: t.name,
-
-        orderIndex: idx + 1,
-
-        order_index: idx + 1,
-
-        estimatedHours: Math.max(0.5, (t.durationMinutes || 120) / 60),
-
-        estimated_hours: Math.max(0.5, (t.durationMinutes || 120) / 60),
-
-        importance: t.importance || 3,
-
-        subtopics: t.subtopics || [],
-
-      }));
-
-
+        return {
+          ref: String(t.id || idx + 1),
+          topicRef: String(t.id || idx + 1),
+          topic_ref: String(t.id || idx + 1),
+          chapterTitle: t.name,
+          chapter_title: t.name,
+          orderIndex: idx + 1,
+          order_index: idx + 1,
+          estimatedHours: Math.max(0.5, (t.durationMinutes || 120) / 60),
+          estimated_hours: Math.max(0.5, (t.durationMinutes || 120) / 60),
+          importance: t.importance || 3,
+          subtopics: t.subtopics || [],
+          is_heavily_tested: isTested,
+          isHeavilyTested: isTested,
+          is_hard: isHard,
+          isHard: isHard,
+        };
+      });
 
       let planData: any = null;
 
@@ -708,6 +715,10 @@ function Dashboard() {
             reviewRatio: 0.2,
 
             review_ratio: 0.2,
+
+            course_difficulty: courseFeedback.dominantDifficulty,
+
+            courseDifficulty: courseFeedback.dominantDifficulty,
 
           }),
 
@@ -1771,7 +1782,9 @@ function Dashboard() {
 
   const firstName = user?.fullName ? user.fullName.split(" ")[0] : "Scholar";
 
-  const activeExam = exams.length > 0 ? exams[Math.min(currentExamIndex, exams.length - 1)] : null;
+  const upcomingExams = exams.filter((ex) => daysUntil(ex.date) >= 0);
+
+  const activeExam = upcomingExams.length > 0 ? upcomingExams[Math.min(currentExamIndex, upcomingExams.length - 1)] : null;
 
   const todayDateStr = new Date().toLocaleDateString(undefined, {
 
@@ -1789,7 +1802,7 @@ function Dashboard() {
 
     <div className="w-full max-w-full min-w-0 overflow-x-hidden grid gap-4 sm:gap-6 lg:grid-cols-3">
 
-      {exams.length > 0 && activeExam ? (
+      {upcomingExams.length > 0 && activeExam ? (
 
         <div className="lg:col-span-3 min-w-0 max-w-full flex flex-col gap-3">
 
@@ -1807,7 +1820,7 @@ function Dashboard() {
 
               <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-bold text-primary">
 
-                {exams.length} {exams.length === 1 ? "exam" : "exams"}
+                {upcomingExams.length} {upcomingExams.length === 1 ? "exam" : "exams"}
 
               </span>
 
@@ -1817,7 +1830,7 @@ function Dashboard() {
 
             <div className="flex items-center gap-2">
 
-              {exams.length > 1 && (
+              {upcomingExams.length > 1 && (
 
                 <div className="flex items-center gap-1.5 rounded-xl border bg-card p-1 shadow-soft">
 
@@ -1831,7 +1844,7 @@ function Dashboard() {
 
                     onClick={() =>
 
-                      setCurrentExamIndex((prev) => (prev > 0 ? prev - 1 : exams.length - 1))
+                      setCurrentExamIndex((prev) => (prev > 0 ? prev - 1 : upcomingExams.length - 1))
 
                     }
 
@@ -1845,7 +1858,7 @@ function Dashboard() {
 
                   <span className="text-xs font-semibold px-1 min-w-[3.5rem] text-center">
 
-                    {currentExamIndex + 1} of {exams.length}
+                    {Math.min(currentExamIndex, upcomingExams.length - 1) + 1} of {upcomingExams.length}
 
                   </span>
 
@@ -1859,7 +1872,7 @@ function Dashboard() {
 
                     onClick={() =>
 
-                      setCurrentExamIndex((prev) => (prev < exams.length - 1 ? prev + 1 : 0))
+                      setCurrentExamIndex((prev) => (prev < upcomingExams.length - 1 ? prev + 1 : 0))
 
                     }
 
@@ -1895,15 +1908,19 @@ function Dashboard() {
 
           {/* Quick horizontal scrollable exam selector tabs */}
 
-          {exams.length > 1 && (
+          {upcomingExams.length > 1 && (
 
             <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none w-full max-w-full min-w-0">
 
-              {exams.map((ex, idx) => {
+              {upcomingExams.map((ex, idx) => {
 
-                const days = daysUntil(ex.date);
+                const rawDays = daysUntil(ex.date);
 
-                const active = idx === currentExamIndex;
+                const isToday = rawDays === 0;
+
+                const days = Math.abs(rawDays);
+
+                const active = idx === Math.min(currentExamIndex, upcomingExams.length - 1);
 
                 return (
 
@@ -1949,7 +1966,13 @@ function Dashboard() {
 
                     >
 
-                      {days > 0 ? (<><CountingNumber number={days} fromNumber={0} className="tabular-nums" />d</>) : "Today"}
+                      {days > 0 ? (
+                        <><CountingNumber number={days} fromNumber={0} className="tabular-nums" />d</>
+                      ) : isToday ? (
+                        "Today"
+                      ) : (
+                        `${days}d ago`
+                      )}
 
                     </span>
 
@@ -3018,21 +3041,31 @@ function Dashboard() {
 
             {challenges.map((ch) => {
 
-              const days = daysUntil(ch.examDate);
+              const rawDays = daysUntil(ch.examDate);
 
-              const urgencyStatus = days < 15 ? "red" : days <= 30 ? "orange" : "green";
+              const isPast = rawDays < 0;
+
+              const isToday = rawDays === 0;
+
+              const days = Math.abs(rawDays);
+
+              const urgencyStatus = isPast ? "past" : rawDays < 15 ? "red" : rawDays <= 30 ? "orange" : "green";
 
               const badgeColor =
 
-                urgencyStatus === "red"
+                urgencyStatus === "past"
 
-                  ? "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30"
+                  ? "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30"
 
-                  : urgencyStatus === "orange"
+                  : urgencyStatus === "red"
 
-                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                    ? "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30"
 
-                    : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+                    : urgencyStatus === "orange"
+
+                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+
+                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
 
 
 
@@ -3106,7 +3139,13 @@ function Dashboard() {
 
                         <Clock className="h-3 w-3" />
 
-                        {days > 0 ? (<><CountingNumber number={days} fromNumber={0} className="tabular-nums" />d left</>) : "Today"}
+                        {days > 0 && !isPast ? (
+                          <><CountingNumber number={days} fromNumber={0} className="tabular-nums" />d left</>
+                        ) : isToday ? (
+                          "Today"
+                        ) : (
+                          `${days}d ago (Ended)`
+                        )}
 
                       </span>
 

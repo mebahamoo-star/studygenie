@@ -44,7 +44,11 @@ FLASHCARD ARCHITECTURAL PRINCIPLES:
      * Provide a balanced mix of "MCQ", "TRUE_FALSE", and "SHORT_ANSWER" questions across the requested question count.
    - For all questions, provide a concise `explanation` (1-2 sentences) explaining why the answer is correct.
 
-5. OUTPUT FORMAT:
+5. STUDENT EXAM FEEDBACK & HIGH-YIELD CALIBRATION:
+   - When feedback indicates the topic is HEAVILY TESTED: Emphasize high-yield exam problem types, calculation steps, core formulas, and critical distinctions tested under exam conditions.
+   - When feedback indicates the topic was RATED HARD: Ensure flashcards deliver crystal-clear intuitive breakdowns of tricky mechanisms, and quiz questions target common pitfalls with insightful explanations.
+
+6. OUTPUT FORMAT:
    - Output strictly valid JSON matching the schema, with no markdown formatting outside the JSON object.
 """
 
@@ -53,6 +57,7 @@ Academic Course: {course_name}
 Target Chapter / Topic: {chapter_title}
 Key Subtopics: {subtopics}
 Quiz Format Requested: {quiz_type}
+Student Exam Feedback Calibration: {feedback_context}
 
 Chapter Body Content & Excerpt:
 <content>

@@ -7,6 +7,7 @@ from app.services.planner import generate_plan
 
 router = APIRouter()
 
+@router.post("/generate-plan")
 @router.post("/v1/generate-plan")
 async def generate_plan_endpoint(
     req: GeneratePlanRequest,

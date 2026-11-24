@@ -10,6 +10,8 @@ class TopicPlanInput(BaseModel):
     estimated_hours: float = Field(default=1.0, ge=0.05, le=60)
     importance: int = Field(default=3, ge=1, le=5)
     subtopics: list[str] = Field(default_factory=list)
+    is_heavily_tested: bool = False
+    is_hard: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -49,6 +51,21 @@ class TopicPlanInput(BaseModel):
             else:
                 subtopics = []
 
+            raw_heavily_tested = (
+                data.get("is_heavily_tested")
+                or data.get("isHeavilyTested")
+                or data.get("heavily_tested")
+                or data.get("heavilyTested")
+                or False
+            )
+            raw_hard = (
+                data.get("is_hard")
+                or data.get("isHard")
+                or data.get("hard_topic")
+                or data.get("hardTopic")
+                or False
+            )
+
             return {
                 "ref": str(ref),
                 "chapter_title": str(title),
@@ -56,6 +73,8 @@ class TopicPlanInput(BaseModel):
                 "estimated_hours": hours,
                 "importance": imp,
                 "subtopics": subtopics,
+                "is_heavily_tested": bool(raw_heavily_tested),
+                "is_hard": bool(raw_hard),
             }
         return data
 
@@ -69,6 +88,7 @@ class GeneratePlanRequest(BaseModel):
     mode: str = Field(default="NORMAL") # NORMAL | SURVIVAL
     buffer_days_before_exam: int = Field(default=1, ge=0, le=7)
     review_ratio: float = Field(default=0.15, ge=0.0, le=0.4)
+    course_difficulty: str | None = None # EASY | MEDIUM | HARD
 
     @model_validator(mode="before")
     @classmethod
@@ -130,6 +150,14 @@ class GeneratePlanRequest(BaseModel):
                     d["review_ratio"] = min(0.4, max(0.0, float(rr)))
                 except (ValueError, TypeError):
                     d["review_ratio"] = 0.15
+
+            # Course difficulty from student feedback
+            if "course_difficulty" not in d:
+                diff = d.get("courseDifficulty") or d.get("difficulty")
+                if diff:
+                    d["course_difficulty"] = str(diff).upper()
+            elif d.get("course_difficulty"):
+                d["course_difficulty"] = str(d["course_difficulty"]).upper()
 
             return d
         return data

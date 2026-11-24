@@ -1,0 +1,112 @@
+{
+  "postExam": {
+    "celebration": {
+      "badge": "Course Conquered",
+      "title": "Congratulations! Exam Complete",
+      "subtitle": "You crossed the finish line for {{course}}. Every hour you invested paid off!",
+      "pointsLabel": "Earned Genie Points",
+      "pointsValue": "+{{points}} XP",
+      "shareButton": "Share your journey",
+      "continueButton": "Continue",
+      "closingLabel": "Close celebration dialog",
+      "reducedMotionAlt": "StudyGenie celebration trophy illustration",
+      "shareNotReady": "Sharing your achievement card will be available once backend sharing is connected."
+    },
+    "feedback": {
+      "stepIndicator": "Step {{step}} of {{total}}",
+      "step1Title": "How was the exam?",
+      "step1Subtitle": "Quick check-in for {{course}}",
+      "step2Title": "Which topics stood out?",
+      "step2Subtitle": "Optional — mark topics from your syllabus that felt trickiest or showed up the most.",
+      "difficulties": {
+        "EASY": {
+          "label": "Easy",
+          "description": "Felt well-prepared and smooth"
+        },
+        "MEDIUM": {
+          "label": "Medium",
+          "description": "Fair exam with a few challenges"
+        },
+        "HARD": {
+          "label": "Hard",
+          "description": "Tougher or deeper than expected"
+        }
+      },
+      "topicSearchPlaceholder": "Search syllabus topics...",
+      "topicSearchLabel": "Search syllabus topics",
+      "hardestLabel": "Hardest for me",
+      "testedLabel": "Heavily tested",
+      "noTopicsTitle": "No syllabus topics found",
+      "noTopicsSubtitle": "Try a different search term or skip this step.",
+      "noTopicsInCourse": "This course has no syllabus topics listed yet.",
+      "privacyNote": "Your answers are private and only used in aggregate to improve study plans.",
+      "skipButton": "Skip",
+      "backButton": "Back",
+      "nextButton": "Next",
+      "submitButton": "Submit feedback",
+      "submittingButton": "Saving feedback...",
+      "closeLabel": "Close exam feedback",
+      "selectedCounts": "{{hardCount}} hardest · {{testedCount}} heavily tested",
+      "submittedToast": "Thanks! Your feedback helps StudyGenie build smarter plans.",
+      "skippedToast": "Feedback skipped. You can view your study report anytime in Settings.",
+      "errors": {
+        "difficultyRequired": "Please pick Easy, Medium, or Hard — or click Skip.",
+        "submitFailed": "Could not save your feedback. Please try again."
+      }
+    },
+    "report": {
+      "backToCourses": "Back to My Courses",
+      "title": "Post-Exam Study Report",
+      "subtitle": "Your effort summary for {{course}}",
+      "totalHours": "Total Study Hours",
+      "sessionsCount": "Study Sessions",
+      "adherence": "Schedule Adherence",
+      "longestStreak": "Longest Streak",
+      "streakDays": "{{days}} days",
+      "finalRank": "Final Rank",
+      "rankValue": "#{{rank}}",
+      "rankUnavailable": "Pending",
+      "chartTitle": "Planned vs. Actual Study Hours",
+      "chartSubtitle": "Weekly breakdown across your exam prep",
+      "plannedSeries": "Planned Hours",
+      "actualSeries": "Actual Hours",
+      "slowTopicsTitle": "Topics That Took Longer Than Expected",
+      "slowTopicsEmpty": "All topics stayed within their planned time!",
+      "topicTimeRatio": "{{actual}}m actual / {{planned}}m planned",
+      "downloadPdf": "Download PDF summary",
+      "downloadingPdf": "Preparing PDF summary...",
+      "pdfNotReady": "PDF export preview will connect to the backend generator soon.",
+      "loadingLabel": "Loading study report..."
+    },
+    "nextStep": {
+      "eyebrow": "Your Next Step",
+      "title": "You have {{hours}} free hours/week now.",
+      "prompt": "Redirect them to {{course}} (next exam in {{days}} days)?",
+      "acceptButton": "Accept",
+      "notNowButton": "Not now",
+      "acceptedToast": "Redirected {{hours}} hrs/week toward {{course}}!",
+      "restTitle": "Take a well-earned rest day?",
+      "restSubtitle": "You hit a {{streak}}-day streak! Activate a Streak Freeze today to recharge without breaking momentum.",
+      "restButton": "Use Streak Freeze",
+      "restNotReady": "Streak Freeze activation is waiting on backend support — rest guilt-free!"
+    },
+    "coursesTab": {
+      "activeHeading": "Active Courses",
+      "completedHeading": "Completed Courses",
+      "archivedHeading": "Archived Courses ({{count}})",
+      "completedMeta": "{{hours}} hrs studied",
+      "rankBadge": "Rank #{{rank}}",
+      "rankPendingBadge": "Rank pending",
+      "viewReport": "View report",
+      "reopen": "Reopen challenge",
+      "archive": "Archive",
+      "reopenConfirmTitle": "Reopen {{course}}?",
+      "reopenConfirmBody": "This moves {{course}} back to your Active courses list so you can continue studying it.",
+      "reopenConfirmAction": "Reopen",
+      "cancel": "Cancel",
+      "reopenedToast": "{{course}} moved back to Active courses.",
+      "archivedToast": "{{course}} moved to Archived.",
+      "emptyCompleted": "No completed exams yet. Once an exam date ends, your achievements appear here."
+    }
+  }
+}

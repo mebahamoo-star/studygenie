@@ -24,6 +24,7 @@ import { fetchAndSyncExams, loadExamsForUser, isCourseEnrolled, type Exam } from
 import { hasUserEnrolledCourses, getUserCourses } from "@/lib/courses-util";
 import { cn } from "@/lib/utils";
 import { CountingNumber } from "@/components/animate-ui/texts/counting-number";
+import { PostExamManager } from "@/features/post-exam/components/PostExamManager";
 import { MobileBottomNav } from "./MobileBottomNav";
 import {
   Sidebar,
@@ -490,6 +491,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <main className="w-full max-w-full min-w-0 flex-1 p-3 pb-28 sm:p-6 sm:pb-8 lg:p-8 overflow-x-hidden">{children}</main>
         <MobileBottomNav />
+        <PostExamManager />
       </SidebarInset>
     </SidebarProvider>
   );

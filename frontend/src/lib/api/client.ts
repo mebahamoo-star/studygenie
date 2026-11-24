@@ -92,8 +92,12 @@ export function saveAuthSession(auth: AuthResponse) {
     localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, auth.accessToken);
     localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, auth.refreshToken);
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(auth.user));
+    try {
+      sessionStorage.removeItem("sg_post_exam_dismissed_ids");
+    } catch {}
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("sg-exams-updated"));
+      window.dispatchEvent(new Event("sg-post-exam-check"));
     }
   } catch (err) {
     console.error("Failed to save auth session to localStorage", err);
@@ -131,6 +135,9 @@ export function clearAuthSession() {
       "sg-guest-task-kits",
     ];
     legacyKeys.forEach((k) => localStorage.removeItem(k));
+    try {
+      sessionStorage.removeItem("sg_post_exam_dismissed_ids");
+    } catch {}
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("sg-exams-updated"));
       window.dispatchEvent(new Event("sg-session-cleared"));

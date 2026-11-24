@@ -30,9 +30,17 @@ public record GenerateStudyKitRequest(
 
     @JsonProperty("quiz_type")
     @JsonAlias({"quiz_type", "quizType"})
-    String quizType
+    String quizType,
+
+    @JsonProperty("course_difficulty")
+    @JsonAlias({"course_difficulty", "courseDifficulty", "difficulty"})
+    String courseDifficulty
 ) {
     public GenerateStudyKitRequest(String courseName, String language, List<TopicInput> topics, int flashcardsPerTopic, int questionsPerTopic) {
-        this(courseName, language, topics, flashcardsPerTopic, questionsPerTopic, "MIXED");
+        this(courseName, language, topics, flashcardsPerTopic, questionsPerTopic, "MIXED", null);
+    }
+
+    public GenerateStudyKitRequest(String courseName, String language, List<TopicInput> topics, int flashcardsPerTopic, int questionsPerTopic, String quizType) {
+        this(courseName, language, topics, flashcardsPerTopic, questionsPerTopic, quizType, null);
     }
 }

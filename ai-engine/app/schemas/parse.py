@@ -15,6 +15,8 @@ class TopicCategory(BaseModel):
 
     categoryTitle: str = Field(description="Category or module title")
     subtopics: list[SubtopicItem] = Field(default_factory=list)
+    estimated_hours: float | None = None
+    importance: int | None = None
 
 
 class FlashcardItem(BaseModel):

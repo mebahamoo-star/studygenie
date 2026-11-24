@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 import { Link } from "@tanstack/react-router";
 
-import { Bell, Calendar, Pencil, Sparkles, Trash2, User, BookOpen } from "lucide-react";
+import { Bell, Calendar, Pencil, Sparkles, Trash2, User, BookOpen, CheckCircle2 } from "lucide-react";
 
 import { toast } from "sonner";
 
@@ -30,49 +30,42 @@ export function ExamHub({
 
 }) {
 
-  const days = Math.max(0, daysUntil(exam.date));
+  const rawDays = daysUntil(exam.date);
+  const isPast = rawDays < 0;
+  const isToday = rawDays === 0;
+  const days = Math.abs(rawDays);
 
 
 
-  const urgencyStatus =
-
-    days < 15
-
+  const urgencyStatus = isPast
+    ? "past"
+    : rawDays < 15
       ? "red"
-
-      : days <= 30
-
+      : rawDays <= 30
         ? "orange"
-
         : "green";
 
 
 
   const hubBadgeClass =
-
-    urgencyStatus === "red"
-
-      ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30"
-
-      : urgencyStatus === "orange"
-
-        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
-
-        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30";
+    urgencyStatus === "past"
+      ? "bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30"
+      : urgencyStatus === "red"
+        ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30"
+        : urgencyStatus === "orange"
+          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+          : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30";
 
 
 
   const hubCountdownBg =
-
-    urgencyStatus === "red"
-
-      ? "bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/25"
-
-      : urgencyStatus === "orange"
-
-        ? "bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/25"
-
-        : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/25";
+    urgencyStatus === "past"
+      ? "bg-gradient-to-br from-slate-600 to-zinc-700 shadow-slate-500/20"
+      : urgencyStatus === "red"
+        ? "bg-gradient-to-br from-red-500 to-rose-600 shadow-red-500/25"
+        : urgencyStatus === "orange"
+          ? "bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/25"
+          : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/25";
 
 
 
@@ -111,30 +104,25 @@ export function ExamHub({
 
 
   const reminderMessage =
-
-    days === 0
-
-      ? "Today is exam day! Take a deep breath and give it your best. 🌟"
-
-      : days === 1
-
-        ? "Exam is tomorrow! Review key points and get a good night's rest. 🌙"
-
-        : days <= 3
-
-          ? "Final stretch! Focus on high-yield topics and stay calm. 🎯"
-
-          : days <= 7
-
-            ? "1 week left! Steady daily review will keep you prepared. ⏱️"
-
-            : "Plenty of time ahead — pace yourself and stay consistent. 📚";
+    isPast
+      ? days === 1
+        ? "This exam took place yesterday. Hope it went great! 🎉"
+        : `This exam took place ${days} days ago. Hope it went great! 🎉`
+      : isToday
+        ? "Today is exam day! Take a deep breath and give it your best. 🌟"
+        : days === 1
+          ? "Exam is tomorrow! Review key points and get a good night's rest. 🌙"
+          : days <= 3
+            ? "Final stretch! Focus on high-yield topics and stay calm. 🎯"
+            : days <= 7
+              ? "1 week left! Steady daily review will keep you prepared. ⏱️"
+              : "Plenty of time ahead — pace yourself and stay consistent. 📚";
 
 
 
   return (
 
-    <Card className={cn("relative overflow-hidden bg-gradient-to-br from-card via-card p-4 sm:p-6 shadow-soft lg:col-span-3 transition-colors border min-w-0 max-w-full w-full", urgencyStatus === "red" ? "border-red-500/30 to-red-500/5" : urgencyStatus === "orange" ? "border-amber-500/30 to-amber-500/5" : "border-emerald-500/30 to-emerald-500/5")}>
+    <Card className={cn("relative overflow-hidden bg-gradient-to-br from-card via-card p-4 sm:p-6 shadow-soft lg:col-span-3 transition-colors border min-w-0 max-w-full w-full", urgencyStatus === "past" ? "border-border/80 to-muted/15" : urgencyStatus === "red" ? "border-red-500/30 to-red-500/5" : urgencyStatus === "orange" ? "border-amber-500/30 to-amber-500/5" : "border-emerald-500/30 to-emerald-500/5")}>
 
       {/* Subtle background ambient blur */}
 
@@ -160,7 +148,19 @@ export function ExamHub({
 
               <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider", hubBadgeClass)}>
 
-                <Bell className="h-3 w-3" /> Upcoming Exam Reminder
+                {isPast ? (
+                  <>
+                    <CheckCircle2 className="h-3 w-3 text-slate-400" /> Past Exam
+                  </>
+                ) : isToday ? (
+                  <>
+                    <Bell className="h-3 w-3 animate-pulse" /> Exam Today
+                  </>
+                ) : (
+                  <>
+                    <Bell className="h-3 w-3" /> Upcoming Exam Reminder
+                  </>
+                )}
 
               </span>
 
@@ -252,7 +252,9 @@ export function ExamHub({
 
             <div className="mt-0.5 text-[10px] font-bold tracking-wider opacity-90 uppercase">
 
-              {days === 1 ? "Day Left" : "Days Left"}
+              {isPast
+                ? (days === 1 ? "Day Ago" : "Days Ago")
+                : (days === 1 ? "Day Left" : "Days Left")}
 
             </div>
 
