@@ -130,8 +130,29 @@ echo [OK] Backend API and AI Engine are LIVE and responding!
 echo [4/4] Starting Frontend (Vite on http://localhost:5173)...
 start "StudyGenie - Frontend" /D "%~dp0frontend" cmd /k "title StudyGenie - Frontend && npm run dev -- --host 0.0.0.0"
 
-:: Wait 2 seconds for Vite dev server to bind, then open browser automatically
-ping -n 3 127.0.0.1 >nul
+:: Wait until Frontend (Vite) is listening and serving HTTP before opening browser
+echo Waiting for Frontend to finish loading on http://localhost:5173...
+set FE_RETRIES=0
+:WAIT_FRONTEND
+powershell -NoProfile -Command "try { $null = Invoke-WebRequest -Uri 'http://localhost:5173/' -UseBasicParsing -TimeoutSec 10; exit 0 } catch { if ($_.Exception.Response) { exit 0 } else { exit 1 } }" >nul 2>&1
+if not errorlevel 1 goto FRONTEND_READY
+
+set /a FE_RETRIES+=1
+if %FE_RETRIES% GEQ 45 (
+    echo.
+    echo [WARNING] Frontend is taking longer than usual, opening browser anyway...
+    goto OPEN_BROWSER
+)
+
+<nul set /p "=. "
+ping -n 2 127.0.0.1 >nul
+goto WAIT_FRONTEND
+
+:FRONTEND_READY
+echo.
+echo [OK] Frontend is LIVE and ready!
+
+:OPEN_BROWSER
 start http://localhost:5173
 
 echo.
