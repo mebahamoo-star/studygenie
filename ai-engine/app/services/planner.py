@@ -11,8 +11,50 @@ def _round_to_5(minutes: float) -> int:
 def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
     warnings: list[str] = []
 
+    # Calibrate topics based on student exam feedback (tested & hard topics)
+    calibrated_topics: list[TopicPlanInput] = []
+    has_heavily_tested = False
+    has_hard_topics = False
+
+    for t in req.topics:
+        imp = t.importance
+        hrs = t.estimated_hours
+
+        # Boost priority of topics past students reported as heavily tested on exams
+        if t.is_heavily_tested:
+            imp = min(5, imp + 1)
+            has_heavily_tested = True
+
+        # Allocate +25% study time for topics rated hard to allow deeper practice
+        if t.is_hard:
+            hrs = min(60.0, max(round(hrs * 1.25, 2), round(hrs + 0.25, 2)))
+            has_hard_topics = True
+
+        calibrated_topics.append(
+            TopicPlanInput(
+                ref=t.ref,
+                chapter_title=t.chapter_title,
+                order_index=t.order_index,
+                estimated_hours=hrs,
+                importance=imp,
+                subtopics=t.subtopics or [],
+                is_heavily_tested=t.is_heavily_tested,
+                is_hard=t.is_hard,
+            )
+        )
+
+    if has_heavily_tested:
+        warnings.append("Adaptive Planner: Prioritized high-yield topics heavily tested on past exams.")
+    if has_hard_topics:
+        warnings.append("Adaptive Planner: Allocated extra study time for topics rated hard by students.")
+
+    if req.course_difficulty == "HARD":
+        warnings.append("Adaptive Planner: Course rated HARD by students; reinforced study and review intervals.")
+    elif req.course_difficulty == "EASY":
+        warnings.append("Adaptive Planner: Course rated EASY by students; streamlined study schedule.")
+
     # Map topics by ref for fast metadata lookup
-    topic_map: dict[str, TopicPlanInput] = {t.ref: t for t in req.topics}
+    topic_map: dict[str, TopicPlanInput] = {t.ref: t for t in calibrated_topics}
 
     # If exam date is today or in the past, auto-adjust to 14 days ahead
     if req.exam_date <= req.start_date:
@@ -50,7 +92,7 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
 
     if req.mode == "SURVIVAL":
         sorted_topics = sorted(
-            req.topics,
+            calibrated_topics,
             key=lambda t: (t.importance, t.importance / t.estimated_hours, -t.order_index),
             reverse=True
         )
@@ -66,7 +108,7 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
                 skipped.append(SkippedTopic(ref=t.ref, reason="NOT_ESSENTIAL"))
                 
         # feasible if all importance 5 topics were selected
-        imp5_all_selected = all((t in selected_topics) for t in req.topics if t.importance == 5)
+        imp5_all_selected = all((t in selected_topics) for t in calibrated_topics if t.importance == 5)
         if not imp5_all_selected:
             feasible = False
             warnings.append("Could not fit all importance-5 topics in SURVIVAL mode.")
@@ -80,6 +122,10 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
             rem = _round_to_5(t.estimated_hours * 60)
             subtopics_str = ", ".join(t.subtopics[:3]) if t.subtopics else ""
             desc = f"Study {t.chapter_title}"
+            if t.is_heavily_tested:
+                desc += " [High-Yield Exam Focus]"
+            elif t.is_hard:
+                desc += " [Challenging Concept Focus]"
             if subtopics_str:
                 desc += f" (Focus: {subtopics_str})"
 
@@ -136,7 +182,7 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
 
         planned_topics_count = len(selected_topics)
     else: # NORMAL
-        sorted_topics = sorted(req.topics, key=lambda t: t.order_index)
+        sorted_topics = sorted(calibrated_topics, key=lambda t: t.order_index)
         
         # Calculate daily study vs review capacity
         daily_review_cap = _round_to_5(daily_cap * req.review_ratio)
@@ -161,6 +207,10 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
 
             subtopics_str = ", ".join(t.subtopics[:3]) if t.subtopics else ""
             desc = f"Study {t.chapter_title}"
+            if t.is_heavily_tested:
+                desc += " [High-Yield Exam Focus]"
+            elif t.is_hard:
+                desc += " [Challenging Concept Focus]"
             if subtopics_str:
                 desc += f" (Focus: {subtopics_str})"
             
@@ -198,7 +248,9 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
             title = t_obj.chapter_title if t_obj else f"Chapter {t_ref}"
             subtopics = t_obj.subtopics if t_obj else []
             subtopics_str = ", ".join(subtopics[:2]) if subtopics else ""
-            desc = f"Active Recall & Practice Quiz: {title}"
+            is_high_yield = t_obj.is_heavily_tested if t_obj else False
+            review_prefix = "Active Recall (High-Yield Focus)" if is_high_yield else "Active Recall & Practice Quiz"
+            desc = f"{review_prefix}: {title}"
             if subtopics_str:
                 desc += f" (Practice: {subtopics_str})"
 

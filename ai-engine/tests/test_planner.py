@@ -13,9 +13,47 @@ def test_planner_invalid_dates():
         exam_date=date(2023, 10, 5),
         topics=[TopicPlanInput(ref="t1", chapter_title="A", order_index=1, estimated_hours=2, importance=5)]
     )
-    with pytest.raises(AppError) as exc:
-        generate_plan(req)
-    assert exc.value.error_code == "INVALID_DATES"
+    res = generate_plan(req)
+    assert any("automatically scheduled 14 days ahead" in w for w in res.summary.warnings)
+    assert res.summary.study_days > 0
+
+def test_planner_adapts_to_heavily_tested_topics():
+    req = GeneratePlanRequest(
+        start_date=date(2023, 10, 1),
+        exam_date=date(2023, 10, 2),
+        buffer_days_before_exam=0,
+        rest_weekdays=[],
+        topics=[
+            TopicPlanInput(ref="t1", chapter_title="Basics", order_index=1, estimated_hours=2, importance=2, is_heavily_tested=True),
+            TopicPlanInput(ref="t2", chapter_title="Theory", order_index=2, estimated_hours=4, importance=2, is_heavily_tested=False),
+        ],
+        daily_hours=2.0, # 120 mins total capacity
+        mode="SURVIVAL"
+    )
+    res = generate_plan(req)
+    # t1 (heavily tested) is prioritized and fits
+    assert res.tasks[0].topic_ref == "t1"
+    assert "High-Yield Exam Focus" in res.tasks[0].description
+    assert any("heavily tested" in w.lower() for w in res.summary.warnings)
+
+def test_planner_adapts_to_hard_topics_and_course_difficulty():
+    req = GeneratePlanRequest(
+        start_date=date(2023, 10, 1),
+        exam_date=date(2023, 10, 10),
+        buffer_days_before_exam=0,
+        rest_weekdays=[],
+        topics=[
+            TopicPlanInput(ref="t1", chapter_title="Tricky Algorithms", order_index=1, estimated_hours=2.0, importance=4, is_hard=True),
+        ],
+        daily_hours=3.0,
+        mode="NORMAL",
+        course_difficulty="HARD"
+    )
+    res = generate_plan(req)
+    # 2.0h * 1.25 = 2.5h (150 mins)
+    study_mins = sum(t.minutes for t in res.tasks if t.task_type == "STUDY")
+    assert study_mins >= 150
+    assert any("hard" in w.lower() for w in res.summary.warnings)
 
 def test_planner_normal_mode():
     req = GeneratePlanRequest(

@@ -1,0 +1,112 @@
+{
+  "postExam": {
+    "celebration": {
+      "badge": "تم اجتياز المقرر",
+      "title": "مبارك! انتهى الامتحان بنجاح",
+      "subtitle": "لقد وصلت إلى خط النهاية في مقرر {{course}}. كل ساعة بذلتها أثمرت!",
+      "pointsLabel": "نقاط الجيني المكتسبة",
+      "pointsValue": "+{{points}} نقطة",
+      "shareButton": "شارك رحلتك",
+      "continueButton": "متابعة",
+      "closingLabel": "إغلاق نافذة الاحتفال",
+      "reducedMotionAlt": "رسوم توضيحية لكأس احتفال StudyGenie",
+      "shareNotReady": "ميزة مشاركة بطاقة الإنجاز ستتوفر عند ربط خدمة المشاركة بالخادم."
+    },
+    "feedback": {
+      "stepIndicator": "الخطوة {{step}} من {{total}}",
+      "step1Title": "كيف كان الامتحان؟",
+      "step1Subtitle": "تقييم سريع لمقرر {{course}}",
+      "step2Title": "ما المواضيع التي لفتت انتباهك؟",
+      "step2Subtitle": "اختياري — حدد من المنهج المواضيع الأصعب عليك أو الأكثر وروداً في الامتحان.",
+      "difficulties": {
+        "EASY": {
+          "label": "سهل",
+          "description": "شعرت بجاهزية عالية وسلاسة"
+        },
+        "MEDIUM": {
+          "label": "متوسط",
+          "description": "امتحان متوازن مع بعض التحديات"
+        },
+        "HARD": {
+          "label": "صعب",
+          "description": "أصعب أو أعمق مما توقعت"
+        }
+      },
+      "topicSearchPlaceholder": "ابحث في مواضيع المنهج...",
+      "topicSearchLabel": "ابحث في مواضيع المنهج",
+      "hardestLabel": "الأصعب بالنسبة لي",
+      "testedLabel": "ورد بكثرة في الامتحان",
+      "noTopicsTitle": "لا توجد مواضيع مطابقة",
+      "noTopicsSubtitle": "جرّب كلمة بحث أخرى أو تخطَّ هذه الخطوة.",
+      "noTopicsInCourse": "لا توجد مواضيع مسجلة لهذا المقرر بعد.",
+      "privacyNote": "إجاباتك خاصة وتُستخدم بشكل مجمّع فقط لتحسين خطط الدراسة.",
+      "skipButton": "تخطي",
+      "backButton": "رجوع",
+      "nextButton": "التالي",
+      "submitButton": "إرسال التقييم",
+      "submittingButton": "جارٍ الحفظ...",
+      "closeLabel": "إغلاق استبيان الامتحان",
+      "selectedCounts": "{{hardCount}} الأصعب · {{testedCount}} الأكثر اختباراً",
+      "submittedToast": "شكراً لك! تقييمك يساعد StudyGenie على تحسين الخطط الدراسية.",
+      "skippedToast": "تم تخطي التقييم. يمكنك مراجعة تقريرك في أي وقت من الإعدادات.",
+      "errors": {
+        "difficultyRequired": "يرجى اختيار سهل أو متوسط أو صعب — أو الضغط على تخطي.",
+        "submitFailed": "تعذر حفظ التقييم. يرجى المحاولة مرة أخرى."
+      }
+    },
+    "report": {
+      "backToCourses": "العودة إلى مقرراتي",
+      "title": "تقرير الدراسة بعد الامتحان",
+      "subtitle": "ملخص جهدك لمقرر {{course}}",
+      "totalHours": "إجمالي ساعات الدراسة",
+      "sessionsCount": "عدد الجلسات",
+      "adherence": "الالتزام بالجدول",
+      "longestStreak": "أطول سلسلة أيام",
+      "streakDays": "{{days}} أيام",
+      "finalRank": "الترتيب النهائي",
+      "rankValue": "#{{rank}}",
+      "rankUnavailable": "قيد الاحتساب",
+      "chartTitle": "الساعات المخططة مقابل الفعلية",
+      "chartSubtitle": "التوزيع الأسبوعي خلال فترة التحضير للامتحان",
+      "plannedSeries": "الساعات المخططة",
+      "actualSeries": "الساعات الفعلية",
+      "slowTopicsTitle": "المواضيع التي استغرقت وقتاً أطول من المتوقع",
+      "slowTopicsEmpty": "جميع المواضيع أُنجزت ضمن الوقت المخطط!",
+      "topicTimeRatio": "{{actual}} د فعلي / {{planned}} د مخطط",
+      "downloadPdf": "تحميل ملخص PDF",
+      "downloadingPdf": "جارٍ تجهيز ملف PDF...",
+      "pdfNotReady": "سيتم ربط تصدير PDF بالخادم قريباً.",
+      "loadingLabel": "جارٍ تحميل التقرير الدراسي..."
+    },
+    "nextStep": {
+      "eyebrow": "خطوتك القادمة",
+      "title": "لديك الآن {{hours}} ساعات فراغ أسبوعياً.",
+      "prompt": "هل تود توجيهها إلى {{course}} (الامتحان القادم خلال {{days}} أيام)؟",
+      "acceptButton": "موافق",
+      "notNowButton": "ليس الآن",
+      "acceptedToast": "تم توجيه {{hours}} ساعات أسبوعياً نحو {{course}}!",
+      "restTitle": "هل تأخذ يوم راحة مستحق؟",
+      "restSubtitle": "حققت سلسلة متواصلة لمدة {{streak}} أيام! فعّل تجميد السلسلة لترتاح دون فقدان تقدمك.",
+      "restButton": "استخدم تجميد السلسلة",
+      "restNotReady": "تفعيل تجميد السلسلة بانتظار دعم الخادم — خذ راحتك بثقة!"
+    },
+    "coursesTab": {
+      "activeHeading": "المقررات النشطة",
+      "completedHeading": "المقررات المكتملة",
+      "archivedHeading": "المقررات المؤرشفة ({{count}})",
+      "completedMeta": "{{hours}} ساعة دراسة",
+      "rankBadge": "الترتيب #{{rank}}",
+      "rankPendingBadge": "الترتيب قيد الاحتساب",
+      "viewReport": "عرض التقرير",
+      "reopen": "إعادة فتح التحدي",
+      "archive": "أرشفة",
+      "reopenConfirmTitle": "إعادة فتح {{course}}؟",
+      "reopenConfirmBody": "سيعيد هذا الإجراء مقرر {{course}} إلى قائمة المقررات النشطة لمتابعة دراسته.",
+      "reopenConfirmAction": "إعادة الفتح",
+      "cancel": "إلغاء",
+      "reopenedToast": "تمت إعادة {{course}} إلى المقررات النشطة.",
+      "archivedToast": "تمت أرشفة {{course}}.",
+      "emptyCompleted": "لا توجد امتحانات مكتملة بعد. عند انتهاء موعد الامتحان ستظهر إنجازاتك هنا."
+    }
+  }
+}

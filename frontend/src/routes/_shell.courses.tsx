@@ -37,6 +37,7 @@ import { browseService, syllabusService, examService } from "@/lib/api/services"
 import { fetchApi, getStoredAccessToken } from "@/lib/api/client";
 
 import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, toLocalDateStr, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile, isCourseMaterialUploaded } from "@/lib/courses-util";
+import { postExamApi } from "@/features/post-exam/api/postExamApi";
 
 import { clearExam, deleteExam, isCourseEnrolled, loadExam, loadExams, saveExam, daysUntil } from "@/lib/exam";
 
@@ -1894,16 +1895,30 @@ function JoinChallenge({
     }
     setLoadingQuiz(true);
     try {
+      let courseFeedback = { dominantDifficulty: "MEDIUM", heavilyTestedTopicIds: [] as number[], hardTopicIds: [] as number[] };
+      try {
+        courseFeedback = await postExamApi.getCourseFeedbackSummary(course.name || course.id);
+      } catch {}
+
+      const testedSet = new Set((courseFeedback?.heavilyTestedTopicIds || []).map(Number));
+      const hardSet = new Set((courseFeedback?.hardTopicIds || []).map(Number));
+
       const payload = {
         course_name: course.name,
+        course_difficulty: courseFeedback.dominantDifficulty,
         language: "en",
         quiz_type: quizType,
-        topics: selectedTopics.map((t, idx) => ({
-          ref: String(t.id || idx + 1),
-          chapter_title: t.name,
-          subtopics: t.subtopics && t.subtopics.length > 0 ? t.subtopics : [t.name],
-          source_excerpt: t.contentExcerpt || (t.subtopics ? t.subtopics.join(". ") : undefined),
-        })),
+        topics: selectedTopics.map((t, idx) => {
+          const topicId = Number(t.id || idx + 1);
+          return {
+            ref: String(t.id || idx + 1),
+            chapter_title: t.name,
+            subtopics: t.subtopics && t.subtopics.length > 0 ? t.subtopics : [t.name],
+            source_excerpt: t.contentExcerpt || (t.subtopics ? t.subtopics.join(". ") : undefined),
+            is_heavily_tested: testedSet.has(topicId),
+            is_hard: hardSet.has(topicId),
+          };
+        }),
         flashcards_per_topic: 2,
         questions_per_topic: Math.min(6, Math.max(3, Math.ceil(12 / selectedTopics.length))),
       };
@@ -2637,70 +2652,58 @@ function JoinChallenge({
 
         }
 
-        const topicsPayload = activeTopics.map((t: Topic, idx: number) => ({
+        let courseFeedback = { dominantDifficulty: "MEDIUM", heavilyTestedTopicIds: [] as number[], hardTopicIds: [] as number[] };
+        try {
+          courseFeedback = await postExamApi.getCourseFeedbackSummary(course?.name || course?.id);
+        } catch {}
 
-          ref: String(t.id || idx + 1),
+        const testedSet = new Set((courseFeedback?.heavilyTestedTopicIds || []).map(Number));
+        const hardSet = new Set((courseFeedback?.hardTopicIds || []).map(Number));
 
-          topicRef: String(t.id || idx + 1),
+        const topicsPayload = activeTopics.map((t: Topic, idx: number) => {
+          const topicId = Number(t.id || idx + 1);
+          const isTested = testedSet.has(topicId);
+          const isHard = hardSet.has(topicId);
 
-          topic_ref: String(t.id || idx + 1),
-
-          chapterTitle: t.name,
-
-          chapter_title: t.name,
-
-          orderIndex: idx + 1,
-
-          order_index: idx + 1,
-
-          estimatedHours: Math.max(0.5, (t.durationMinutes || 120) / 60),
-
-          estimated_hours: Math.max(0.5, (t.durationMinutes || 120) / 60),
-
-          importance: t.importance || 3,
-
-          subtopics: t.subtopics || [],
-
-        }));
-
-
+          return {
+            ref: String(t.id || idx + 1),
+            topicRef: String(t.id || idx + 1),
+            topic_ref: String(t.id || idx + 1),
+            chapterTitle: t.name,
+            chapter_title: t.name,
+            orderIndex: idx + 1,
+            order_index: idx + 1,
+            estimatedHours: Math.max(0.5, (t.durationMinutes || 120) / 60),
+            estimated_hours: Math.max(0.5, (t.durationMinutes || 120) / 60),
+            importance: t.importance || 3,
+            subtopics: t.subtopics || [],
+            is_heavily_tested: isTested,
+            isHeavilyTested: isTested,
+            is_hard: isHard,
+            isHard: isHard,
+          };
+        });
 
         const res = await fetchApi<any>("/api/v1/study-plans/generate", {
-
           method: "POST",
-
           body: JSON.stringify({
-
             startDate: startDateStr,
-
             start_date: startDateStr,
-
             examDate: dateStr,
-
             exam_date: dateStr,
-
             topics: topicsPayload,
-
             dailyHours: mode === "survival" ? 4.0 : 2.5,
-
             daily_hours: mode === "survival" ? 4.0 : 2.5,
-
             restDays: [6],
-
             rest_weekdays: [6],
-
             mode: mode.toUpperCase(),
-
             bufferDays: bufferDays,
-
             buffer_days_before_exam: bufferDays,
-
             reviewRatio: 0.2,
-
             review_ratio: 0.2,
-
+            course_difficulty: courseFeedback.dominantDifficulty,
+            courseDifficulty: courseFeedback.dominantDifficulty,
           }),
-
         });
 
         planData = res.data;
@@ -3046,18 +3049,24 @@ function JoinChallenge({
                   <span className="font-bold text-foreground truncate">{courseExam.type || "Final Exam"}</span>
                   <span className="text-muted-foreground">•</span>
                   <span className="font-semibold text-primary">{courseExam.date}</span>
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0",
-                      daysUntil(courseExam.date) < 15
+                  {(() => {
+                    const rawDays = daysUntil(courseExam.date);
+                    const isPast = rawDays < 0;
+                    const isToday = rawDays === 0;
+                    const days = Math.abs(rawDays);
+                    const badgeCls = isPast
+                      ? "border border-slate-500/30 bg-slate-500/15 text-slate-600 dark:text-slate-400"
+                      : rawDays < 15
                         ? "border border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400"
-                        : daysUntil(courseExam.date) <= 30
+                        : rawDays <= 30
                           ? "border border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                          : "border border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                    )}
-                  >
-                    {Math.max(0, daysUntil(courseExam.date))}d left
-                  </span>
+                          : "border border-emerald-500/30 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+                    return (
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold shrink-0", badgeCls)}>
+                        {isPast ? `${days}d ago (Ended)` : isToday ? "Today" : `${days}d left`}
+                      </span>
+                    );
+                  })()}
                   {courseExam.professor && (
                     <span className="text-muted-foreground hidden md:inline">• Prof. {courseExam.professor}</span>
                   )}

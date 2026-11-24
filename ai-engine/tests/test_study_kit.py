@@ -35,3 +35,23 @@ async def test_generate_study_kit_all_fail():
     with pytest.raises(AppError) as exc:
         await generate_study_kit(req, seed=42)
     assert exc.value.error_code == "ALL_TOPICS_FAILED"
+
+@pytest.mark.asyncio
+async def test_generate_study_kit_with_student_feedback():
+    req = GenerateStudyKitRequest(
+        course_name="Database Systems",
+        course_difficulty="HARD",
+        topics=[
+            TopicInput(
+                ref="db1",
+                chapter_title="B+ Tree Indexing",
+                is_heavily_tested=True,
+                is_hard=True
+            )
+        ]
+    )
+    res = await generate_study_kit(req, seed=42)
+    assert len(res.topics) == 1
+    assert res.topics[0].ref == "db1"
+    assert len(res.topics[0].flashcards) > 0
+    assert len(res.topics[0].quiz) > 0

@@ -8,6 +8,8 @@ class TopicInput(BaseModel):
     chapter_title: str = Field(..., max_length=255)
     subtopics: list[str] | None = Field(default=None, max_length=20)
     source_excerpt: str | None = Field(default=None, max_length=20000)
+    is_heavily_tested: bool = False
+    is_hard: bool = False
 
 class GenerateStudyKitRequest(BaseModel):
     course_name: str = Field(..., max_length=150)
@@ -16,6 +18,7 @@ class GenerateStudyKitRequest(BaseModel):
     flashcards_per_topic: int = Field(default=10, ge=1, le=25)
     questions_per_topic: int = Field(default=5, ge=1, le=15)
     quiz_type: str = Field(default="MIXED", max_length=30)
+    course_difficulty: str | None = None
 
 class Flashcard(BaseModel):
     front: str = Field(..., max_length=500)

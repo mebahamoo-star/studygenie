@@ -151,6 +151,9 @@ export function saveUserCourses(courses: Course[]): void {
     if (prefix === "guest") {
       localStorage.setItem("sg-user-courses", JSON.stringify(sanitized));
     }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("sg-courses-updated"));
+    }
   } catch {}
 }
 

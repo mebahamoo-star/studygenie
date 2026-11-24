@@ -114,6 +114,15 @@ async def _generate_topic_kit(req: GenerateStudyKitRequest, topic: TopicInput, r
     provider = get_provider()
     
     quiz_type = getattr(req, "quiz_type", "MIXED") or "MIXED"
+    feedback_parts = []
+    if getattr(topic, "is_heavily_tested", False):
+        feedback_parts.append("HEAVILY TESTED on past exams (prioritize high-yield exam problem types, formulas, and mechanics)")
+    if getattr(topic, "is_hard", False):
+        feedback_parts.append("RATED HARD by students (provide extra clear explanations breaking down complex mechanisms)")
+    if getattr(req, "course_difficulty", None):
+        feedback_parts.append(f"Course Difficulty: {req.course_difficulty}")
+    feedback_context = "; ".join(feedback_parts) if feedback_parts else "Standard syllabus distribution"
+
     user_prompt = USER_PROMPT_TEMPLATE.format(
         course_name=req.course_name,
         chapter_title=topic.chapter_title,
@@ -121,7 +130,8 @@ async def _generate_topic_kit(req: GenerateStudyKitRequest, topic: TopicInput, r
         source_excerpt=topic.source_excerpt or "None",
         flashcards_per_topic=req.flashcards_per_topic,
         questions_per_topic=req.questions_per_topic,
-        quiz_type=quiz_type
+        quiz_type=quiz_type,
+        feedback_context=feedback_context,
     )
 
     try:

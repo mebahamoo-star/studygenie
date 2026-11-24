@@ -39,8 +39,26 @@ public class TopicPlanInput {
     @Builder.Default
     private List<String> subtopics = new ArrayList<>();
 
+    @com.fasterxml.jackson.annotation.JsonProperty("is_heavily_tested")
+    @JsonAlias({"is_heavily_tested", "isHeavilyTested", "heavily_tested", "heavilyTested"})
+    @Builder.Default
+    private Boolean isHeavilyTested = false;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("is_hard")
+    @JsonAlias({"is_hard", "isHard", "hard_topic", "hardTopic"})
+    @Builder.Default
+    private Boolean isHard = false;
+
     public TopicPlanInput(String ref, String chapterTitle, int orderIndex, double estimatedHours, int importance) {
-        this(ref, chapterTitle, orderIndex, estimatedHours, importance, new ArrayList<>());
+        this(ref, chapterTitle, orderIndex, estimatedHours, importance, new ArrayList<>(), false, false);
+    }
+
+    public boolean isHeavilyTested() {
+        return Boolean.TRUE.equals(isHeavilyTested);
+    }
+
+    public boolean isHard() {
+        return Boolean.TRUE.equals(isHard);
     }
 
     // Record-style accessors for backward compatibility

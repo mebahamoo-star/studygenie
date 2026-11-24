@@ -33,6 +33,7 @@ import { Route as AdminAdminOverviewRouteImport } from './routes/_admin.admin.ov
 import { Route as AdminAdminReportsRouteImport } from './routes/_admin.admin.reports'
 import { Route as AdminAdminUsersRouteImport } from './routes/_admin.admin.users'
 import { Route as ShellSettingsTabRouteImport } from './routes/_shell.settings.$tab'
+import { Route as ShellCoursesIdReportRouteImport } from './routes/_shell.courses_.$id.report'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -152,6 +153,11 @@ const ShellSettingsTabRoute = ShellSettingsTabRouteImport.update({
   path: '/$tab',
   getParentRoute: () => ShellSettingsRoute,
 } as any)
+const ShellCoursesIdReportRoute = ShellCoursesIdReportRouteImport.update({
+  id: '/courses_/$id/report',
+  path: '/courses/$id/report',
+  getParentRoute: () => ShellRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -176,6 +182,7 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminAdminUsersRoute
   '/settings/$tab': typeof ShellSettingsTabRoute
   '/admin/': typeof AdminAdminIndexRoute
+  '/courses/$id/report': typeof ShellCoursesIdReportRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -200,6 +207,7 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminAdminUsersRoute
   '/settings/$tab': typeof ShellSettingsTabRoute
   '/admin': typeof AdminAdminIndexRoute
+  '/courses/$id/report': typeof ShellCoursesIdReportRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -227,6 +235,7 @@ export interface FileRoutesById {
   '/_admin/admin/users': typeof AdminAdminUsersRoute
   '/_shell/settings/$tab': typeof ShellSettingsTabRoute
   '/_admin/admin/': typeof AdminAdminIndexRoute
+  '/_shell/courses_/$id/report': typeof ShellCoursesIdReportRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -253,6 +262,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/settings/$tab'
     | '/admin/'
+    | '/courses/$id/report'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -277,6 +287,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/settings/$tab'
     | '/admin'
+    | '/courses/$id/report'
   id:
     | '__root__'
     | '/'
@@ -303,6 +314,7 @@ export interface FileRouteTypes {
     | '/_admin/admin/users'
     | '/_shell/settings/$tab'
     | '/_admin/admin/'
+    | '/_shell/courses_/$id/report'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -486,6 +498,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellSettingsTabRouteImport
       parentRoute: typeof ShellSettingsRoute
     }
+    '/_shell/courses_/$id/report': {
+      id: '/_shell/courses_/$id/report'
+      path: '/courses/$id/report'
+      fullPath: '/courses/$id/report'
+      preLoaderRoute: typeof ShellCoursesIdReportRouteImport
+      parentRoute: typeof ShellRoute
+    }
   }
 }
 
@@ -531,6 +550,7 @@ interface ShellRouteChildren {
   ShellProfileRoute: typeof ShellProfileRoute
   ShellQuizRoute: typeof ShellQuizRoute
   ShellSettingsRoute: typeof ShellSettingsRouteWithChildren
+  ShellCoursesIdReportRoute: typeof ShellCoursesIdReportRoute
 }
 
 const ShellRouteChildren: ShellRouteChildren = {
@@ -543,6 +563,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellProfileRoute: ShellProfileRoute,
   ShellQuizRoute: ShellQuizRoute,
   ShellSettingsRoute: ShellSettingsRouteWithChildren,
+  ShellCoursesIdReportRoute: ShellCoursesIdReportRoute,
 }
 
 const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)

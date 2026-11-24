@@ -634,15 +634,29 @@ export function loadExamsForUser(
 
 
 
-  // Sort by date ascending (closest upcoming exam first)
+  // Sort: upcoming exams first (closest first), followed by past exams (most recently ended first)
 
   return filtered.sort((a, b) => {
 
-    const timeA = new Date(a.date + "T00:00:00").getTime();
+    const daysA = daysUntil(a.date);
 
-    const timeB = new Date(b.date + "T00:00:00").getTime();
+    const daysB = daysUntil(b.date);
 
-    return timeA - timeB;
+    const aUpcoming = daysA >= 0;
+
+    const bUpcoming = daysB >= 0;
+
+    if (aUpcoming && !bUpcoming) return -1;
+
+    if (!aUpcoming && bUpcoming) return 1;
+
+    if (aUpcoming && bUpcoming) {
+
+      return daysA - daysB; // closest upcoming first
+
+    }
+
+    return daysB - daysA; // most recently passed first (e.g. -1 before -10)
 
   });
 

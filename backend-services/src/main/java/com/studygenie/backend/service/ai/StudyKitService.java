@@ -17,14 +17,17 @@ import java.util.stream.Collectors;
 public class StudyKitService {
     private final AiEngineClient aiEngineClient;
     private final StudyKitStore store;
+    private final com.studygenie.backend.service.feedback.ExamFeedbackService feedbackService;
 
-    public StudyKitService(AiEngineClient aiEngineClient, StudyKitStore store) {
+    public StudyKitService(AiEngineClient aiEngineClient, StudyKitStore store, com.studygenie.backend.service.feedback.ExamFeedbackService feedbackService) {
         this.aiEngineClient = aiEngineClient;
         this.store = store;
+        this.feedbackService = feedbackService;
     }
 
     public ClientStudyKitResponse generateAndSave(GenerateStudyKitRequest request) {
-        StudyKitResponseData data = aiEngineClient.generateStudyKit(request);
+        GenerateStudyKitRequest enriched = feedbackService != null ? feedbackService.enrichStudyKitRequest(request) : request;
+        StudyKitResponseData data = aiEngineClient.generateStudyKit(enriched);
         
         Long userId = getUserId();
         String kitId = UUID.randomUUID().toString();

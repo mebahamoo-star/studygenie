@@ -48,6 +48,16 @@ public class GeneratePlanRequest {
     @Builder.Default
     private double reviewRatio = 0.15;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("course_difficulty")
+    @JsonAlias({"course_difficulty", "courseDifficulty", "difficulty"})
+    private String courseDifficulty;
+
+    public GeneratePlanRequest(LocalDate startDate, LocalDate examDate, List<TopicPlanInput> topics,
+                               double dailyHours, List<Integer> restWeekdays, String mode,
+                               int bufferDaysBeforeExam, double reviewRatio) {
+        this(startDate, examDate, topics, dailyHours, restWeekdays, mode, bufferDaysBeforeExam, reviewRatio, null);
+    }
+
     // Record-style accessors for backward compatibility
     public LocalDate startDate() {
         return startDate != null ? startDate : LocalDate.now();
