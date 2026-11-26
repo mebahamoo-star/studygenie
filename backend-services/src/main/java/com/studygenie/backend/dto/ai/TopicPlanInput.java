@@ -75,6 +75,10 @@ public class TopicPlanInput {
         return Boolean.TRUE.equals(isHard);
     }
 
+    public boolean isWeakQuiz() {
+        return Boolean.TRUE.equals(isWeakQuiz);
+    }
+
     // Record-style accessors for backward compatibility
     public String ref() {
         return ref != null && !ref.isBlank() ? ref : String.valueOf(orderIndex > 0 ? orderIndex : 1);

@@ -114,6 +114,7 @@ class GeneratePlanRequest(BaseModel):
     review_ratio: float = Field(default=0.15, ge=0.0, le=0.4)
     course_difficulty: str | None = None # EASY | MEDIUM | HARD
     weekday_hours: dict[int, float] | None = None # 0 = Monday .. 6 = Sunday
+    completed_today_minutes: int = Field(default=0, ge=0)
 
     @model_validator(mode="before")
     @classmethod
@@ -191,6 +192,18 @@ class GeneratePlanRequest(BaseModel):
                 for k, v in raw_wh.items():
                     parsed_wh[int(k)] = float(v)
                 d["weekday_hours"] = parsed_wh
+
+            # Minutes already completed today
+            raw_ctm = (
+                d.get("completed_today_minutes")
+                if "completed_today_minutes" in d
+                else d.get("completedTodayMinutes")
+            )
+            if raw_ctm is not None:
+                try:
+                    d["completed_today_minutes"] = max(0, int(raw_ctm))
+                except (ValueError, TypeError):
+                    d["completed_today_minutes"] = 0
 
             return d
         return data

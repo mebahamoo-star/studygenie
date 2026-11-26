@@ -1647,6 +1647,16 @@ function groupTopicsIntoChapters(topics: Topic[], courseName?: string): ChapterF
   ];
 }
 
+const DEFAULT_WEEKDAY_HOURS: Record<number, number> = {
+  0: 2.5,
+  1: 2.5,
+  2: 2.5,
+  3: 2.5,
+  4: 0,
+  5: 2.5,
+  6: 2.5,
+};
+
 function JoinChallenge({
 
   course,
@@ -1705,15 +1715,87 @@ function JoinChallenge({
     return [4]; // Default: Friday (Python weekday 4)
   });
   const [customWeekdayHoursEnabled, setCustomWeekdayHoursEnabled] = useState(false);
-  const [weekdayHoursMap, setWeekdayHoursMap] = useState<Record<number, number>>({
-    0: 2.5,
-    1: 2.5,
-    2: 2.5,
-    3: 2.5,
-    4: 0,
-    5: 2.5,
-    6: 2.5,
-  });
+  const [weekdayHoursMap, setWeekdayHoursMap] = useState<Record<number, number>>({ ...DEFAULT_WEEKDAY_HOURS });
+
+  useEffect(() => {
+    let active = true;
+    const prefix = getUserStoragePrefix();
+
+    const applySavedPlanSettings = (savedPlan: any, fromServer: boolean) => {
+      if (!active || !savedPlan) return;
+      const savedExamDate = savedPlan.exam_date ?? savedPlan.examDate;
+      if (savedExamDate && typeof savedExamDate === "string") {
+        const parsed = new Date(savedExamDate + "T00:00:00");
+        if (!isNaN(parsed.getTime())) {
+          setDate(parsed);
+        }
+      }
+      const savedDailyHours = savedPlan.daily_hours ?? savedPlan.dailyHours;
+      if (typeof savedDailyHours === "number" && savedDailyHours > 0) {
+        setDailyHours(savedDailyHours);
+      }
+      const savedMode = savedPlan.summary?.mode;
+      if (savedMode && typeof savedMode === "string") {
+        setMode(savedMode.toLowerCase() === "survival" ? "survival" : "normal");
+      }
+      const savedRest = savedPlan.rest_weekdays ?? savedPlan.restWeekdays;
+      if (Array.isArray(savedRest)) {
+        setRestWeekdays(savedRest.filter((d: any) => typeof d === "number" && d >= 0 && d <= 6));
+      }
+      const savedWh = savedPlan.weekday_hours ?? savedPlan.weekdayHours;
+      if (savedWh && typeof savedWh === "object" && Object.keys(savedWh).length > 0) {
+        const normalized: Record<number, number> = { ...DEFAULT_WEEKDAY_HOURS };
+        Object.entries(savedWh).forEach(([k, v]) => {
+          const dayNum = Number(k);
+          const hrsVal = Number(v);
+          if (!isNaN(dayNum) && dayNum >= 0 && dayNum <= 6 && !isNaN(hrsVal)) {
+            normalized[dayNum] = hrsVal;
+          }
+        });
+        setWeekdayHoursMap(normalized);
+        setCustomWeekdayHoursEnabled(true);
+      } else if (fromServer) {
+        setCustomWeekdayHoursEnabled(false);
+        setWeekdayHoursMap({ ...DEFAULT_WEEKDAY_HOURS });
+        try {
+          localStorage.removeItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`);
+        } catch {}
+      }
+    };
+
+    try {
+      const rawPlan =
+        localStorage.getItem(`sg-${prefix}-plan-${course.id}`) ||
+        localStorage.getItem(`sg-${prefix}-plan-${course.name}`);
+      if (rawPlan) {
+        applySavedPlanSettings(JSON.parse(rawPlan), false);
+      }
+      const rawWh = localStorage.getItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`);
+      if (rawWh) {
+        const parsedWh = JSON.parse(rawWh);
+        if (parsedWh && typeof parsedWh === "object" && Object.keys(parsedWh).length > 0) {
+          setWeekdayHoursMap((prev) => ({ ...prev, ...parsedWh }));
+          setCustomWeekdayHoursEnabled(true);
+        }
+      }
+    } catch {}
+
+    const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
+    if (isRealId) {
+      browseService
+        .getCoursePlan(course.id)
+        .then((remote) => {
+          if (active && remote) {
+            applySavedPlanSettings(remote, true);
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [course.id, course.name]);
   const [planDateError, setPlanDateError] = useState<string | null>(null);
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [isExamExpanded, setIsExamExpanded] = useState(false);
@@ -1921,7 +2003,7 @@ function JoinChallenge({
     try {
       let courseFeedback = { dominantDifficulty: "MEDIUM", heavilyTestedTopicIds: [] as number[], hardTopicIds: [] as number[] };
       try {
-        courseFeedback = await postExamApi.getCourseFeedbackSummary(course.name || course.id);
+        courseFeedback = await postExamApi.getCourseFeedbackSummary(course.id || course.name);
       } catch {}
 
       const testedSet = new Set((courseFeedback?.heavilyTestedTopicIds || []).map(Number));
@@ -2577,6 +2659,11 @@ function JoinChallenge({
     try {
       const prefix = getUserStoragePrefix();
       localStorage.setItem(`sg-${prefix}-rest-days-${course.id || course.name}`, JSON.stringify(restWeekdays));
+      if (customWeekdayHoursEnabled) {
+        localStorage.setItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`, JSON.stringify(weekdayHoursMap));
+      } else {
+        localStorage.removeItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`);
+      }
     } catch {}
 
 
@@ -2630,66 +2717,46 @@ function JoinChallenge({
       const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
 
       if (isRealId) {
-
+        const selectedIds = effectiveTopics.map((t) => t.id).filter((id): id is number => typeof id === "number");
+        const whPayload = customWeekdayHoursEnabled ? weekdayHoursMap : {};
+        const clearWh = !customWeekdayHoursEnabled;
         try {
-
-          const selectedIds = effectiveTopics.map((t) => t.id).filter((id): id is number => typeof id === "number");
           planData = await browseService.generateOrUpdatePlan(course.id, {
             examDate: dateStr,
             dailyHours: effDailyHours,
             mode,
             selectedTopicIds: selectedIds.length > 0 ? selectedIds : undefined,
             restWeekdays,
-            weekdayHours: customWeekdayHoursEnabled ? weekdayHoursMap : undefined,
+            weekdayHours: whPayload,
+            clearWeekdayHours: clearWh,
           });
-
         } catch (planErr) {
-
           console.warn("Could not regenerate via /plan endpoint, trying fallback joinCourse:", planErr);
-
           try {
-
             planData = await browseService.joinCourse(course.id, {
-
               examDate: dateStr,
-
               dailyHours: effDailyHours,
-
               mode,
-
               selectedTopicIds: selectedIds.length > 0 ? selectedIds : undefined,
-
               restWeekdays,
-
-              weekdayHours: customWeekdayHoursEnabled ? weekdayHoursMap : undefined,
-
+              weekdayHours: whPayload,
+              clearWeekdayHours: clearWh,
             });
-
           } catch (joinErr) {
-
             console.warn("Could not join via course ID, attempting direct plan generation", joinErr);
-
           }
-
         }
-
       }
 
-
-
       if (!planData) {
-
         const activeTopics: Topic[] = effectiveTopics;
-
         if (!activeTopics || activeTopics.length === 0) {
-
           throw new Error("No syllabus topics available to generate a study plan. Please upload course material first.");
-
         }
 
         let courseFeedback = { dominantDifficulty: "MEDIUM", heavilyTestedTopicIds: [] as number[], hardTopicIds: [] as number[] };
         try {
-          courseFeedback = await postExamApi.getCourseFeedbackSummary(course?.name || course?.id);
+          courseFeedback = await postExamApi.getCourseFeedbackSummary(course?.id || course?.name);
         } catch {}
 
         const testedSet = new Set((courseFeedback?.heavilyTestedTopicIds || []).map(Number));
@@ -3844,13 +3911,31 @@ function JoinChallenge({
                 })}
               </div>
               <div className="pt-2 border-t border-border/40">
-                <button
-                  type="button"
-                  onClick={() => setCustomWeekdayHoursEnabled((v) => !v)}
-                  className="text-xs font-semibold text-primary hover:underline"
-                >
-                  {customWeekdayHoursEnabled ? "Hide per-weekday hours" : "Customize hours per weekday (optional)"}
-                </button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomWeekdayHoursEnabled((v) => !v)}
+                    className="text-xs font-semibold text-primary hover:underline"
+                  >
+                    {customWeekdayHoursEnabled ? "Hide per-weekday hours" : "Customize hours per weekday (optional)"}
+                  </button>
+                  {customWeekdayHoursEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomWeekdayHoursEnabled(false);
+                        setWeekdayHoursMap({ ...DEFAULT_WEEKDAY_HOURS });
+                        try {
+                          const prefix = getUserStoragePrefix();
+                          localStorage.removeItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`);
+                        } catch {}
+                      }}
+                      className="text-xs font-semibold text-destructive hover:underline"
+                    >
+                      Clear custom weekday hours
+                    </button>
+                  )}
+                </div>
                 {customWeekdayHoursEnabled && (
                   <div className="mt-2 grid grid-cols-7 gap-1.5">
                     {[

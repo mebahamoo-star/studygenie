@@ -50,9 +50,10 @@ interface DayPlan {
 }
 
 function Plan() {
-  const { addPoints } = useApp();
+  const { addPoints, refreshGamification } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const [doneMap, setDoneMap] = useState<Record<string, string[]>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
@@ -167,15 +168,35 @@ function Plan() {
 
     // Keep localStorage cache synchronized for offline/guest fallback
     const currentList = doneMap[dateStr] || [];
+    const taskIdStr = t.id ? String(t.id) : null;
     const nextList = nextCompleted
-      ? Array.from(new Set([...currentList, taskKey]))
-      : currentList.filter((id) => id !== taskKey && id !== t.ref && id !== t.title);
+      ? Array.from(new Set([...currentList, taskKey, ...(taskIdStr ? [taskIdStr] : [])]))
+      : currentList.filter((id) => id !== taskKey && id !== taskIdStr && id !== t.ref && id !== t.title);
     setDoneMap((prev) => ({ ...prev, [dateStr]: nextList }));
     try {
       localStorage.setItem(`sg-${prefix}-checklist-done-${dateStr}`, JSON.stringify(nextList));
       const todayStr = new Date().toISOString().slice(0, 10);
       if (dateStr === todayStr) {
         localStorage.setItem(`sg-${prefix}-checklist-done`, JSON.stringify(nextList));
+      }
+      if (selectedCourse) {
+        const planKey = `sg-${prefix}-plan-${selectedCourse.id}`;
+        const rawPlan = localStorage.getItem(planKey);
+        if (rawPlan) {
+          try {
+            const parsedPlan = JSON.parse(rawPlan);
+            if (Array.isArray(parsedPlan?.tasks)) {
+              parsedPlan.tasks = parsedPlan.tasks.map((item: any) =>
+                (t.id && item.id === t.id) ||
+                (!t.id && item.date === dateStr && (item.topic_ref === t.ref || item.topicRef === t.ref) && (item.task_type || item.taskType || "STUDY").toUpperCase() === t.tag)
+                  ? { ...item, is_completed: nextCompleted, isCompleted: nextCompleted }
+                  : item
+              );
+              localStorage.setItem(planKey, JSON.stringify(parsedPlan));
+              localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.name}`, JSON.stringify(parsedPlan));
+            }
+          } catch {}
+        }
       }
       window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateStr, list: nextList } }));
     } catch {}
@@ -189,7 +210,7 @@ function Plan() {
       try {
         const res = await browseService.togglePlanTaskCompletion(selectedCourse.id, t.id, nextCompleted);
         if (res.xpGranted) {
-          addPoints(15);
+          await refreshGamification();
           toast.success("+15 XP! Topic marked as completed 🎉");
         }
         return;
@@ -229,6 +250,7 @@ function Plan() {
       return;
     }
     setIsRescheduling(true);
+    setRescheduleError(null);
     try {
       const updated = await browseService.rescheduleCoursePlan(selectedCourse.id);
       const prefix = getUserStoragePrefix();
@@ -242,7 +264,9 @@ function Plan() {
       extractAndSetPlanMeta(updated, selectedCourse);
       toast.success("Remaining uncompleted work rescheduled from today!");
     } catch (err: any) {
-      toast.error(err?.message || "Could not reschedule remaining plan.");
+      const msg = err?.message || "Could not reschedule remaining plan. Ensure your exam date is in the future.";
+      setRescheduleError(msg);
+      toast.error(msg);
     } finally {
       setIsRescheduling(false);
     }
@@ -304,6 +328,7 @@ function Plan() {
     setFullPlanDays([]);
     setSkippedTopics([]);
     setPlanWarnings([]);
+    setRescheduleError(null);
     setSurvival(false);
 
     let planData: any = null;
@@ -714,28 +739,38 @@ function Plan() {
           .flatMap((d) => d.tasks.filter((t) => !isTaskDone(d.date, t)));
         if (overdueTasks.length === 0) return null;
         return (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-4 shadow-sm">
-            <div className="flex items-start gap-2.5">
-              <Clock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <div className="text-sm font-bold text-foreground">
-                  Falling Behind? You have {overdueTasks.length} overdue study task(s).
+          <div className="mb-6 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-4 shadow-sm">
+              <div className="flex items-start gap-2.5">
+                <Clock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-sm font-bold text-foreground">
+                    Falling Behind? You have {overdueTasks.length} overdue study task(s).
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Completed progress will be preserved while remaining study hours are redistributed from today forward.
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Completed progress will be preserved while remaining study hours are redistributed from today forward.
-                </p>
               </div>
+              <Button
+                variant="magic"
+                size="sm"
+                onClick={handleRescheduleBehind}
+                disabled={isRescheduling}
+                className="gap-1.5 font-semibold"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isRescheduling && "animate-spin")} />
+                {isRescheduling ? "Rescheduling..." : "Reschedule Remaining Work"}
+              </Button>
             </div>
-            <Button
-              variant="magic"
-              size="sm"
-              onClick={handleRescheduleBehind}
-              disabled={isRescheduling}
-              className="gap-1.5 font-semibold"
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5", isRescheduling && "animate-spin")} />
-              {isRescheduling ? "Rescheduling..." : "Reschedule Remaining Work"}
-            </Button>
+            {rescheduleError && (
+              <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-xs font-medium text-destructive">
+                <span>{rescheduleError}</span>
+                <Link to="/courses" className="font-bold underline hover:opacity-80">
+                  Update Exam Date →
+                </Link>
+              </div>
+            )}
           </div>
         );
       })()}

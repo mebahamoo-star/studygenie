@@ -109,6 +109,8 @@ export function FeedbackStepper({
     }
 
     const ok = await submitFeedback(enrollment.id, {
+      courseId: enrollment.courseId,
+      courseName: enrollment.courseName,
       difficulty: parsed.data.difficulty,
       hardTopicIds: parsed.data.hardTopicIds,
       testedTopicIds: parsed.data.testedTopicIds,

@@ -20,6 +20,7 @@ import type {
   GamificationProfile,
   LeaderboardEntry,
   PlanResponseData,
+  PlanTask,
   ProgressResponse,
   QuizSubmissionResponse,
   ReviewItem,
@@ -422,9 +423,10 @@ export const browseService = {
       examDate: string;
       dailyHours: number;
       mode: "normal" | "survival";
-      selectedTopicIds?: (number | string)[];
-      restWeekdays?: number[];
-      weekdayHours?: Record<number, number>;
+      selectedTopicIds?: (number | string)[] | undefined;
+      restWeekdays?: number[] | undefined;
+      weekdayHours?: Record<number, number> | null | undefined;
+      clearWeekdayHours?: boolean | undefined;
     },
   ): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/join`, {
@@ -435,7 +437,8 @@ export const browseService = {
         mode: params.mode,
         selected_topic_ids: params.selectedTopicIds,
         rest_weekdays: params.restWeekdays,
-        weekday_hours: params.weekdayHours,
+        weekday_hours: params.clearWeekdayHours ? {} : (params.weekdayHours ?? undefined),
+        clear_weekday_hours: params.clearWeekdayHours,
       }),
     });
 
@@ -448,9 +451,10 @@ export const browseService = {
       examDate: string;
       dailyHours: number;
       mode: "normal" | "survival";
-      selectedTopicIds?: (number | string)[];
-      restWeekdays?: number[];
-      weekdayHours?: Record<number, number>;
+      selectedTopicIds?: (number | string)[] | undefined;
+      restWeekdays?: number[] | undefined;
+      weekdayHours?: Record<number, number> | null | undefined;
+      clearWeekdayHours?: boolean | undefined;
     },
   ): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan`, {
@@ -461,7 +465,8 @@ export const browseService = {
         mode: params.mode,
         selected_topic_ids: params.selectedTopicIds,
         rest_weekdays: params.restWeekdays,
-        weekday_hours: params.weekdayHours,
+        weekday_hours: params.clearWeekdayHours ? {} : (params.weekdayHours ?? undefined),
+        clear_weekday_hours: params.clearWeekdayHours,
       }),
     });
     return res.data!;

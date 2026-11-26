@@ -344,3 +344,39 @@ def test_planner_weak_quiz_extra_review():
     assert len(weak_t1_reviews) > len(base_t1_reviews)
     assert any("Weak Quiz Reinforcement" in (t.description or "") for t in weak_t1_reviews)
     assert any("weak quiz" in w.lower() for w in weak_res.summary.warnings)
+
+
+def test_planner_subtracts_completed_today_minutes_from_today_capacity():
+    req = GeneratePlanRequest(
+        start_date=date(2023, 10, 1),
+        exam_date=date(2023, 10, 5),
+        buffer_days_before_exam=0,
+        rest_weekdays=[],
+        topics=[
+            TopicPlanInput(ref="t1", chapter_title="Part 1", order_index=1, estimated_hours=1.5, importance=4),
+            TopicPlanInput(ref="t2", chapter_title="Part 2", order_index=2, estimated_hours=1.5, importance=4),
+        ],
+        daily_hours=2.0,
+        mode="NORMAL",
+        completed_today_minutes=75,
+    )
+    res = generate_plan(req)
+    today_mins = sum(t.minutes for t in res.tasks if t.date == date(2023, 10, 1))
+    assert today_mins <= 45
+
+    full_done_req = GeneratePlanRequest(
+        start_date=date(2023, 10, 1),
+        exam_date=date(2023, 10, 5),
+        buffer_days_before_exam=0,
+        rest_weekdays=[],
+        topics=[
+            TopicPlanInput(ref="t1", chapter_title="Part 1", order_index=1, estimated_hours=1.5, importance=4),
+        ],
+        daily_hours=2.0,
+        mode="NORMAL",
+        completed_today_minutes=120,
+    )
+    full_res = generate_plan(full_done_req)
+    assert sum(t.minutes for t in full_res.tasks if t.date == date(2023, 10, 1)) == 0
+    assert any(t.date >= date(2023, 10, 2) for t in full_res.tasks)
+

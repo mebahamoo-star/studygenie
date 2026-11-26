@@ -9,11 +9,16 @@ import com.studygenie.backend.dto.ai.TopicPlanInput;
 import com.studygenie.backend.dto.feedback.CourseFeedbackSummary;
 import com.studygenie.backend.dto.feedback.ExamFeedbackPayload;
 import com.studygenie.backend.entity.Course;
+import com.studygenie.backend.entity.Exam;
 import com.studygenie.backend.entity.ExamFeedback;
+import com.studygenie.backend.entity.StudyPlan;
 import com.studygenie.backend.entity.Syllabus;
 import com.studygenie.backend.entity.Topic;
+import com.studygenie.backend.exception.BadRequestException;
 import com.studygenie.backend.repository.CourseRepository;
 import com.studygenie.backend.repository.ExamFeedbackRepository;
+import com.studygenie.backend.repository.ExamRepository;
+import com.studygenie.backend.repository.StudyPlanRepository;
 import com.studygenie.backend.repository.SyllabusRepository;
 import com.studygenie.backend.repository.TopicRepository;
 import org.slf4j.Logger;
@@ -35,6 +40,8 @@ public class ExamFeedbackService {
     private final CourseRepository courseRepository;
     private final SyllabusRepository syllabusRepository;
     private final TopicRepository topicRepository;
+    private final ExamRepository examRepository;
+    private final StudyPlanRepository studyPlanRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // In-memory fallback used only when instantiated without Spring repositories (unit tests)
@@ -44,7 +51,15 @@ public class ExamFeedbackService {
     private final Set<String> seenCelebrations = ConcurrentHashMap.newKeySet();
 
     public ExamFeedbackService() {
-        this(null, null, null, null);
+        this(null, null, null, null, null, null);
+    }
+
+    public ExamFeedbackService(
+            ExamFeedbackRepository examFeedbackRepository,
+            CourseRepository courseRepository,
+            SyllabusRepository syllabusRepository,
+            TopicRepository topicRepository) {
+        this(examFeedbackRepository, courseRepository, syllabusRepository, topicRepository, null, null);
     }
 
     @Autowired
@@ -52,11 +67,15 @@ public class ExamFeedbackService {
             ExamFeedbackRepository examFeedbackRepository,
             CourseRepository courseRepository,
             SyllabusRepository syllabusRepository,
-            TopicRepository topicRepository) {
+            TopicRepository topicRepository,
+            @Autowired(required = false) ExamRepository examRepository,
+            @Autowired(required = false) StudyPlanRepository studyPlanRepository) {
         this.examFeedbackRepository = examFeedbackRepository;
         this.courseRepository = courseRepository;
         this.syllabusRepository = syllabusRepository;
         this.topicRepository = topicRepository;
+        this.examRepository = examRepository;
+        this.studyPlanRepository = studyPlanRepository;
     }
 
     @Transactional
@@ -87,8 +106,10 @@ public class ExamFeedbackService {
 
     @Transactional
     public void saveFeedback(String enrollmentId, Long userId, ExamFeedbackPayload payload) {
+        if (payload == null) {
+            throw new BadRequestException("Feedback payload is required.");
+        }
         String key = normalizeKey(enrollmentId);
-        seenCelebrations.add(key);
 
         Long resolvedCourseId = payload.getCourseId();
         if (resolvedCourseId == null) {
@@ -99,26 +120,85 @@ public class ExamFeedbackService {
         }
 
         String resolvedCourseName = payload.getCourseName();
-        if ((resolvedCourseName == null || resolvedCourseName.isBlank())) {
+        if (resolvedCourseName == null || resolvedCourseName.isBlank()) {
             resolvedCourseName = enrollmentCourseMap.get(key);
         }
-        if ((resolvedCourseName == null || resolvedCourseName.isBlank()) && resolvedCourseId == null) {
-            resolvedCourseName = extractCourseFromEnrollment(enrollmentId);
-        }
 
-        if (courseRepository != null) {
-            if (resolvedCourseId != null && (resolvedCourseName == null || resolvedCourseName.isBlank())) {
-                resolvedCourseName = courseRepository.findById(resolvedCourseId)
-                        .map(Course::getName)
-                        .orElse(resolvedCourseName);
-            } else if (resolvedCourseId == null && resolvedCourseName != null && !resolvedCourseName.isBlank()) {
-                Optional<Course> found = courseRepository.findFirstByNameIgnoreCase(resolvedCourseName.trim());
-                if (found.isPresent()) {
-                    resolvedCourseId = found.get().getId();
-                    resolvedCourseName = found.get().getName();
+        if (enrollmentId != null && enrollmentId.toLowerCase().startsWith("enroll_exam_") && examRepository != null) {
+            Long examId = tryParseLong(enrollmentId.substring("enroll_exam_".length()));
+            if (examId != null) {
+                Optional<Exam> examOpt = examRepository.findById(examId);
+                if (examOpt.isPresent()) {
+                    if (resolvedCourseId == null && examOpt.get().getCourseId() != null) {
+                        resolvedCourseId = examOpt.get().getCourseId();
+                    }
+                    if ((resolvedCourseName == null || resolvedCourseName.isBlank()) && examOpt.get().getCourse() != null) {
+                        resolvedCourseName = examOpt.get().getCourse();
+                    }
                 }
             }
         }
+
+        if (courseRepository != null) {
+            if (resolvedCourseId != null) {
+                Optional<Course> byId = courseRepository.findById(resolvedCourseId);
+                if (byId.isPresent()) {
+                    resolvedCourseId = byId.get().getId();
+                    resolvedCourseName = byId.get().getName();
+                } else {
+                    resolvedCourseId = null;
+                }
+            }
+
+            if (resolvedCourseId == null) {
+                String extracted = extractCourseFromEnrollment(enrollmentId);
+                if (extracted != null) {
+                    Long extractedId = tryParseLong(extracted);
+                    if (extractedId != null) {
+                        Optional<Course> byExtractedId = courseRepository.findById(extractedId);
+                        if (byExtractedId.isPresent()) {
+                            resolvedCourseId = byExtractedId.get().getId();
+                            resolvedCourseName = byExtractedId.get().getName();
+                        }
+                    }
+                }
+            }
+
+            if (resolvedCourseId == null) {
+                List<String> candidates = collectCourseNameCandidates(resolvedCourseName, extractCourseFromEnrollment(enrollmentId));
+                for (String cand : candidates) {
+                    Optional<Course> found = courseRepository.findFirstByNameIgnoreCase(cand);
+                    if (found.isPresent()) {
+                        resolvedCourseId = found.get().getId();
+                        resolvedCourseName = found.get().getName();
+                        break;
+                    }
+                }
+                if (resolvedCourseId == null && userId != null && studyPlanRepository != null && !candidates.isEmpty()) {
+                    List<StudyPlan> plans = studyPlanRepository.findByStudentId(userId);
+                    for (StudyPlan sp : plans) {
+                        if (sp.getCourse() != null && sp.getCourse().getName() != null) {
+                            String spName = sp.getCourse().getName().trim();
+                            if (candidates.stream().anyMatch(c -> c.equalsIgnoreCase(spName))) {
+                                resolvedCourseId = sp.getCourse().getId();
+                                resolvedCourseName = sp.getCourse().getName();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (resolvedCourseId == null) {
+                throw new BadRequestException("Could not resolve a valid course for this feedback submission.");
+            }
+        } else {
+            if (resolvedCourseId == null && (resolvedCourseName == null || resolvedCourseName.isBlank())) {
+                throw new BadRequestException("Could not resolve a valid course for this feedback submission.");
+            }
+        }
+
+        seenCelebrations.add(key);
 
         if (resolvedCourseId != null) {
             enrollmentCourseIdMap.put(key, resolvedCourseId);
@@ -287,6 +367,8 @@ public class ExamFeedbackService {
                     .subtopics(t.subtopics())
                     .isHeavilyTested(isTested)
                     .isHard(isHard)
+                    .isWeakQuiz(t.isWeakQuiz())
+                    .quizScore(t.getQuizScore())
                     .build();
             enrichedTopics.add(enriched);
         }
@@ -473,10 +555,35 @@ public class ExamFeedbackService {
 
     private String extractCourseFromEnrollment(String id) {
         if (id == null) return null;
-        String lower = id.toLowerCase();
-        if (lower.startsWith("enroll_")) {
+        String lower = id.trim();
+        if (lower.toLowerCase().startsWith("enroll_")) {
             return lower.substring("enroll_".length());
         }
         return null;
+    }
+
+    private List<String> collectCourseNameCandidates(String explicitName, String extractedSuffix) {
+        Set<String> candidates = new LinkedHashSet<>();
+        addNameVariants(candidates, explicitName);
+        if (extractedSuffix != null && !extractedSuffix.isBlank()
+                && !extractedSuffix.toLowerCase().startsWith("exam_")
+                && !extractedSuffix.equalsIgnoreCase("unknown")
+                && !extractedSuffix.equalsIgnoreCase("valid")) {
+            addNameVariants(candidates, extractedSuffix);
+            addNameVariants(candidates, extractedSuffix.replace('_', ' '));
+        }
+        return new ArrayList<>(candidates);
+    }
+
+    private void addNameVariants(Set<String> candidates, String raw) {
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
+        String trimmed = raw.trim();
+        candidates.add(trimmed);
+        String[] split = trimmed.split("\\s*(?:—|–|\\s-\\s)\\s*", 2);
+        if (split.length == 2 && !split[1].isBlank()) {
+            candidates.add(split[1].trim());
+        }
     }
 }

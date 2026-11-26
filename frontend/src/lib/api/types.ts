@@ -99,6 +99,14 @@ export interface PlanResponseData {
   tasks: PlanTask[];
   skippedTopics?: any[];
   summary: PlanSummary;
+  exam_date?: string;
+  examDate?: string;
+  daily_hours?: number;
+  dailyHours?: number;
+  rest_weekdays?: number[];
+  restWeekdays?: number[];
+  weekday_hours?: Record<string, number> | Record<number, number> | null;
+  weekdayHours?: Record<string, number> | Record<number, number> | null;
 }
 
 export interface Flashcard {

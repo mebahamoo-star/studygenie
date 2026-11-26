@@ -20,17 +20,24 @@ public record JoinCourseRequest(
     List<Integer> restWeekdays,
     @JsonProperty("weekday_hours")
     @JsonAlias({"weekdayHours", "weekday_hours"})
-    Map<Integer, Double> weekdayHours
+    Map<Integer, Double> weekdayHours,
+    @JsonProperty("clear_weekday_hours")
+    @JsonAlias({"clearWeekdayHours", "clear_weekday_hours"})
+    Boolean clearWeekdayHours
 ) {
     public JoinCourseRequest(LocalDate examDate, Double dailyHours, String mode) {
-        this(examDate, dailyHours, mode, null, null, null);
+        this(examDate, dailyHours, mode, null, null, null, null);
     }
 
     public JoinCourseRequest(LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds) {
-        this(examDate, dailyHours, mode, selectedTopicIds, null, null);
+        this(examDate, dailyHours, mode, selectedTopicIds, null, null, null);
     }
 
     public JoinCourseRequest(LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds, List<Integer> restWeekdays) {
-        this(examDate, dailyHours, mode, selectedTopicIds, restWeekdays, null);
+        this(examDate, dailyHours, mode, selectedTopicIds, restWeekdays, null, null);
+    }
+
+    public JoinCourseRequest(LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds, List<Integer> restWeekdays, Map<Integer, Double> weekdayHours) {
+        this(examDate, dailyHours, mode, selectedTopicIds, restWeekdays, weekdayHours, null);
     }
 }

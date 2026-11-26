@@ -167,26 +167,47 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
             message="No valid study days in window given the selected rest days.",
         )
 
+    today_remaining_cap: int | None = None
+    if req.completed_today_minutes > 0 and study_dates and study_dates[0] == req.start_date:
+        today_hrs = (
+            req.weekday_hours.get(study_dates[0].weekday(), req.daily_hours)
+            if req.weekday_hours is not None
+            else req.daily_hours
+        )
+        base_today_cap = _round_to_5(max(0.5, today_hrs) * 60)
+        rem_today_cap = max(0, ((base_today_cap - req.completed_today_minutes) // 5) * 5)
+        if rem_today_cap == 0 and len(study_dates) > 1:
+            study_dates = study_dates[1:]
+        else:
+            today_remaining_cap = rem_today_cap
+
     num_days = len(study_dates)
     day_cap_map: dict[int, int] = {}
     day_study_cap_map: dict[int, int] = {}
     day_review_cap_map: dict[int, int] = {}
 
     for i, d_obj in enumerate(study_dates):
-        day_hrs = (
-            req.weekday_hours.get(d_obj.weekday(), req.daily_hours)
-            if req.weekday_hours is not None
-            else req.daily_hours
-        )
-        d_cap = _round_to_5(max(0.5, day_hrs) * 60)
+        if i == 0 and today_remaining_cap is not None:
+            d_cap = today_remaining_cap
+        else:
+            day_hrs = (
+                req.weekday_hours.get(d_obj.weekday(), req.daily_hours)
+                if req.weekday_hours is not None
+                else req.daily_hours
+            )
+            d_cap = _round_to_5(max(0.5, day_hrs) * 60)
         day_cap_map[i] = d_cap
-        if req.mode == "SURVIVAL":
+        if d_cap <= 0:
+            day_review_cap_map[i] = 0
+            day_study_cap_map[i] = 0
+        elif req.mode == "SURVIVAL":
             day_review_cap_map[i] = 0
             day_study_cap_map[i] = d_cap
         else:
-            r_cap = _round_to_5(d_cap * req.review_ratio) if num_days > 1 else 0
+            r_cap = _round_to_5(d_cap * req.review_ratio) if (num_days > 1 and d_cap >= 20) else 0
+            r_cap = min(d_cap, r_cap)
             day_review_cap_map[i] = r_cap
-            day_study_cap_map[i] = max(5, d_cap - r_cap)
+            day_study_cap_map[i] = max(0, d_cap - r_cap)
 
     total_capacity = sum(day_cap_map.values())
     total_required_study_mins = sum(_round_to_5(t.estimated_hours * 60) for t in calibrated_topics)
@@ -250,7 +271,7 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
     rem_cap_pool = sum(day_study_cap_map[d] for d in range(study_window_days))
     for d in range(study_window_days):
         d_cap = day_study_cap_map[d]
-        if rem_pool <= 0 or rem_cap_pool <= 0:
+        if rem_pool <= 0 or rem_cap_pool <= 0 or d_cap <= 0:
             day_study_budget[d] = 0
         else:
             ideal = _round_to_5(rem_pool * (d_cap / rem_cap_pool))

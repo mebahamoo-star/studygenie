@@ -247,7 +247,7 @@ function Dashboard() {
 
   const nav = useNavigate();
 
-  const { user, points, streak, lang } = useApp();
+  const { user, points, streak, lang, addPoints, refreshGamification } = useApp();
   const { triggerCelebration, triggerEncourage } = useGenie();
 
   const todayStr = toLocalDateStr(new Date());
@@ -648,7 +648,7 @@ function Dashboard() {
 
       let courseFeedback = { dominantDifficulty: "MEDIUM", heavilyTestedTopicIds: [] as number[], hardTopicIds: [] as number[] };
       try {
-        courseFeedback = await postExamApi.getCourseFeedbackSummary(course?.name || course?.id);
+        courseFeedback = await postExamApi.getCourseFeedbackSummary(courseObj?.id || courseObj?.name);
       } catch {}
 
       const testedSet = new Set((courseFeedback?.heavilyTestedTopicIds || []).map(Number));
@@ -688,9 +688,9 @@ function Dashboard() {
 
           body: JSON.stringify({
 
-            courseId: course?.id,
+            courseId: courseObj?.id,
 
-            course_id: course?.id,
+            course_id: courseObj?.id,
 
             startDate: todayStr,
 
@@ -1289,69 +1289,66 @@ function Dashboard() {
 
 
 
-      // Load done IDs for all 7 days of this week (combining server is_completed + localStorage)
-
+      // Load done IDs for all 7 days of this week with server state as source of truth
       const currentWeekDays = getWeekDays();
-
       const loadedDoneMap: Record<string, string[]> = {};
 
       currentWeekDays.forEach((w) => {
-
         const setForDay = new Set<string>();
-
         const raw = localStorage.getItem(`sg-${prefix}-checklist-done-${w.dateStr}`);
-
         if (raw) {
-
           try {
-
             const parsed = JSON.parse(raw);
-
             if (Array.isArray(parsed)) parsed.forEach((id) => setForDay.add(String(id)));
-
           } catch {}
-
         } else if (w.today) {
-
           const legacy = localStorage.getItem(`sg-${prefix}-checklist-done`);
-
           if (legacy) {
-
             try {
-
               const parsed = JSON.parse(legacy);
-
               if (Array.isArray(parsed)) parsed.forEach((id) => setForDay.add(String(id)));
-
             } catch {}
-
           }
-
         }
 
         allPlans.forEach((plan) => {
-
           plan.tasks.forEach((t: any, idx: number) => {
-
             const d = t.date || t.scheduledDate || t.scheduled_date;
+            if (d !== w.dateStr) return;
 
-            if (d === w.dateStr && Boolean(t.is_completed ?? t.isCompleted)) {
+            const tid = String(t.id || `${plan.courseName}-${w.dateStr}-${t.topic_ref || t.topicRef || t.topic_title || t.title || idx}`);
+            const legacyKey = `${plan.courseName}-${w.dateStr}-${t.topic_ref || t.topicRef || t.topic_title || t.title || ""}`;
+            const titleKey = `${plan.courseName}-${w.dateStr}-${t.topic_title || t.title || ""}`;
+            const refStr = String(t.topic_ref || t.topicRef || "");
+            const rawTitle = String(t.topic_title || t.title || "");
 
-              const tid = String(t.id || `${plan.courseName}-${w.dateStr}-${t.topic_ref || t.topicRef || t.topic_title || t.title || idx}`);
-
-              setForDay.add(tid);
-
+            const hasServerFlag = typeof t.is_completed === "boolean" || typeof t.isCompleted === "boolean";
+            if (hasServerFlag) {
+              const serverDone = Boolean(t.is_completed ?? t.isCompleted);
+              setForDay.delete(tid);
+              setForDay.delete(legacyKey);
+              setForDay.delete(titleKey);
+              if (refStr) setForDay.delete(refStr);
+              if (rawTitle) setForDay.delete(rawTitle);
+              if (serverDone) {
+                setForDay.add(tid);
+              }
             }
-
           });
-
         });
 
-        loadedDoneMap[w.dateStr] = Array.from(setForDay);
-
+        const reconciled = Array.from(setForDay);
+        loadedDoneMap[w.dateStr] = reconciled;
+        try {
+          localStorage.setItem(`sg-${prefix}-checklist-done-${w.dateStr}`, JSON.stringify(reconciled));
+          if (w.today) {
+            localStorage.setItem(`sg-${prefix}-checklist-done`, JSON.stringify(reconciled));
+          }
+        } catch {}
       });
 
       setDoneMap(loadedDoneMap);
+      setDone(loadedDoneMap[todayStr] || []);
 
 
 
@@ -1533,32 +1530,31 @@ function Dashboard() {
 
 
 
-      // Compute progress
-
+      // Compute progress using reconciled server state
       if (aggregatedTasks.length > 0) {
-
-        const completedCount = aggregatedTasks.filter((t) => savedDone.includes(t.id)).length;
-
+        const targetDayKey = aggregatedTasks[0]?.date || todayStr;
+        const reconciledDone = loadedDoneMap[targetDayKey] || loadedDoneMap[todayStr] || [];
+        const completedCount = aggregatedTasks.filter((t) => reconciledDone.includes(t.id)).length;
         setProgress(Math.round((completedCount / aggregatedTasks.length) * 100));
-
       } else {
-
         setProgress(0);
-
       }
-
     };
-
-
 
     loadDashboardData();
 
-
+    const handleChecklistSync = (e: any) => {
+      if (!isMounted || !e?.detail?.date || !Array.isArray(e.detail.list)) return;
+      setDoneMap((prev) => ({ ...prev, [e.detail.date]: e.detail.list }));
+      if (e.detail.date === todayStr) {
+        setDone(e.detail.list);
+      }
+    };
+    window.addEventListener("sg-checklist-updated", handleChecklistSync);
 
     return () => {
-
       isMounted = false;
-
+      window.removeEventListener("sg-checklist-updated", handleChecklistSync);
     };
 
   }, []);
@@ -1675,20 +1671,14 @@ function Dashboard() {
 
 
 
-  const toggleTask = (taskId: string, targetDateStr?: string) => {
-
+  const toggleTask = async (taskId: string, targetDateStr?: string) => {
     const prefix = getUserStoragePrefix();
-
     const dateToUse = targetDateStr || selectedDateStr;
-
     const doneKey = `sg-${prefix}-checklist-done-${dateToUse}`;
 
-
-
     const currentList = doneMap[dateToUse] || (dateToUse === todayStr ? done : []);
-
     const isDone = currentList.includes(taskId);
-
+    const nextCompleted = !isDone;
     const nextList = isDone ? currentList.filter((id) => id !== taskId) : [...currentList, taskId];
 
     // Genie reactions on task completion
@@ -1717,51 +1707,92 @@ function Dashboard() {
       }
     }
 
-
-
     setDoneMap((prev) => ({
-
       ...prev,
-
       [dateToUse]: nextList,
-
     }));
 
-
-
     if (dateToUse === todayStr) {
-
       setDone(nextList);
-
     }
 
+    const matchedTask =
+      tasks.find((t) => t.id === taskId) ||
+      getTasksForDate(dateToUse).find((t) => t.id === taskId);
+    const cid = matchedTask?.courseId;
 
+    // Synchronize discoveredPlans & cached plan in localStorage
+    setDiscoveredPlans((prev) =>
+      prev.map((plan) => ({
+        ...plan,
+        tasks: (plan.tasks || []).map((t: any) =>
+          String(t.id) === taskId
+            ? { ...t, is_completed: nextCompleted, isCompleted: nextCompleted }
+            : t
+        ),
+      }))
+    );
 
     try {
-
       localStorage.setItem(doneKey, JSON.stringify(nextList));
-
       if (dateToUse === todayStr) {
-
         localStorage.setItem(`sg-${prefix}-checklist-done`, JSON.stringify(nextList));
-
-        window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateToUse, list: nextList } }));
-
       }
-
+      if (cid) {
+        const planKey = `sg-${prefix}-plan-${cid}`;
+        const rawPlan = localStorage.getItem(planKey);
+        if (rawPlan) {
+          try {
+            const parsedPlan = JSON.parse(rawPlan);
+            if (Array.isArray(parsedPlan?.tasks)) {
+              parsedPlan.tasks = parsedPlan.tasks.map((t: any) =>
+                String(t.id) === taskId
+                  ? { ...t, is_completed: nextCompleted, isCompleted: nextCompleted }
+                  : t
+              );
+              localStorage.setItem(planKey, JSON.stringify(parsedPlan));
+            }
+          } catch {}
+        }
+      }
+      window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateToUse, list: nextList } }));
     } catch {}
 
-    // Persist to server if this task has a numeric database ID and courseId
-    if (/^\d+$/.test(taskId)) {
-      const matchedTask =
-        tasks.find((t) => t.id === taskId) ||
-        getTasksForDate(dateToUse).find((t) => t.id === taskId);
-      const cid = matchedTask?.courseId;
-      if (cid && !String(cid).startsWith("c-") && !String(cid).startsWith("course-")) {
-        void browseService.togglePlanTaskCompletion(cid, taskId, !isDone).catch(() => {});
+    // Persist to server if this task has a numeric database ID and real courseId
+    const isRealCourse =
+      cid && !String(cid).startsWith("c-") && !String(cid).startsWith("course-");
+
+    if (/^\d+$/.test(taskId) && isRealCourse) {
+      try {
+        const res = await browseService.togglePlanTaskCompletion(cid, taskId, nextCompleted);
+        if (res.xpGranted) {
+          await refreshGamification();
+          toast.success("+15 XP! Task marked as completed 🎉");
+        }
+      } catch (err: any) {
+        // Revert optimistic update on failure
+        setDoneMap((prev) => ({ ...prev, [dateToUse]: currentList }));
+        if (dateToUse === todayStr) setDone(currentList);
+        toast.error(err?.message || "Could not update task completion on server.");
       }
+      return;
     }
 
+    // Offline/guest anti-double-XP tracking
+    if (nextCompleted) {
+      const xpKey = `sg-${prefix}-xp-awarded`;
+      let awardedIds: string[] = [];
+      try {
+        awardedIds = JSON.parse(localStorage.getItem(xpKey) || "[]");
+      } catch {}
+      if (!awardedIds.includes(taskId)) {
+        try {
+          localStorage.setItem(xpKey, JSON.stringify([...awardedIds, taskId]));
+        } catch {}
+        addPoints(15);
+        toast.success("+15 XP! Task marked as completed 🎉");
+      }
+    }
   };
 
 
