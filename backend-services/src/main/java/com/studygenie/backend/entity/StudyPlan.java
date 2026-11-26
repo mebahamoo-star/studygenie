@@ -68,6 +68,9 @@ public class StudyPlan {
     @Column(name = "skipped_topics_json", columnDefinition = "TEXT")
     private String skippedTopicsJson;
 
+    @Column(name = "weekday_hours_json", columnDefinition = "TEXT")
+    private String weekdayHoursJson;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from typing import Any
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -12,6 +13,8 @@ class TopicPlanInput(BaseModel):
     subtopics: list[str] = Field(default_factory=list)
     is_heavily_tested: bool = False
     is_hard: bool = False
+    is_weak_quiz: bool = False
+    quiz_score: float | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -65,6 +68,25 @@ class TopicPlanInput(BaseModel):
                 or data.get("hardTopic")
                 or False
             )
+            raw_weak_quiz = (
+                data.get("is_weak_quiz")
+                or data.get("isWeakQuiz")
+                or data.get("weak_quiz")
+                or data.get("weakQuiz")
+                or False
+            )
+            raw_quiz_score = data.get("quiz_score") if data.get("quiz_score") is not None else data.get("quizScore")
+            quiz_score: float | None = None
+            if raw_quiz_score is not None:
+                try:
+                    qs = float(raw_quiz_score)
+                    if 0.0 < qs <= 1.0:
+                        qs *= 100.0
+                    quiz_score = max(0.0, min(100.0, qs))
+                    if quiz_score < 60.0:
+                        raw_weak_quiz = True
+                except (ValueError, TypeError):
+                    quiz_score = None
 
             return {
                 "ref": str(ref),
@@ -75,6 +97,8 @@ class TopicPlanInput(BaseModel):
                 "subtopics": subtopics,
                 "is_heavily_tested": bool(raw_heavily_tested),
                 "is_hard": bool(raw_hard),
+                "is_weak_quiz": bool(raw_weak_quiz),
+                "quiz_score": quiz_score,
             }
         return data
 
@@ -89,6 +113,7 @@ class GeneratePlanRequest(BaseModel):
     buffer_days_before_exam: int = Field(default=1, ge=0, le=7)
     review_ratio: float = Field(default=0.15, ge=0.0, le=0.4)
     course_difficulty: str | None = None # EASY | MEDIUM | HARD
+    weekday_hours: dict[int, float] | None = None # 0 = Monday .. 6 = Sunday
 
     @model_validator(mode="before")
     @classmethod
@@ -158,6 +183,14 @@ class GeneratePlanRequest(BaseModel):
                     d["course_difficulty"] = str(diff).upper()
             elif d.get("course_difficulty"):
                 d["course_difficulty"] = str(d["course_difficulty"]).upper()
+
+            # Per-weekday availability hours
+            raw_wh = d.get("weekday_hours") if "weekday_hours" in d else d.get("weekdayHours")
+            if isinstance(raw_wh, dict):
+                parsed_wh: dict[int, float] = {}
+                for k, v in raw_wh.items():
+                    parsed_wh[int(k)] = float(v)
+                d["weekday_hours"] = parsed_wh
 
             return d
         return data

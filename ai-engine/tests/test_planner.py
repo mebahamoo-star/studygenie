@@ -286,3 +286,61 @@ def test_planner_review_spillover_and_warning_when_full():
     review_tasks = [t for t in res.tasks if t.task_type == "REVIEW"]
     assert len(review_tasks) == 2
     assert any("could not schedule" in w.lower() for w in res.summary.warnings)
+
+
+def test_planner_per_weekday_availability():
+    # Mon=0 (1h), Tue=1 (4h), Wed=2 (0h -> rest day), Thu=3 (2h)
+    req = GeneratePlanRequest(
+        start_date=date(2023, 10, 2),  # Monday
+        exam_date=date(2023, 10, 6),  # Friday
+        buffer_days_before_exam=1,
+        rest_weekdays=[],
+        weekday_hours={0: 1.0, 1: 4.0, 2: 0.0, 3: 2.0},
+        topics=[
+            TopicPlanInput(ref="t1", chapter_title="Part 1", order_index=1, estimated_hours=2.0, importance=4),
+            TopicPlanInput(ref="t2", chapter_title="Part 2", order_index=2, estimated_hours=2.0, importance=4),
+        ],
+        daily_hours=2.0,
+        mode="NORMAL",
+    )
+    res = generate_plan(req)
+    scheduled_dates = {t.date for t in res.tasks}
+    # Wednesday 2023-10-04 has 0h -> must have no tasks
+    assert date(2023, 10, 4) not in scheduled_dates
+    # Monday 2023-10-02 cap is 60 mins; Tuesday 2023-10-03 cap is 240 mins
+    assert sum(t.minutes for t in res.tasks if t.date == date(2023, 10, 2)) <= 60
+    assert sum(t.minutes for t in res.tasks if t.date == date(2023, 10, 3)) <= 240
+
+
+def test_planner_weak_quiz_extra_review():
+    base_req = GeneratePlanRequest(
+        start_date=date(2023, 10, 1),
+        exam_date=date(2023, 10, 12),
+        buffer_days_before_exam=1,
+        rest_weekdays=[],
+        topics=[
+            TopicPlanInput(ref="t1", chapter_title="Topic One", order_index=1, estimated_hours=1.0, importance=3, quiz_score=90.0),
+            TopicPlanInput(ref="t2", chapter_title="Topic Two", order_index=2, estimated_hours=1.0, importance=3, quiz_score=90.0),
+        ],
+        daily_hours=2.0,
+        mode="NORMAL",
+    )
+    weak_req = GeneratePlanRequest(
+        start_date=date(2023, 10, 1),
+        exam_date=date(2023, 10, 12),
+        buffer_days_before_exam=1,
+        rest_weekdays=[],
+        topics=[
+            TopicPlanInput(ref="t1", chapter_title="Topic One", order_index=1, estimated_hours=1.0, importance=3, quiz_score=40.0),
+            TopicPlanInput(ref="t2", chapter_title="Topic Two", order_index=2, estimated_hours=1.0, importance=3, quiz_score=90.0),
+        ],
+        daily_hours=2.0,
+        mode="NORMAL",
+    )
+    base_res = generate_plan(base_req)
+    weak_res = generate_plan(weak_req)
+    base_t1_reviews = [t for t in base_res.tasks if t.topic_ref == "t1" and t.task_type == "REVIEW"]
+    weak_t1_reviews = [t for t in weak_res.tasks if t.topic_ref == "t1" and t.task_type == "REVIEW"]
+    assert len(weak_t1_reviews) > len(base_t1_reviews)
+    assert any("Weak Quiz Reinforcement" in (t.description or "") for t in weak_t1_reviews)
+    assert any("weak quiz" in w.lower() for w in weak_res.summary.warnings)

@@ -31,6 +31,7 @@ export const Route = createFileRoute("/_shell/plan")({
 });
 
 interface DayTask {
+  id?: number;
   ref: string;
   title: string;
   tag: string;
@@ -38,6 +39,9 @@ interface DayTask {
   desc?: string;
   subtopics?: string[];
   contentExcerpt?: string;
+  isCompleted?: boolean;
+  completedAt?: string | null;
+  xpAwarded?: boolean;
 }
 
 interface DayPlan {
@@ -48,6 +52,7 @@ interface DayPlan {
 function Plan() {
   const { addPoints } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
   const [doneMap, setDoneMap] = useState<Record<string, string[]>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
@@ -129,19 +134,42 @@ function Plan() {
   }, [planDays]);
 
   const isTaskDone = (dateStr: string, t: DayTask) => {
-    const prefix = getUserStoragePrefix();
+    if (typeof t.isCompleted === "boolean" && t.id) {
+      return t.isCompleted;
+    }
     const taskId = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
     const list = doneMap[dateStr] || [];
     return list.includes(taskId) || list.includes(t.ref) || list.includes(t.title);
   };
 
-  const togglePlanTaskDone = (dateStr: string, t: DayTask) => {
+  const togglePlanTaskDone = async (dateStr: string, t: DayTask) => {
     const prefix = getUserStoragePrefix();
-    const taskId = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
-    const currentList = doneMap[dateStr] || [];
-    const isDone = currentList.includes(taskId) || currentList.includes(t.ref) || currentList.includes(t.title);
-    const nextList = isDone ? currentList.filter((id) => id !== taskId && id !== t.ref && id !== t.title) : [...currentList, taskId];
+    const taskKey = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
+    const isCurrentlyDone = isTaskDone(dateStr, t);
+    const nextCompleted = !isCurrentlyDone;
 
+    // Optimistic update on server-backed planDays / fullPlanDays
+    const patchDays = (days: DayPlan[]) =>
+      days.map((d) =>
+        d.date !== dateStr
+          ? d
+          : {
+              ...d,
+              tasks: d.tasks.map((item) =>
+                (t.id && item.id === t.id) || (!t.id && item.ref === t.ref && item.tag === t.tag && item.title === t.title)
+                  ? { ...item, isCompleted: nextCompleted, xpAwarded: item.xpAwarded || nextCompleted }
+                  : item
+              ),
+            }
+      );
+    setPlanDays((prev) => patchDays(prev));
+    setFullPlanDays((prev) => patchDays(prev));
+
+    // Keep localStorage cache synchronized for offline/guest fallback
+    const currentList = doneMap[dateStr] || [];
+    const nextList = nextCompleted
+      ? Array.from(new Set([...currentList, taskKey]))
+      : currentList.filter((id) => id !== taskKey && id !== t.ref && id !== t.title);
     setDoneMap((prev) => ({ ...prev, [dateStr]: nextList }));
     try {
       localStorage.setItem(`sg-${prefix}-checklist-done-${dateStr}`, JSON.stringify(nextList));
@@ -152,9 +180,71 @@ function Plan() {
       window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateStr, list: nextList } }));
     } catch {}
 
-    if (!isDone) {
-      addPoints(15);
-      toast.success("+15 XP! Topic marked as completed 🎉");
+    const isRealCourse =
+      selectedCourse?.id &&
+      !String(selectedCourse.id).startsWith("course-") &&
+      !String(selectedCourse.id).startsWith("c-");
+
+    if (t.id && isRealCourse && selectedCourse) {
+      try {
+        const res = await browseService.togglePlanTaskCompletion(selectedCourse.id, t.id, nextCompleted);
+        if (res.xpGranted) {
+          addPoints(15);
+          toast.success("+15 XP! Topic marked as completed 🎉");
+        }
+        return;
+      } catch (err: any) {
+        // Revert optimistic update on failure
+        setPlanDays((prev) => patchDays(prev).map((d) => (d.date !== dateStr ? d : { ...d, tasks: d.tasks.map((item) => (item.id === t.id ? { ...item, isCompleted: isCurrentlyDone } : item)) })));
+        toast.error(err?.message || "Could not update task completion on server.");
+        return;
+      }
+    }
+
+    // Offline/guest anti-double-XP tracking
+    if (nextCompleted) {
+      const xpKey = `sg-${prefix}-xp-awarded`;
+      let awardedIds: string[] = [];
+      try {
+        awardedIds = JSON.parse(localStorage.getItem(xpKey) || "[]");
+      } catch {}
+      if (!t.xpAwarded && !awardedIds.includes(taskKey)) {
+        try {
+          localStorage.setItem(xpKey, JSON.stringify([...awardedIds, taskKey]));
+        } catch {}
+        addPoints(15);
+        toast.success("+15 XP! Topic marked as completed 🎉");
+      }
+    }
+  };
+
+  const handleRescheduleBehind = async () => {
+    if (!selectedCourse) return;
+    const isRealCourse =
+      selectedCourse.id &&
+      !String(selectedCourse.id).startsWith("course-") &&
+      !String(selectedCourse.id).startsWith("c-");
+    if (!isRealCourse) {
+      toast.info("Open Course Configuration to regenerate your local schedule.");
+      return;
+    }
+    setIsRescheduling(true);
+    try {
+      const updated = await browseService.rescheduleCoursePlan(selectedCourse.id);
+      const prefix = getUserStoragePrefix();
+      try {
+        localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.id}`, JSON.stringify(updated));
+        localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.name}`, JSON.stringify(updated));
+      } catch {}
+      if (updated?.tasks) {
+        formatAndSetTasks(updated.tasks, selectedCourse);
+      }
+      extractAndSetPlanMeta(updated, selectedCourse);
+      toast.success("Remaining uncompleted work rescheduled from today!");
+    } catch (err: any) {
+      toast.error(err?.message || "Could not reschedule remaining plan.");
+    } finally {
+      setIsRescheduling(false);
     }
   };
 
@@ -219,10 +309,33 @@ function Plan() {
     let planData: any = null;
     if (currentCourse.id && !String(currentCourse.id).startsWith("course-") && !String(currentCourse.id).startsWith("c-")) {
       try {
-        const res = await browseService.getCoursePlan(currentCourse.id);
+        let res = await browseService.getCoursePlan(currentCourse.id);
+        const prefix = getUserStoragePrefix();
+        const migratedFlagKey = `sg-${prefix}-migrated-plan-${currentCourse.id}`;
+        if (res?.tasks && res.tasks.length > 0 && !localStorage.getItem(migratedFlagKey)) {
+          const legacyKeys: string[] = [];
+          res.tasks.forEach((task: any) => {
+            if (!task.is_completed && !task.isCompleted && task.date) {
+              const rawDone = localStorage.getItem(`sg-${prefix}-checklist-done-${task.date}`);
+              if (rawDone) {
+                try {
+                  const arr = JSON.parse(rawDone);
+                  if (Array.isArray(arr)) legacyKeys.push(...arr);
+                } catch {}
+              }
+            }
+          });
+          if (legacyKeys.length > 0) {
+            try {
+              res = await browseService.migratePlanCompletions(currentCourse.id, Array.from(new Set(legacyKeys)));
+            } catch {}
+          }
+          try {
+            localStorage.setItem(migratedFlagKey, "1");
+          } catch {}
+        }
         if (res?.tasks && res.tasks.length > 0) {
           planData = res;
-          const prefix = getUserStoragePrefix();
           try {
             localStorage.setItem(`sg-${prefix}-plan-${currentCourse.id}`, JSON.stringify(res));
             localStorage.setItem(`sg-plan-${currentCourse.id}`, JSON.stringify(res));
@@ -342,6 +455,7 @@ function Plan() {
       }
 
       grouped[d].push({
+        id: typeof item.id === "number" ? item.id : undefined,
         ref,
         title,
         tag,
@@ -349,6 +463,9 @@ function Plan() {
         desc,
         subtopics,
         contentExcerpt,
+        isCompleted: Boolean(item.is_completed ?? item.isCompleted),
+        completedAt: item.completed_at ?? item.completedAt ?? null,
+        xpAwarded: Boolean(item.xp_awarded ?? item.xpAwarded),
       });
     });
 
@@ -589,6 +706,39 @@ function Plan() {
           )}
         </div>
       )}
+
+      {(() => {
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const overdueTasks = planDays
+          .filter((d) => d.date < todayIso)
+          .flatMap((d) => d.tasks.filter((t) => !isTaskDone(d.date, t)));
+        if (overdueTasks.length === 0) return null;
+        return (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-4 shadow-sm">
+            <div className="flex items-start gap-2.5">
+              <Clock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm font-bold text-foreground">
+                  Falling Behind? You have {overdueTasks.length} overdue study task(s).
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Completed progress will be preserved while remaining study hours are redistributed from today forward.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="magic"
+              size="sm"
+              onClick={handleRescheduleBehind}
+              disabled={isRescheduling}
+              className="gap-1.5 font-semibold"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", isRescheduling && "animate-spin")} />
+              {isRescheduling ? "Rescheduling..." : "Reschedule Remaining Work"}
+            </Button>
+          </div>
+        );
+      })()}
 
       {!isCourseMaterialUploaded(selectedCourse) ? (
         <Card className="flex flex-col items-center justify-center py-16 px-6 text-center border-amber-500/40 bg-gradient-to-b from-amber-500/5 to-transparent shadow-soft">

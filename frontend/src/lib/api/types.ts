@@ -61,6 +61,7 @@ export interface Topic {
 }
 
 export interface PlanTask {
+  id?: number;
   date: string;
   topic_ref?: string;
   topicRef?: string;
@@ -71,6 +72,12 @@ export interface PlanTask {
   minutes: number;
   description?: string;
   subtopics?: string[];
+  is_completed?: boolean;
+  isCompleted?: boolean;
+  completed_at?: string | null;
+  completedAt?: string | null;
+  xp_awarded?: boolean;
+  xpAwarded?: boolean;
   // UI helper mappings:
   t?: string;
   tag?: string;

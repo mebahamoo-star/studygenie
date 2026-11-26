@@ -9,20 +9,31 @@ def _round_to_5(minutes: float) -> int:
     return int(math.ceil(minutes / 5.0)) * 5
 
 
-def _scaled_review_offsets(comp_idx: int, num_days: int, mode: str) -> list[int]:
-    """Scale spaced-repetition offsets to the remaining days after topic completion."""
+def _scaled_review_offsets(
+    comp_idx: int, num_days: int, mode: str, is_weak_quiz: bool = False
+) -> list[int]:
+    """Scale spaced-repetition offsets to remaining days, adding reinforcement for weak-quiz topics."""
     rem_days = (num_days - 1) - comp_idx
     if mode == "SURVIVAL":
-        return [rem_days] if rem_days >= 1 else [0]
-    if rem_days >= 7:
-        return [1, 3, 7]
-    if rem_days >= 3:
-        return sorted({1, max(2, round(rem_days / 2)), rem_days})
-    if rem_days == 2:
-        return [1, 2]
-    if rem_days == 1:
-        return [1]
-    return [0]
+        offsets = [rem_days] if rem_days >= 1 else [0]
+    elif rem_days >= 7:
+        offsets = [1, 3, 7]
+    elif rem_days >= 3:
+        offsets = sorted({1, max(2, round(rem_days / 2)), rem_days})
+    elif rem_days == 2:
+        offsets = [1, 2]
+    elif rem_days == 1:
+        offsets = [1]
+    else:
+        offsets = [0]
+
+    if is_weak_quiz and rem_days >= 2:
+        for candidate in [1, 2, 3, 4, 5, 6, rem_days]:
+            if candidate <= rem_days and candidate not in offsets:
+                offsets = sorted([*offsets, candidate])
+                break
+
+    return offsets
 
 
 def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
@@ -33,6 +44,21 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
             message="rest_weekdays must contain integers between 0 (Monday) and 6 (Sunday)",
         )
 
+    if req.weekday_hours is not None:
+        for k, v in req.weekday_hours.items():
+            if isinstance(k, bool) or not isinstance(k, int) or k < 0 or k > 6:
+                raise AppError(
+                    status_code=422,
+                    error_code="INVALID_WEEKDAY_HOURS",
+                    message="weekday_hours keys must be integers between 0 (Monday) and 6 (Sunday)",
+                )
+            if v < 0.0 or v > 12.0:
+                raise AppError(
+                    status_code=422,
+                    error_code="INVALID_WEEKDAY_HOURS",
+                    message="weekday_hours values must be between 0.0 and 12.0 hours",
+                )
+
     if req.exam_date <= req.start_date:
         raise AppError(
             status_code=422,
@@ -40,7 +66,13 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
             message="exam_date must be after start_date",
         )
 
-    if set(req.rest_weekdays) >= {0, 1, 2, 3, 4, 5, 6}:
+    effective_rest_weekdays = set(req.rest_weekdays)
+    if req.weekday_hours is not None:
+        for wk, hrs in req.weekday_hours.items():
+            if hrs <= 0.0:
+                effective_rest_weekdays.add(wk)
+
+    if effective_rest_weekdays >= {0, 1, 2, 3, 4, 5, 6}:
         raise AppError(
             status_code=422,
             error_code="NO_STUDY_DAYS",
@@ -49,19 +81,26 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
 
     warnings: list[str] = []
 
-    # Calibrate topics based on student exam feedback (tested & hard topics)
+    # Calibrate topics based on student exam feedback & quiz performance
     calibrated_topics: list[TopicPlanInput] = []
     has_heavily_tested = False
     has_hard_topics = False
+    has_weak_quiz = False
 
     for t in req.topics:
         imp = t.importance
         hrs = t.estimated_hours
+        is_weak = bool(t.is_weak_quiz or (t.quiz_score is not None and t.quiz_score < 60.0))
 
         # Boost priority of topics past students reported as heavily tested on exams
         if t.is_heavily_tested:
             imp = min(5, imp + 1)
             has_heavily_tested = True
+
+        # Boost priority of topics with weak quiz performance (< 60%)
+        if is_weak:
+            imp = min(5, imp + 1)
+            has_weak_quiz = True
 
         # Allocate +25% study time for topics rated hard to allow deeper practice
         if t.is_hard:
@@ -78,6 +117,8 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
                 subtopics=t.subtopics or [],
                 is_heavily_tested=t.is_heavily_tested,
                 is_hard=t.is_hard,
+                is_weak_quiz=is_weak,
+                quiz_score=t.quiz_score,
             )
         )
 
@@ -85,6 +126,8 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
         warnings.append("Adaptive Planner: Prioritized high-yield topics heavily tested on past exams.")
     if has_hard_topics:
         warnings.append("Adaptive Planner: Allocated extra study time for topics rated hard by students.")
+    if has_weak_quiz:
+        warnings.append("Adaptive Planner: Added extra review sessions for topics with weak quiz scores (<60%).")
 
     if req.course_difficulty == "HARD":
         warnings.append("Adaptive Planner: Course rated HARD by students; reinforced study and review intervals.")
@@ -103,16 +146,15 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
     study_dates = []
     curr = req.start_date
     while curr <= end_date:
-        if curr.weekday() not in req.rest_weekdays:
+        if curr.weekday() not in effective_rest_weekdays:
             study_dates.append(curr)
         curr += timedelta(days=1)
 
     if not study_dates and effective_buffer > 0:
-        # Relax buffer days before exam while strictly preserving rest days
         curr = req.start_date
         last_possible = req.exam_date - timedelta(days=1)
         while curr <= last_possible:
-            if curr.weekday() not in req.rest_weekdays:
+            if curr.weekday() not in effective_rest_weekdays:
                 study_dates.append(curr)
             curr += timedelta(days=1)
         if study_dates:
@@ -126,28 +168,39 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
         )
 
     num_days = len(study_dates)
-    daily_cap = _round_to_5(req.daily_hours * 60)
-    total_capacity = num_days * daily_cap
+    day_cap_map: dict[int, int] = {}
+    day_study_cap_map: dict[int, int] = {}
+    day_review_cap_map: dict[int, int] = {}
 
-    if req.mode == "SURVIVAL":
-        daily_review_cap = 0
-        daily_study_cap = daily_cap
-    else:
-        daily_review_cap = _round_to_5(daily_cap * req.review_ratio) if num_days > 1 else 0
-        daily_study_cap = max(5, daily_cap - daily_review_cap)
+    for i, d_obj in enumerate(study_dates):
+        day_hrs = (
+            req.weekday_hours.get(d_obj.weekday(), req.daily_hours)
+            if req.weekday_hours is not None
+            else req.daily_hours
+        )
+        d_cap = _round_to_5(max(0.5, day_hrs) * 60)
+        day_cap_map[i] = d_cap
+        if req.mode == "SURVIVAL":
+            day_review_cap_map[i] = 0
+            day_study_cap_map[i] = d_cap
+        else:
+            r_cap = _round_to_5(d_cap * req.review_ratio) if num_days > 1 else 0
+            day_review_cap_map[i] = r_cap
+            day_study_cap_map[i] = max(5, d_cap - r_cap)
 
+    total_capacity = sum(day_cap_map.values())
     total_required_study_mins = sum(_round_to_5(t.estimated_hours * 60) for t in calibrated_topics)
 
     # Reserve final study day(s) exclusively for cumulative review when capacity allows
-    if num_days >= 14 and (num_days - 2) * daily_study_cap >= total_required_study_mins:
+    if num_days >= 14 and sum(day_study_cap_map[i] for i in range(num_days - 2)) >= total_required_study_mins:
         reserved_review_days = 2
-    elif num_days >= 3 and (num_days - 1) * daily_study_cap >= total_required_study_mins:
+    elif num_days >= 3 and sum(day_study_cap_map[i] for i in range(num_days - 1)) >= total_required_study_mins:
         reserved_review_days = 1
     else:
         reserved_review_days = 0
 
     study_window_days = max(1, num_days - reserved_review_days)
-    available_study_capacity = study_window_days * daily_study_cap
+    available_study_capacity = sum(day_study_cap_map[i] for i in range(study_window_days))
 
     tasks: list[Task] = []
     skipped: list[SkippedTopic] = []
@@ -190,26 +243,27 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
     selected_topics.sort(key=lambda t: t.order_index)
     planned_topics_count = len(selected_topics)
 
-    # Load-balanced daily study budget across study_window_days
+    # Load-balanced daily study budget across study_window_days weighted by per-day capacity
     total_selected_study_mins = sum(_round_to_5(t.estimated_hours * 60) for t in selected_topics)
     day_study_budget: dict[int, int] = {}
     rem_pool = total_selected_study_mins
+    rem_cap_pool = sum(day_study_cap_map[d] for d in range(study_window_days))
     for d in range(study_window_days):
-        days_left = study_window_days - d
-        if rem_pool <= 0:
+        d_cap = day_study_cap_map[d]
+        if rem_pool <= 0 or rem_cap_pool <= 0:
             day_study_budget[d] = 0
         else:
-            ideal = _round_to_5(rem_pool / days_left)
-            budget = min(daily_study_cap, max(5, min(rem_pool, ideal)))
+            ideal = _round_to_5(rem_pool * (d_cap / rem_cap_pool))
+            budget = min(d_cap, max(5, min(rem_pool, ideal)))
             day_study_budget[d] = budget
             rem_pool -= budget
+            rem_cap_pool -= d_cap
 
-    # Distribute any rounding remainder up to daily_study_cap
     if rem_pool > 0:
         for d in range(study_window_days):
             if rem_pool <= 0:
                 break
-            extra_cap = daily_study_cap - day_study_budget[d]
+            extra_cap = day_study_cap_map[d] - day_study_budget[d]
             if extra_cap > 0:
                 add = min(rem_pool, extra_cap)
                 day_study_budget[d] += add
@@ -225,6 +279,8 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
         desc = f"Study {t.chapter_title}"
         if t.is_heavily_tested:
             desc += " [High-Yield Exam Focus]"
+        elif t.is_weak_quiz:
+            desc += " [Weak Quiz Focus]"
         elif t.is_hard:
             desc += " [Challenging Concept Focus]"
         if subtopics_str:
@@ -255,18 +311,20 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
 
         topic_completion_day[t.ref] = last_study_day_idx
 
-    # Spaced-repetition & cumulative reviews (never exceeding daily_cap)
+    # Spaced-repetition & cumulative reviews (never exceeding per-day cap)
     day_review_used: dict[int, int] = {i: 0 for i in range(num_days)}
     scheduled_topic_reviews: set[tuple[int, str]] = set()
     unscheduled_review_count = 0
 
     def avail_on_day(d_idx: int) -> int:
-        return max(0, daily_cap - day_study_used[d_idx] - day_review_used[d_idx])
+        return max(0, day_cap_map[d_idx] - day_study_used[d_idx] - day_review_used[d_idx])
 
     def make_review_desc(t_obj: TopicPlanInput, cumulative: bool = False) -> str:
         subtopics_str = ", ".join(t_obj.subtopics[:2]) if t_obj.subtopics else ""
         if cumulative:
             prefix = "Cumulative Review & Practice Quiz"
+        elif t_obj.is_weak_quiz:
+            prefix = "Weak Quiz Reinforcement & Active Recall"
         elif t_obj.is_heavily_tested:
             prefix = "Active Recall (High-Yield Focus)"
         else:
@@ -277,14 +335,16 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
         return d_txt
 
     topic_offsets = {
-        t.ref: _scaled_review_offsets(topic_completion_day[t.ref], num_days, req.mode)
+        t.ref: _scaled_review_offsets(
+            topic_completion_day[t.ref], num_days, req.mode, is_weak_quiz=t.is_weak_quiz
+        )
         for t in selected_topics
         if t.ref in topic_completion_day
     }
 
     review_priority_topics = sorted(
         [t for t in selected_topics if t.ref in topic_completion_day],
-        key=lambda t: (t.importance, -t.order_index),
+        key=lambda t: (1 if t.is_weak_quiz else 0, t.importance, -t.order_index),
         reverse=True,
     )
 
@@ -325,38 +385,40 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
         if not placed:
             unscheduled_review_count += 1
 
-    # Pass 2: Additional scaled spaced-repetition intervals in NORMAL mode (with forward spillover)
-    if req.mode != "SURVIVAL":
-        for t in selected_topics:
-            if t.ref not in topic_completion_day:
-                continue
-            comp_idx = topic_completion_day[t.ref]
-            for offset in topic_offsets[t.ref][1:]:
-                target_idx = comp_idx + offset
-                if target_idx >= num_days:
-                    target_idx = num_days - 1
-                placed = False
-                for r_idx in range(target_idx, num_days):
-                    if (r_idx, t.ref) in scheduled_topic_reviews:
-                        continue
-                    if avail_on_day(r_idx) >= 15:
+    # Pass 2: Additional scaled spaced-repetition intervals (NORMAL mode, or weak-quiz topics in SURVIVAL)
+    for t in review_priority_topics:
+        if t.ref not in topic_completion_day:
+            continue
+        if req.mode == "SURVIVAL" and not t.is_weak_quiz:
+            continue
+        comp_idx = topic_completion_day[t.ref]
+        for offset in topic_offsets[t.ref][1:]:
+            target_idx = min(num_days - 1, comp_idx + offset)
+            placed = False
+            for r_idx in range(target_idx, num_days):
+                if (r_idx, t.ref) in scheduled_topic_reviews:
+                    continue
+                if avail_on_day(r_idx) >= min_review_mins:
+                    take = min(15, avail_on_day(r_idx))
+                    take = (take // 5) * 5
+                    if take >= min_review_mins:
                         tasks.append(
                             Task(
                                 date=study_dates[r_idx],
                                 topic_ref=t.ref,
                                 topic_title=t.chapter_title,
                                 task_type="REVIEW",
-                                minutes=15,
+                                minutes=take,
                                 description=make_review_desc(t),
                                 subtopics=t.subtopics or [],
                             )
                         )
-                        day_review_used[r_idx] += 15
+                        day_review_used[r_idx] += take
                         scheduled_topic_reviews.add((r_idx, t.ref))
                         placed = True
                         break
-                if not placed:
-                    unscheduled_review_count += 1
+            if not placed:
+                unscheduled_review_count += 1
 
     # Pass 3: Cumulative review on reserved final day(s)
     if reserved_review_days > 0 and selected_topics:

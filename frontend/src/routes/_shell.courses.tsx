@@ -1704,6 +1704,16 @@ function JoinChallenge({
     } catch {}
     return [4]; // Default: Friday (Python weekday 4)
   });
+  const [customWeekdayHoursEnabled, setCustomWeekdayHoursEnabled] = useState(false);
+  const [weekdayHoursMap, setWeekdayHoursMap] = useState<Record<number, number>>({
+    0: 2.5,
+    1: 2.5,
+    2: 2.5,
+    3: 2.5,
+    4: 0,
+    5: 2.5,
+    6: 2.5,
+  });
   const [planDateError, setPlanDateError] = useState<string | null>(null);
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [isExamExpanded, setIsExamExpanded] = useState(false);
@@ -2630,6 +2640,7 @@ function JoinChallenge({
             mode,
             selectedTopicIds: selectedIds.length > 0 ? selectedIds : undefined,
             restWeekdays,
+            weekdayHours: customWeekdayHoursEnabled ? weekdayHoursMap : undefined,
           });
 
         } catch (planErr) {
@@ -2649,6 +2660,8 @@ function JoinChallenge({
               selectedTopicIds: selectedIds.length > 0 ? selectedIds : undefined,
 
               restWeekdays,
+
+              weekdayHours: customWeekdayHoursEnabled ? weekdayHoursMap : undefined,
 
             });
 
@@ -2720,6 +2733,8 @@ function JoinChallenge({
             daily_hours: effDailyHours,
             restDays: restWeekdays,
             rest_weekdays: restWeekdays,
+            weekday_hours: customWeekdayHoursEnabled ? weekdayHoursMap : undefined,
+            weekdayHours: customWeekdayHoursEnabled ? weekdayHoursMap : undefined,
             mode: mode.toUpperCase(),
             bufferDays: bufferDays,
             buffer_days_before_exam: bufferDays,
@@ -3827,6 +3842,45 @@ function JoinChallenge({
                     </button>
                   );
                 })}
+              </div>
+              <div className="pt-2 border-t border-border/40">
+                <button
+                  type="button"
+                  onClick={() => setCustomWeekdayHoursEnabled((v) => !v)}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  {customWeekdayHoursEnabled ? "Hide per-weekday hours" : "Customize hours per weekday (optional)"}
+                </button>
+                {customWeekdayHoursEnabled && (
+                  <div className="mt-2 grid grid-cols-7 gap-1.5">
+                    {[
+                      { label: "Mon", val: 0 },
+                      { label: "Tue", val: 1 },
+                      { label: "Wed", val: 2 },
+                      { label: "Thu", val: 3 },
+                      { label: "Fri", val: 4 },
+                      { label: "Sat", val: 5 },
+                      { label: "Sun", val: 6 },
+                    ].map((day) => (
+                      <div key={day.val} className="flex flex-col items-center gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground">{day.label}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={12}
+                          step={0.5}
+                          disabled={restWeekdays.includes(day.val)}
+                          value={restWeekdays.includes(day.val) ? 0 : (weekdayHoursMap[day.val] ?? dailyHours)}
+                          onChange={(e) => {
+                            const val = Math.min(12, Math.max(0, parseFloat(e.target.value) || 0));
+                            setWeekdayHoursMap((prev) => ({ ...prev, [day.val]: val }));
+                          }}
+                          className="w-full rounded-md border border-border/70 bg-background px-1 py-1 text-center text-xs font-mono disabled:opacity-50"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

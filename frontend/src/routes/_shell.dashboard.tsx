@@ -1289,7 +1289,7 @@ function Dashboard() {
 
 
 
-      // Load done IDs for all 7 days of this week
+      // Load done IDs for all 7 days of this week (combining server is_completed + localStorage)
 
       const currentWeekDays = getWeekDays();
 
@@ -1297,13 +1297,17 @@ function Dashboard() {
 
       currentWeekDays.forEach((w) => {
 
+        const setForDay = new Set<string>();
+
         const raw = localStorage.getItem(`sg-${prefix}-checklist-done-${w.dateStr}`);
 
         if (raw) {
 
           try {
 
-            loadedDoneMap[w.dateStr] = JSON.parse(raw);
+            const parsed = JSON.parse(raw);
+
+            if (Array.isArray(parsed)) parsed.forEach((id) => setForDay.add(String(id)));
 
           } catch {}
 
@@ -1315,13 +1319,35 @@ function Dashboard() {
 
             try {
 
-              loadedDoneMap[w.dateStr] = JSON.parse(legacy);
+              const parsed = JSON.parse(legacy);
+
+              if (Array.isArray(parsed)) parsed.forEach((id) => setForDay.add(String(id)));
 
             } catch {}
 
           }
 
         }
+
+        allPlans.forEach((plan) => {
+
+          plan.tasks.forEach((t: any, idx: number) => {
+
+            const d = t.date || t.scheduledDate || t.scheduled_date;
+
+            if (d === w.dateStr && Boolean(t.is_completed ?? t.isCompleted)) {
+
+              const tid = String(t.id || `${plan.courseName}-${w.dateStr}-${t.topic_ref || t.topicRef || t.topic_title || t.title || idx}`);
+
+              setForDay.add(tid);
+
+            }
+
+          });
+
+        });
+
+        loadedDoneMap[w.dateStr] = Array.from(setForDay);
 
       });
 
@@ -1718,11 +1744,23 @@ function Dashboard() {
       if (dateToUse === todayStr) {
 
         localStorage.setItem(`sg-${prefix}-checklist-done`, JSON.stringify(nextList));
-      window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateToUse, list: nextList } }));
+
+        window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateToUse, list: nextList } }));
 
       }
 
     } catch {}
+
+    // Persist to server if this task has a numeric database ID and courseId
+    if (/^\d+$/.test(taskId)) {
+      const matchedTask =
+        tasks.find((t) => t.id === taskId) ||
+        getTasksForDate(dateToUse).find((t) => t.id === taskId);
+      const cid = matchedTask?.courseId;
+      if (cid && !String(cid).startsWith("c-") && !String(cid).startsWith("course-")) {
+        void browseService.togglePlanTaskCompletion(cid, taskId, !isDone).catch(() => {});
+      }
+    }
 
   };
 

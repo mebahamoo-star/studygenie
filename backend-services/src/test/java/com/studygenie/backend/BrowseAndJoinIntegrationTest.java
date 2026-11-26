@@ -284,6 +284,94 @@ public class BrowseAndJoinIntegrationTest {
     }
 
     @Test
+    void testTaskCompletionToggle_AntiDoubleXp_AndOwnershipCheck() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        Long taskId = planTaskRepository.findByStudyPlanId(sp.getId()).get(0).getId();
+
+        // First completion grants XP
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("XP_GRANTED"))
+                .andExpect(jsonPath("$.data.is_completed").value(true))
+                .andExpect(jsonPath("$.data.xp_awarded").value(true));
+
+        // Uncheck then re-check must NOT grant XP twice
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.is_completed").value(false));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Task updated"))
+                .andExpect(jsonPath("$.data.is_completed").value(true));
+
+        // Another student cannot toggle someone else's task
+        Student other = Student.builder()
+                .email("other@test.com")
+                .password("pwd")
+                .fullName("Other Student")
+                .build();
+        other = studentRepository.save(other);
+        String otherToken = "Bearer " + jwtService.generateAccessToken(other.getId(), other.getEmail());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", otherToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":false}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void testRegeneratePlan_PreservesCompletedTasks() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        Long taskId = planTaskRepository.findByStudyPlanId(sp.getId()).get(0).getId();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":true}"))
+                .andExpect(status().isOk());
+
+        // Regenerate: completed task (full 2.0h) must be preserved
+        JoinCourseRequest regenReq = new JoinCourseRequest(LocalDate.now().plusDays(20), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/plan")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(regenReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tasks[0].id").value(taskId))
+                .andExpect(jsonPath("$.data.tasks[0].is_completed").value(true));
+    }
+
+    @Test
     void testOldMockPaths_Return404() throws Exception {
         mockMvc.perform(post("/api/plans/generate").header("Authorization", validToken)
                 .contentType(MediaType.APPLICATION_JSON)

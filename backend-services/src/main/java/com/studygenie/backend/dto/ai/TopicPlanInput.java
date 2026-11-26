@@ -49,8 +49,22 @@ public class TopicPlanInput {
     @Builder.Default
     private Boolean isHard = false;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("is_weak_quiz")
+    @JsonAlias({"is_weak_quiz", "isWeakQuiz", "weak_quiz", "weakQuiz"})
+    @Builder.Default
+    private Boolean isWeakQuiz = false;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("quiz_score")
+    @JsonAlias({"quiz_score", "quizScore"})
+    private Double quizScore;
+
     public TopicPlanInput(String ref, String chapterTitle, int orderIndex, double estimatedHours, int importance) {
-        this(ref, chapterTitle, orderIndex, estimatedHours, importance, new ArrayList<>(), false, false);
+        this(ref, chapterTitle, orderIndex, estimatedHours, importance, new ArrayList<>(), false, false, false, null);
+    }
+
+    public TopicPlanInput(String ref, String chapterTitle, int orderIndex, double estimatedHours, int importance,
+                          List<String> subtopics, Boolean isHeavilyTested, Boolean isHard) {
+        this(ref, chapterTitle, orderIndex, estimatedHours, importance, subtopics, isHeavilyTested, isHard, false, null);
     }
 
     public boolean isHeavilyTested() {
@@ -75,7 +89,7 @@ public class TopicPlanInput {
     }
 
     public double estimatedHours() {
-        return estimatedHours >= 0.5 ? estimatedHours : 1.0;
+        return estimatedHours >= 0.05 ? estimatedHours : 1.0;
     }
 
     public int importance() {
