@@ -54,6 +54,8 @@ function Plan() {
   const [survival, setSurvival] = useState(false);
   const [planDays, setPlanDays] = useState<DayPlan[]>([]);
   const [fullPlanDays, setFullPlanDays] = useState<DayPlan[]>([]);
+  const [skippedTopics, setSkippedTopics] = useState<{ ref: string; title: string; reason: string }[]>([]);
+  const [planWarnings, setPlanWarnings] = useState<string[]>([]);
   const [courseInfo, setCourseInfo] = useState<{ name: string; code?: string }>({
     name: "Study Plan",
     code: "",
@@ -167,6 +169,7 @@ function Plan() {
           localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.id}`, JSON.stringify(remote));
           localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.name}`, JSON.stringify(remote));
           formatAndSetTasks(remote.tasks, selectedCourse);
+          extractAndSetPlanMeta(remote, selectedCourse);
           toast.success("Plan refreshed successfully from server!");
           return;
         }
@@ -209,6 +212,8 @@ function Plan() {
     setCourseInfo({ name: currentCourse.name, code: currentCourse.code });
     setPlanDays([]);
     setFullPlanDays([]);
+    setSkippedTopics([]);
+    setPlanWarnings([]);
     setSurvival(false);
 
     let planData: any = null;
@@ -245,6 +250,36 @@ function Plan() {
     if (planData?.tasks && planData.tasks.length > 0) {
       formatAndSetTasks(planData.tasks, currentCourse);
     }
+    if (planData) {
+      extractAndSetPlanMeta(planData, currentCourse);
+    }
+  };
+
+  const extractAndSetPlanMeta = (planData: any, courseParam?: Course) => {
+    const curCourse = courseParam || selectedCourse;
+    const topicTitleByRef: Record<string, string> = {};
+    if (curCourse?.topics && Array.isArray(curCourse.topics)) {
+      curCourse.topics.forEach((t: any, idx: number) => {
+        const key = String(t.id || idx + 1);
+        topicTitleByRef[key] = t.name || t.chapter_title || t.chapterTitle || `Topic ${key}`;
+      });
+    }
+
+    const rawSkipped = planData?.skipped_topics || planData?.skippedTopics || [];
+    const mappedSkipped = Array.isArray(rawSkipped)
+      ? rawSkipped.map((s: any) => {
+          const ref = String(s.ref ?? s.topicRef ?? "");
+          return {
+            ref,
+            title: topicTitleByRef[ref] || `Topic ${ref}`,
+            reason: String(s.reason || "NO_CAPACITY"),
+          };
+        })
+      : [];
+    setSkippedTopics(mappedSkipped);
+
+    const rawWarnings = planData?.summary?.warnings || [];
+    setPlanWarnings(Array.isArray(rawWarnings) ? rawWarnings.filter(Boolean) : []);
   };
 
   const formatAndSetTasks = (tasks: any[], courseParam?: Course) => {
@@ -509,6 +544,49 @@ function Plan() {
           >
             Turn Off Survival Mode
           </Button>
+        </div>
+      )}
+
+      {(skippedTopics.length > 0 || planWarnings.length > 0) && (
+        <div className="mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm shadow-sm space-y-2.5">
+          {planWarnings.length > 0 && (
+            <div className="flex items-start gap-2.5 text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                {planWarnings.map((w, idx) => (
+                  <p key={idx} className="text-xs font-medium leading-relaxed">
+                    {w}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {skippedTopics.length > 0 && (
+            <div className="border-t border-amber-500/25 pt-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                  Skipped Topics ({skippedTopics.length}) — Insufficient Time Before Exam
+                </span>
+                <Link to="/courses" className="text-xs font-semibold text-primary hover:underline">
+                  Adjust Daily Hours / Exam Date →
+                </Link>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {skippedTopics.map((st) => (
+                  <span
+                    key={st.ref}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground"
+                  >
+                    <span>{st.title}</span>
+                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                      {st.reason === "NOT_ESSENTIAL" ? "Low Priority" : "No Capacity"}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
