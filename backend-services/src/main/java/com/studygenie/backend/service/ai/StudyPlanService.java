@@ -17,9 +17,13 @@ public class StudyPlanService {
     }
 
     public PlanResponseData generatePlan(GeneratePlanRequest request) {
-        String courseInference = (request.topics() != null && !request.topics().isEmpty())
-                ? request.topics().get(0).chapterTitle() : "";
-        GeneratePlanRequest enriched = feedbackService.enrichPlanRequest(request, courseInference);
+        return generatePlan(request, request.getCourseId(), null);
+    }
+
+    public PlanResponseData generatePlan(GeneratePlanRequest request, Long courseId, String courseName) {
+        GeneratePlanRequest enriched = (courseId != null || (courseName != null && !courseName.isBlank()))
+                ? feedbackService.enrichPlanRequest(request, courseId, courseName)
+                : request;
         return aiEngineClient.generatePlan(enriched);
     }
     

@@ -35,7 +35,7 @@ public class GeneratePlanRequest {
 
     @JsonAlias({"restWeekdays", "restDays", "rest_days"})
     @Builder.Default
-    private List<Integer> restWeekdays = List.of(6);
+    private List<Integer> restWeekdays = List.of(4);
 
     @Builder.Default
     private String mode = "NORMAL";
@@ -52,10 +52,20 @@ public class GeneratePlanRequest {
     @JsonAlias({"course_difficulty", "courseDifficulty", "difficulty"})
     private String courseDifficulty;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("course_id")
+    @JsonAlias({"course_id", "courseId"})
+    private Long courseId;
+
     public GeneratePlanRequest(LocalDate startDate, LocalDate examDate, List<TopicPlanInput> topics,
                                double dailyHours, List<Integer> restWeekdays, String mode,
                                int bufferDaysBeforeExam, double reviewRatio) {
-        this(startDate, examDate, topics, dailyHours, restWeekdays, mode, bufferDaysBeforeExam, reviewRatio, null);
+        this(startDate, examDate, topics, dailyHours, restWeekdays, mode, bufferDaysBeforeExam, reviewRatio, null, null);
+    }
+
+    public GeneratePlanRequest(LocalDate startDate, LocalDate examDate, List<TopicPlanInput> topics,
+                               double dailyHours, List<Integer> restWeekdays, String mode,
+                               int bufferDaysBeforeExam, double reviewRatio, String courseDifficulty) {
+        this(startDate, examDate, topics, dailyHours, restWeekdays, mode, bufferDaysBeforeExam, reviewRatio, courseDifficulty, null);
     }
 
     // Record-style accessors for backward compatibility
@@ -76,7 +86,7 @@ public class GeneratePlanRequest {
     }
 
     public List<Integer> restWeekdays() {
-        return restWeekdays != null ? restWeekdays : List.of(6);
+        return restWeekdays != null ? restWeekdays : List.of(4);
     }
 
     public String mode() {

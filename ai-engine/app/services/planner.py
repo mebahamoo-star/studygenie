@@ -9,6 +9,20 @@ def _round_to_5(minutes: float) -> int:
     return int(math.ceil(minutes / 5.0)) * 5
 
 def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
+    if any(isinstance(d, bool) or not isinstance(d, int) or d < 0 or d > 6 for d in req.rest_weekdays):
+        raise AppError(
+            status_code=422,
+            error_code="INVALID_REST_DAYS",
+            message="rest_weekdays must contain integers between 0 (Monday) and 6 (Sunday)",
+        )
+
+    if req.exam_date <= req.start_date:
+        raise AppError(
+            status_code=422,
+            error_code="INVALID_DATES",
+            message="exam_date must be after start_date",
+        )
+
     warnings: list[str] = []
 
     # Calibrate topics based on student exam feedback (tested & hard topics)
@@ -55,11 +69,6 @@ def generate_plan(req: GeneratePlanRequest) -> PlanResponseData:
 
     # Map topics by ref for fast metadata lookup
     topic_map: dict[str, TopicPlanInput] = {t.ref: t for t in calibrated_topics}
-
-    # If exam date is today or in the past, auto-adjust to 14 days ahead
-    if req.exam_date <= req.start_date:
-        req.exam_date = req.start_date + timedelta(days=14)
-        warnings.append("Target exam date was automatically scheduled 14 days ahead.")
 
     days_between = (req.exam_date - req.start_date).days
     effective_buffer = min(req.buffer_days_before_exam, max(0, days_between - 1))

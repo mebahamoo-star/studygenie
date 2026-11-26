@@ -84,7 +84,7 @@ class GeneratePlanRequest(BaseModel):
     exam_date: date
     topics: list[TopicPlanInput] = Field(..., min_length=1, max_length=40)
     daily_hours: float = Field(default=2.0, ge=0.5, le=12.0)
-    rest_weekdays: list[int] = Field(default_factory=list) # 0 = Monday
+    rest_weekdays: list[int] = Field(default_factory=lambda: [4]) # 0 = Monday .. 6 = Sunday (default Friday = 4)
     mode: str = Field(default="NORMAL") # NORMAL | SURVIVAL
     buffer_days_before_exam: int = Field(default=1, ge=0, le=7)
     review_ratio: float = Field(default=0.15, ge=0.0, le=0.4)
@@ -118,7 +118,7 @@ class GeneratePlanRequest(BaseModel):
             except (ValueError, TypeError):
                 d["daily_hours"] = 2.0
 
-            # Rest weekdays
+            # Rest weekdays (0 = Monday .. 6 = Sunday, default Friday = 4)
             if "rest_weekdays" not in d:
                 if "restWeekdays" in d:
                     d["rest_weekdays"] = d["restWeekdays"]
@@ -127,9 +127,9 @@ class GeneratePlanRequest(BaseModel):
                 elif "rest_days" in d:
                     d["rest_weekdays"] = d["rest_days"]
                 else:
-                    d["rest_weekdays"] = [6]
-            if not isinstance(d.get("rest_weekdays"), list):
-                d["rest_weekdays"] = [6]
+                    d["rest_weekdays"] = [4]
+            if d.get("rest_weekdays") is None or not isinstance(d.get("rest_weekdays"), list):
+                d["rest_weekdays"] = [4]
 
             # Mode
             mode = d.get("mode", "NORMAL")

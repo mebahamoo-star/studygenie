@@ -44,6 +44,22 @@ public class PlanTask {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "task_type", length = 20)
+    private String taskType;
+
+    @Column(name = "minutes")
+    private Integer minutes;
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "subtopics_json", columnDefinition = "TEXT")
+    private String subtopicsJson;
+
+    @Column(name = "xp_awarded")
+    @Builder.Default
+    private Boolean xpAwarded = false;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

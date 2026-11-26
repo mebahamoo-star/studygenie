@@ -1,8 +1,11 @@
 package com.studygenie.backend.service.browse;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.studygenie.backend.dto.ai.GeneratePlanRequest;
 import com.studygenie.backend.dto.ai.PlanResponseData;
 import com.studygenie.backend.dto.ai.PlanSummary;
+import com.studygenie.backend.dto.ai.SkippedTopic;
 import com.studygenie.backend.dto.ai.Task;
 import com.studygenie.backend.dto.ai.TopicPlanInput;
 import com.studygenie.backend.dto.browse.CourseDto;
@@ -76,6 +79,7 @@ public class CourseService {
     private final QuizQuestionRepository quizQuestionRepository;
     private final QuizAttemptRepository quizAttemptRepository;
     private final ExamRepository examRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public CourseService(CourseRepository courseRepository,
                          CollegeRepository collegeRepository,
@@ -565,6 +569,17 @@ public class CourseService {
 
     @Transactional
     public PlanResponseData joinChallenge(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds) {
+        return joinChallenge(courseId, userId, examDate, dailyHours, mode, selectedTopicIds, null);
+    }
+
+    @Transactional
+    public PlanResponseData joinChallenge(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds, List<Integer> requestedRestWeekdays) {
+        if (examDate == null || !examDate.isAfter(LocalDate.now())) {
+            throw new BadRequestException("Exam date must be in the future.");
+        }
+
+        List<Integer> restWeekdays = resolveAndValidateRestWeekdays(requestedRestWeekdays, null);
+
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
 
@@ -584,24 +599,53 @@ public class CourseService {
 
         List<TopicPlanInput> topics = topicRepository.findBySyllabusId(course.getSyllabus().getId()).stream()
                 .filter(t -> selectedTopicIds == null || selectedTopicIds.isEmpty() || selectedTopicIds.contains(t.getId()))
-                .map(t -> new TopicPlanInput(
-                        String.valueOf(t.getId()),
-                        t.getChapterTitle(),
-                        t.getOrderIndex(),
-                        t.getEstimatedHours() != null && t.getEstimatedHours() > 0 ? t.getEstimatedHours() : 0.5,
-                        t.getImportance() != null && t.getImportance() > 0 ? t.getImportance() : 3
-                ))
+                .map(t -> TopicPlanInput.builder()
+                        .ref(String.valueOf(t.getId()))
+                        .chapterTitle(t.getChapterTitle())
+                        .orderIndex(t.getOrderIndex())
+                        .estimatedHours(t.getEstimatedHours() != null && t.getEstimatedHours() > 0 ? t.getEstimatedHours() : 0.5)
+                        .importance(t.getImportance() != null && t.getImportance() > 0 ? t.getImportance() : 3)
+                        .subtopics(extractSubtopicLabels(t.getContentExcerpt()))
+                        .build())
                 .collect(Collectors.toList());
 
         if (topics.isEmpty()) {
             throw new ResourceNotFoundException("This course has no syllabus chapters or topics yet. Please upload the syllabus first.", "NO_TOPICS");
         }
 
-        // 1. Save StudyPlan first
+        double effDailyHours = dailyHours != null ? dailyHours : 2.0;
+        String effMode = mode != null && !mode.isBlank() ? mode.toUpperCase() : "NORMAL";
+        int bufferDays = 3;
+
+        // 1. Generate Plan first (validates & computes full schedule)
+        GeneratePlanRequest request = GeneratePlanRequest.builder()
+                .startDate(LocalDate.now())
+                .examDate(examDate)
+                .topics(topics)
+                .dailyHours(effDailyHours)
+                .restWeekdays(restWeekdays)
+                .mode(effMode)
+                .bufferDaysBeforeExam(bufferDays)
+                .reviewRatio(0.2)
+                .courseId(courseId)
+                .build();
+
+        PlanResponseData data = studyPlanService.generatePlan(request, course.getId(), course.getName());
+
+        // 2. Save StudyPlan with full configuration & summary metadata
         StudyPlan studyPlan = StudyPlan.builder()
                 .student(student)
                 .course(course)
                 .examDate(examDate)
+                .mode(data.summary() != null && data.summary().mode() != null ? data.summary().mode() : effMode)
+                .dailyHours(effDailyHours)
+                .restWeekdays(formatRestWeekdays(restWeekdays))
+                .bufferDays(bufferDays)
+                .studyDays(data.summary() != null ? data.summary().studyDays() : null)
+                .capacityMinutes(data.summary() != null ? data.summary().capacityMinutes() : null)
+                .feasible(data.summary() != null ? data.summary().feasible() : Boolean.TRUE)
+                .warningsJson(writeJson(data.summary() != null ? data.summary().warnings() : List.of()))
+                .skippedTopicsJson(writeJson(data.skippedTopics() != null ? data.skippedTopics() : List.of()))
                 .build();
         studyPlan = studyPlanRepository.save(studyPlan);
         if (student.getEnrolledCourses() != null && !student.getEnrolledCourses().contains(course)) {
@@ -610,55 +654,28 @@ public class CourseService {
         }
         syncExamDate(student, course.getName(), examDate);
 
-        // 2. Generate Plan
-        GeneratePlanRequest request = new GeneratePlanRequest(
-                LocalDate.now(),
-                examDate,
-                topics,
-                dailyHours != null ? dailyHours : 2.0,
-                List.of(7), // default rest day Sunday
-                mode != null ? mode : "NORMAL",
-                3, // buffer
-                0.2 // review ratio
-        );
-
-        PlanResponseData data = studyPlanService.generatePlan(request);
-
-        // 3. Persist PlanTasks
-        List<PlanTask> planTasks = new ArrayList<>();
-        if (data.tasks() != null) {
-            for (Task task : data.tasks()) {
-                try {
-                    Long topicId = Long.valueOf(task.topicRef());
-                    Topic topic = topicRepository.findById(topicId).orElse(null);
-                    if (topic == null) {
-                        log.warn("Topic with ID {} not found. Skipping task.", topicId);
-                        continue;
-                    }
-                    PlanTask planTask = PlanTask.builder()
-                            .studyPlan(studyPlan)
-                            .topic(topic)
-                            .scheduledDate(task.date())
-                            .isCompleted(false)
-                            .build();
-                    planTasks.add(planTask);
-                } catch (NumberFormatException e) {
-                    log.warn("Invalid topic ref: {}. Skipping task.", task.topicRef());
-                }
-            }
-            planTaskRepository.saveAll(planTasks);
-        }
+        // 3. Persist PlanTasks with full task metadata
+        savePlanTasks(studyPlan, data);
 
         return data;
     }
 
     @Transactional
     public PlanResponseData regeneratePlan(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode) {
-        return regeneratePlan(courseId, userId, examDate, dailyHours, mode, null);
+        return regeneratePlan(courseId, userId, examDate, dailyHours, mode, null, null);
     }
 
     @Transactional
     public PlanResponseData regeneratePlan(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds) {
+        return regeneratePlan(courseId, userId, examDate, dailyHours, mode, selectedTopicIds, null);
+    }
+
+    @Transactional
+    public PlanResponseData regeneratePlan(Long courseId, Long userId, LocalDate examDate, Double dailyHours, String mode, List<Long> selectedTopicIds, List<Integer> requestedRestWeekdays) {
+        if (examDate == null || !examDate.isAfter(LocalDate.now())) {
+            throw new BadRequestException("Exam date must be in the future.");
+        }
+
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
 
@@ -680,8 +697,56 @@ public class CourseService {
                         .examDate(examDate)
                         .build());
 
+        List<Integer> restWeekdays = resolveAndValidateRestWeekdays(requestedRestWeekdays, studyPlan.getRestWeekdays());
+        double effDailyHours = dailyHours != null ? dailyHours : (studyPlan.getDailyHours() != null ? studyPlan.getDailyHours() : 2.0);
+        String effMode = mode != null && !mode.isBlank() ? mode.toUpperCase() : (studyPlan.getMode() != null ? studyPlan.getMode() : "NORMAL");
+        int bufferDays = 3;
+
+        // Fetch all current syllabus topics (including newly added chapters!)
+        List<TopicPlanInput> topics = topicRepository.findBySyllabusId(course.getSyllabus().getId()).stream()
+                .filter(t -> selectedTopicIds == null || selectedTopicIds.isEmpty() || selectedTopicIds.contains(t.getId()))
+                .map(t -> TopicPlanInput.builder()
+                        .ref(String.valueOf(t.getId()))
+                        .chapterTitle(t.getChapterTitle())
+                        .orderIndex(t.getOrderIndex())
+                        .estimatedHours(t.getEstimatedHours() != null && t.getEstimatedHours() > 0 ? t.getEstimatedHours() : 0.5)
+                        .importance(t.getImportance() != null && t.getImportance() > 0 ? t.getImportance() : 3)
+                        .subtopics(extractSubtopicLabels(t.getContentExcerpt()))
+                        .build())
+                .collect(Collectors.toList());
+
+        if (topics.isEmpty()) {
+            throw new ResourceNotFoundException("This course has no syllabus chapters or topics yet. Please upload the syllabus first.", "NO_TOPICS");
+        }
+
+        GeneratePlanRequest request = GeneratePlanRequest.builder()
+                .startDate(LocalDate.now())
+                .examDate(examDate)
+                .topics(topics)
+                .dailyHours(effDailyHours)
+                .restWeekdays(restWeekdays)
+                .mode(effMode)
+                .bufferDaysBeforeExam(bufferDays)
+                .reviewRatio(0.2)
+                .courseId(courseId)
+                .build();
+
+        PlanResponseData data = studyPlanService.generatePlan(request, course.getId(), course.getName());
+
         studyPlan.setExamDate(examDate);
+        studyPlan.setMode(data.summary() != null && data.summary().mode() != null ? data.summary().mode() : effMode);
+        studyPlan.setDailyHours(effDailyHours);
+        studyPlan.setRestWeekdays(formatRestWeekdays(restWeekdays));
+        studyPlan.setBufferDays(bufferDays);
+        if (data.summary() != null) {
+            studyPlan.setStudyDays(data.summary().studyDays());
+            studyPlan.setCapacityMinutes(data.summary().capacityMinutes());
+            studyPlan.setFeasible(data.summary().feasible());
+            studyPlan.setWarningsJson(writeJson(data.summary().warnings()));
+        }
+        studyPlan.setSkippedTopicsJson(writeJson(data.skippedTopics() != null ? data.skippedTopics() : List.of()));
         studyPlan = studyPlanRepository.save(studyPlan);
+
         if (student.getEnrolledCourses() != null && !student.getEnrolledCourses().contains(course)) {
             student.getEnrolledCourses().add(course);
             studentRepository.save(student);
@@ -694,35 +759,98 @@ public class CourseService {
             planTaskRepository.deleteAll(oldTasks);
         }
 
-        // Fetch all current syllabus topics (including newly added chapters!)
-        List<TopicPlanInput> topics = topicRepository.findBySyllabusId(course.getSyllabus().getId()).stream()
-                .filter(t -> selectedTopicIds == null || selectedTopicIds.isEmpty() || selectedTopicIds.contains(t.getId()))
-                .map(t -> new TopicPlanInput(
-                        String.valueOf(t.getId()),
-                        t.getChapterTitle(),
-                        t.getOrderIndex(),
-                        t.getEstimatedHours() != null && t.getEstimatedHours() > 0 ? t.getEstimatedHours() : 0.5,
-                        t.getImportance() != null && t.getImportance() > 0 ? t.getImportance() : 3
-                ))
+        List<PlanTask> savedTasks = savePlanTasks(studyPlan, data);
+
+        log.info("Successfully regenerated study plan for course '{}' (ID: {}) with {} tasks",
+                course.getName(), course.getId(), savedTasks.size());
+
+        return data;
+    }
+
+    @Transactional(readOnly = true)
+    public PlanResponseData getPlan(Long courseId, Long userId) {
+        StudyPlan studyPlan = studyPlanRepository.findByStudentIdAndCourseId(userId, courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("You have not joined this course.", "NOT_JOINED"));
+
+        List<PlanTask> planTasks = planTaskRepository.findByStudyPlanId(studyPlan.getId());
+        planTasks.sort((a, b) -> {
+            int dateCmp = a.getScheduledDate().compareTo(b.getScheduledDate());
+            if (dateCmp != 0) return dateCmp;
+            String tA = a.getTaskType() != null ? a.getTaskType() : "STUDY";
+            String tB = b.getTaskType() != null ? b.getTaskType() : "STUDY";
+            int typeCmp = ("STUDY".equalsIgnoreCase(tA) ? 0 : 1) - ("STUDY".equalsIgnoreCase(tB) ? 0 : 1);
+            if (typeCmp != 0) return typeCmp;
+            long idA = a.getId() != null ? a.getId() : 0L;
+            long idB = b.getId() != null ? b.getId() : 0L;
+            return Long.compare(idA, idB);
+        });
+
+        List<Task> tasks = planTasks.stream()
+                .map(pt -> {
+                    Topic topic = pt.getTopic();
+                    String title = (topic != null && topic.getChapterTitle() != null)
+                            ? topic.getChapterTitle()
+                            : "Topic " + (topic != null ? topic.getId() : "1");
+                    String taskType = (pt.getTaskType() != null && !pt.getTaskType().isBlank())
+                            ? pt.getTaskType()
+                            : "STUDY";
+                    int minutes = (pt.getMinutes() != null && pt.getMinutes() > 0)
+                            ? pt.getMinutes()
+                            : (int) Math.round(((topic != null && topic.getEstimatedHours() != null && topic.getEstimatedHours() > 0)
+                                    ? topic.getEstimatedHours()
+                                    : 2.0) * 60);
+                    String description = (pt.getDescription() != null && !pt.getDescription().isBlank())
+                            ? pt.getDescription()
+                            : ("REVIEW".equalsIgnoreCase(taskType)
+                                    ? "Active Recall & Practice Quiz: " + title
+                                    : "Study " + title);
+                    List<String> subtopics = readStringList(pt.getSubtopicsJson());
+                    return new Task(
+                            pt.getScheduledDate(),
+                            String.valueOf(topic != null ? topic.getId() : 1),
+                            title,
+                            taskType,
+                            minutes,
+                            description,
+                            subtopics
+                    );
+                })
                 .collect(Collectors.toList());
 
-        if (topics.isEmpty()) {
-            throw new ResourceNotFoundException("This course has no syllabus chapters or topics yet. Please upload the syllabus first.", "NO_TOPICS");
+        List<SkippedTopic> skippedTopics = readSkippedTopics(studyPlan.getSkippedTopicsJson());
+        List<String> warnings = readStringList(studyPlan.getWarningsJson());
+        String mode = (studyPlan.getMode() != null && !studyPlan.getMode().isBlank()) ? studyPlan.getMode() : "NORMAL";
+        int studyDays = (studyPlan.getStudyDays() != null && studyPlan.getStudyDays() > 0)
+                ? studyPlan.getStudyDays()
+                : (int) tasks.stream().map(Task::date).distinct().count();
+        int plannedMinutes = tasks.stream().mapToInt(Task::minutes).sum();
+        int capacityMinutes = (studyPlan.getCapacityMinutes() != null && studyPlan.getCapacityMinutes() > 0)
+                ? studyPlan.getCapacityMinutes()
+                : (int) Math.round(studyDays * (studyPlan.getDailyHours() != null ? studyPlan.getDailyHours() : 2.0) * 60);
+        int plannedTopics = (int) tasks.stream()
+                .filter(t -> !"REVIEW".equalsIgnoreCase(t.taskType()))
+                .map(Task::topicRef)
+                .distinct()
+                .count();
+        if (plannedTopics == 0 && !tasks.isEmpty()) {
+            plannedTopics = (int) tasks.stream().map(Task::topicRef).distinct().count();
         }
+        boolean feasible = studyPlan.getFeasible() != null ? studyPlan.getFeasible() : skippedTopics.isEmpty();
 
-        GeneratePlanRequest request = new GeneratePlanRequest(
-                LocalDate.now(),
-                examDate,
-                topics,
-                dailyHours != null ? dailyHours : 2.0,
-                List.of(7),
-                mode != null ? mode : "NORMAL",
-                3,
-                0.2
+        PlanSummary summary = new PlanSummary(
+                mode,
+                studyDays,
+                capacityMinutes,
+                plannedMinutes,
+                plannedTopics,
+                skippedTopics.size(),
+                feasible,
+                warnings
         );
+        return new PlanResponseData(tasks, skippedTopics, summary);
+    }
 
-        PlanResponseData data = studyPlanService.generatePlan(request);
-
+    private List<PlanTask> savePlanTasks(StudyPlan studyPlan, PlanResponseData data) {
         List<PlanTask> planTasks = new ArrayList<>();
         if (data.tasks() != null) {
             for (Task task : data.tasks()) {
@@ -738,6 +866,11 @@ public class CourseService {
                             .topic(topic)
                             .scheduledDate(task.date())
                             .isCompleted(false)
+                            .xpAwarded(false)
+                            .taskType(task.taskType() != null && !task.taskType().isBlank() ? task.taskType() : "STUDY")
+                            .minutes(task.minutes() > 0 ? task.minutes() : 30)
+                            .description(task.description())
+                            .subtopicsJson(writeJson(task.subtopics() != null ? task.subtopics() : List.of()))
                             .build();
                     planTasks.add(planTask);
                 } catch (NumberFormatException e) {
@@ -745,41 +878,103 @@ public class CourseService {
                 }
             }
             if (!planTasks.isEmpty()) {
-                planTaskRepository.saveAll(planTasks);
+                planTasks = planTaskRepository.saveAll(planTasks);
             }
         }
-
-        log.info("Successfully regenerated study plan for course '{}' (ID: {}) with {} tasks",
-                course.getName(), course.getId(), planTasks.size());
-
-        return data;
+        return planTasks;
     }
 
-    @Transactional(readOnly = true)
-    public PlanResponseData getPlan(Long courseId, Long userId) {
-        StudyPlan studyPlan = studyPlanRepository.findByStudentIdAndCourseId(userId, courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("You have not joined this course.", "NOT_JOINED"));
+    private List<Integer> resolveAndValidateRestWeekdays(List<Integer> requested, String persistedCsv) {
+        List<Integer> resolved;
+        if (requested != null) {
+            resolved = requested;
+        } else if (persistedCsv != null) {
+            resolved = parseRestWeekdays(persistedCsv);
+        } else {
+            resolved = List.of(4); // Default Friday (Python weekday 4)
+        }
+        List<Integer> normalized = new ArrayList<>();
+        for (Integer day : resolved) {
+            if (day == null || day < 0 || day > 6) {
+                throw new BadRequestException("Rest weekdays must be between 0 (Monday) and 6 (Sunday).");
+            }
+            if (!normalized.contains(day)) {
+                normalized.add(day);
+            }
+        }
+        return normalized;
+    }
 
-        List<PlanTask> planTasks = planTaskRepository.findByStudyPlanId(studyPlan.getId());
-        List<Task> tasks = planTasks.stream()
-                .map(pt -> {
-                    String title = (pt.getTopic() != null && pt.getTopic().getChapterTitle() != null)
-                            ? pt.getTopic().getChapterTitle()
-                            : "Topic " + (pt.getTopic() != null ? pt.getTopic().getId() : "1");
-                    return new Task(
-                            pt.getScheduledDate(),
-                            String.valueOf(pt.getTopic() != null ? pt.getTopic().getId() : 1),
-                            title,
-                            "STUDY",
-                            (int) ((pt.getTopic() != null ? pt.getTopic().getEstimatedHours() : 2.0) * 60),
-                            "Study " + title,
-                            List.of()
-                    );
-                })
-                .collect(Collectors.toList());
+    private String formatRestWeekdays(List<Integer> days) {
+        if (days == null || days.isEmpty()) {
+            return "";
+        }
+        return days.stream().map(String::valueOf).collect(Collectors.joining(","));
+    }
 
-        PlanSummary summary = new PlanSummary("NORMAL", 1, 0, 0, tasks.size(), 0, true, List.of());
-        return new PlanResponseData(tasks, List.of(), summary);
+    private List<Integer> parseRestWeekdays(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return List.of();
+        }
+        List<Integer> list = new ArrayList<>();
+        for (String part : csv.split(",")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty()) {
+                try {
+                    int val = Integer.parseInt(trimmed);
+                    if (val >= 0 && val <= 6 && !list.contains(val)) {
+                        list.add(val);
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return list;
+    }
+
+    private List<String> extractSubtopicLabels(String contentExcerpt) {
+        if (contentExcerpt == null || contentExcerpt.isBlank()) {
+            return List.of();
+        }
+        List<String> labels = new ArrayList<>();
+        for (String block : contentExcerpt.split("\\R\\R+")) {
+            String line = block.trim();
+            if (!line.isEmpty()) {
+                int colonIdx = line.indexOf(':');
+                String label = colonIdx > 0 ? line.substring(0, colonIdx).trim() : line;
+                if (!label.isEmpty()) {
+                    labels.add(label.length() > 100 ? label.substring(0, 100) : label);
+                }
+            }
+            if (labels.size() >= 6) break;
+        }
+        return labels;
+    }
+
+    private String writeJson(Object value) {
+        if (value == null) return "[]";
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    private List<String> readStringList(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private List<SkippedTopic> readSkippedTopics(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<SkippedTopic>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
     }
     private void syncExamDate(Student student, String courseName, LocalDate examDate) {
         if (student == null || courseName == null || examDate == null) return;

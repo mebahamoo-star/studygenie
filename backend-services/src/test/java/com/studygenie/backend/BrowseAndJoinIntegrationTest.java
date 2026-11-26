@@ -254,7 +254,33 @@ public class BrowseAndJoinIntegrationTest {
     void testGetCoursePlan_Success() throws Exception {
         JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(30), 2.0, "NORMAL");
         mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join").header("Authorization", validToken).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(req))).andExpect(status().isOk());
-        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan").header("Authorization", validToken)).andExpect(status().isOk()).andExpect(jsonPath("$.data.tasks").isArray()).andExpect(jsonPath("$.data.summary").exists());
+        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan").header("Authorization", validToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tasks").isArray())
+                .andExpect(jsonPath("$.data.tasks[0].task_type").value("LEARN"))
+                .andExpect(jsonPath("$.data.tasks[0].minutes").value(120))
+                .andExpect(jsonPath("$.data.summary.planned_minutes").value(120))
+                .andExpect(jsonPath("$.data.summary.study_days").value(1));
+    }
+
+    @Test
+    void testJoinCourse_PastOrTodayExamDate_Returns400() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now(), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testJoinCourse_InvalidRestWeekday_Returns400() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL", null, java.util.List.of(7));
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

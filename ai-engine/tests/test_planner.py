@@ -13,9 +13,50 @@ def test_planner_invalid_dates():
         exam_date=date(2023, 10, 5),
         topics=[TopicPlanInput(ref="t1", chapter_title="A", order_index=1, estimated_hours=2, importance=5)]
     )
+    with pytest.raises(AppError) as exc:
+        generate_plan(req)
+    assert exc.value.status_code == 422
+    assert exc.value.error_code == "INVALID_DATES"
+
+
+def test_planner_exam_date_equal_start_date_rejected():
+    req = GeneratePlanRequest(
+        start_date=date(2023, 10, 10),
+        exam_date=date(2023, 10, 10),
+        topics=[TopicPlanInput(ref="t1", chapter_title="A", order_index=1, estimated_hours=2, importance=5)]
+    )
+    with pytest.raises(AppError) as exc:
+        generate_plan(req)
+    assert exc.value.status_code == 422
+    assert exc.value.error_code == "INVALID_DATES"
+
+
+def test_planner_invalid_rest_weekdays_rejected():
+    req = GeneratePlanRequest(
+        start_date=date(2023, 10, 1),
+        exam_date=date(2023, 10, 10),
+        rest_weekdays=[7],
+        topics=[TopicPlanInput(ref="t1", chapter_title="A", order_index=1, estimated_hours=2, importance=5)]
+    )
+    with pytest.raises(AppError) as exc:
+        generate_plan(req)
+    assert exc.value.status_code == 422
+    assert exc.value.error_code == "INVALID_REST_DAYS"
+
+
+def test_planner_default_rest_day_is_friday_and_honored():
+    # 2023-10-02 (Mon) to 2023-10-09 (Mon), buffer=0 -> includes Fri 2023-10-06 (weekday() == 4)
+    req = GeneratePlanRequest(
+        start_date=date(2023, 10, 2),
+        exam_date=date(2023, 10, 9),
+        buffer_days_before_exam=0,
+        topics=[TopicPlanInput(ref="t1", chapter_title="A", order_index=1, estimated_hours=6, importance=5)],
+        daily_hours=2.0,
+    )
+    assert req.rest_weekdays == [4]
     res = generate_plan(req)
-    assert any("automatically scheduled 14 days ahead" in w for w in res.summary.warnings)
-    assert res.summary.study_days > 0
+    scheduled_dates = {t.date for t in res.tasks}
+    assert date(2023, 10, 6) not in scheduled_dates
 
 def test_planner_adapts_to_heavily_tested_topics():
     req = GeneratePlanRequest(

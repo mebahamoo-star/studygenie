@@ -688,6 +688,10 @@ function Dashboard() {
 
           body: JSON.stringify({
 
+            courseId: course?.id,
+
+            course_id: course?.id,
+
             startDate: todayStr,
 
             start_date: todayStr,
@@ -702,9 +706,9 @@ function Dashboard() {
 
             daily_hours: 2.5,
 
-            restDays: [6],
+            restDays: [4],
 
-            rest_weekdays: [6],
+            rest_weekdays: [4],
 
             mode: "NORMAL",
 

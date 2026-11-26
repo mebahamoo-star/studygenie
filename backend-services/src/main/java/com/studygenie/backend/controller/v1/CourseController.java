@@ -330,7 +330,7 @@ public class CourseController {
         Double dailyHours = body.dailyHours();
         String mode = body.mode();
         Long userId = requireUserId(userDetails);
-        PlanResponseData data = courseService.regeneratePlan(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds());
+        PlanResponseData data = courseService.regeneratePlan(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds(), body.restWeekdays());
         return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
     }
 
@@ -362,7 +362,7 @@ public class CourseController {
 
         
 
-        PlanResponseData data = courseService.joinChallenge(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds());
+        PlanResponseData data = courseService.joinChallenge(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds(), body.restWeekdays());
 
         return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
 

@@ -89,4 +89,33 @@ class ExamFeedbackServiceTest {
         assertThat(enriched.courseDifficulty()).isEqualTo("MEDIUM");
         assertThat(enriched.topics().get(0).isHeavilyTested()).isTrue();
     }
+
+    @Test
+    void testFeedbackNotLeakedAcrossCoursesWhenOnlyOneEntryExists() {
+        ExamFeedbackPayload payload = ExamFeedbackPayload.builder()
+                .courseId(10L)
+                .courseName("Database Systems")
+                .difficulty("HARD")
+                .testedTopicIds(List.of(1L))
+                .hardTopicIds(List.of(2L))
+                .build();
+
+        service.registerEnrollmentCourse("enroll_db", 10L, "Database Systems");
+        service.saveFeedback("enroll_db", 1L, payload);
+
+        GeneratePlanRequest otherCourseReq = GeneratePlanRequest.builder()
+                .courseId(20L)
+                .startDate(LocalDate.now())
+                .examDate(LocalDate.now().plusWeeks(2))
+                .topics(List.of(
+                        TopicPlanInput.builder().ref("1").chapterTitle("Intro").orderIndex(1).build(),
+                        TopicPlanInput.builder().ref("2").chapterTitle("Kinematics").orderIndex(2).build()
+                ))
+                .build();
+
+        GeneratePlanRequest enriched = service.enrichPlanRequest(otherCourseReq, 20L, "Physics 101");
+        assertThat(enriched.getCourseDifficulty()).isNull();
+        assertThat(enriched.topics().get(0).isHeavilyTested()).isFalse();
+        assertThat(enriched.topics().get(1).isHard()).isFalse();
+    }
 }

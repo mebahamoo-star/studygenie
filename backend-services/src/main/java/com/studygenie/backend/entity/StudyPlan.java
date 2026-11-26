@@ -41,6 +41,33 @@ public class StudyPlan {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "mode", length = 20)
+    private String mode;
+
+    @Column(name = "daily_hours")
+    private Double dailyHours;
+
+    @Column(name = "rest_weekdays", length = 50)
+    private String restWeekdays;
+
+    @Column(name = "buffer_days")
+    private Integer bufferDays;
+
+    @Column(name = "study_days")
+    private Integer studyDays;
+
+    @Column(name = "capacity_minutes")
+    private Integer capacityMinutes;
+
+    @Column(name = "feasible")
+    private Boolean feasible;
+
+    @Column(name = "warnings_json", columnDefinition = "TEXT")
+    private String warningsJson;
+
+    @Column(name = "skipped_topics_json", columnDefinition = "TEXT")
+    private String skippedTopicsJson;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

@@ -3,6 +3,7 @@ package com.studygenie.backend.controller.v1;
 import com.studygenie.backend.dto.ApiResponse;
 import com.studygenie.backend.dto.ai.GeneratePlanRequest;
 import com.studygenie.backend.dto.ai.PlanResponseData;
+import com.studygenie.backend.exception.BadRequestException;
 import com.studygenie.backend.service.ai.StudyPlanService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -31,10 +32,20 @@ public class StudyPlanV1Controller {
     public ResponseEntity<ApiResponse<PlanResponseData>> generatePlan(
             @Valid @RequestBody GeneratePlanRequest request) {
 
-                if (request.topics() == null || request.topics().isEmpty()) {
+        if (request.topics() == null || request.topics().isEmpty()) {
             return ResponseEntity.badRequest().body(ApiResponse.error(
                     "Cannot generate study plan without syllabus topics. Please upload the course syllabus first.",
                     "NO_SYLLABUS_TOPICS"));
+        }
+        if (request.examDate() == null || !request.examDate().isAfter(request.startDate())) {
+            throw new BadRequestException("Exam date must be after start date.");
+        }
+        if (request.restWeekdays() != null) {
+            for (Integer day : request.restWeekdays()) {
+                if (day == null || day < 0 || day > 6) {
+                    throw new BadRequestException("Rest weekdays must be between 0 (Monday) and 6 (Sunday).");
+                }
+            }
         }
 
         PlanResponseData data = studyPlanService.generateAndSave(request);

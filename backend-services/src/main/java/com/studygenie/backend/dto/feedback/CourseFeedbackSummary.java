@@ -15,6 +15,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CourseFeedbackSummary {
+    private Long courseId;
     private String courseName;
     private String dominantDifficulty; // EASY | MEDIUM | HARD
     private int totalSubmissions;

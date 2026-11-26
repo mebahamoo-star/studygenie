@@ -423,6 +423,7 @@ export const browseService = {
       dailyHours: number;
       mode: "normal" | "survival";
       selectedTopicIds?: (number | string)[];
+      restWeekdays?: number[];
     },
   ): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/join`, {
@@ -432,6 +433,7 @@ export const browseService = {
         dailyHours: params.dailyHours,
         mode: params.mode,
         selected_topic_ids: params.selectedTopicIds,
+        rest_weekdays: params.restWeekdays,
       }),
     });
 
@@ -445,6 +447,7 @@ export const browseService = {
       dailyHours: number;
       mode: "normal" | "survival";
       selectedTopicIds?: (number | string)[];
+      restWeekdays?: number[];
     },
   ): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan`, {
@@ -454,6 +457,7 @@ export const browseService = {
         dailyHours: params.dailyHours,
         mode: params.mode,
         selected_topic_ids: params.selectedTopicIds,
+        rest_weekdays: params.restWeekdays,
       }),
     });
     return res.data!;
