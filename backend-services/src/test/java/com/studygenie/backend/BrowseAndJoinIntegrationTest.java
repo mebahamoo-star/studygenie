@@ -63,6 +63,8 @@ public class BrowseAndJoinIntegrationTest {
     private com.studygenie.backend.repository.PlanTaskRepository planTaskRepository;
     @Autowired
     private com.studygenie.backend.repository.ExamRepository examRepository;
+    @Autowired
+    private com.studygenie.backend.repository.ExamFeedbackRepository examFeedbackRepository;
 
     @Autowired
     private JwtService jwtService;
@@ -76,9 +78,12 @@ public class BrowseAndJoinIntegrationTest {
     private Course noSyllabusCourse;
     private College college;
     private University university;
+    private Syllabus syllabus;
+    private Topic topic;
 
     @BeforeEach
     void setUp() {
+        examFeedbackRepository.deleteAll();
         planTaskRepository.deleteAll();
         studyPlanRepository.deleteAll();
         examRepository.deleteAll();
@@ -103,11 +108,11 @@ public class BrowseAndJoinIntegrationTest {
         readyCourse = Course.builder().name("Ready Course").college(college).status(CourseStatus.READY).build();
         readyCourse = courseRepository.save(readyCourse);
 
-        Syllabus syllabus = Syllabus.builder().course(readyCourse).build();
+        syllabus = Syllabus.builder().course(readyCourse).build();
         syllabus = syllabusRepository.save(syllabus);
 
-        Topic topic = Topic.builder().syllabus(syllabus).chapterTitle("Chapter 1").orderIndex(1).estimatedHours(2.0).build();
-        topicRepository.save(topic);
+        topic = Topic.builder().syllabus(syllabus).chapterTitle("Chapter 1").orderIndex(1).estimatedHours(2.0).build();
+        topic = topicRepository.save(topic);
 
         noSyllabusCourse = Course.builder().name("No Syllabus Course").college(college).status(CourseStatus.NO_SYLLABUS).build();
         noSyllabusCourse = courseRepository.save(noSyllabusCourse);
@@ -254,7 +259,324 @@ public class BrowseAndJoinIntegrationTest {
     void testGetCoursePlan_Success() throws Exception {
         JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(30), 2.0, "NORMAL");
         mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join").header("Authorization", validToken).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(req))).andExpect(status().isOk());
-        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan").header("Authorization", validToken)).andExpect(status().isOk()).andExpect(jsonPath("$.data.tasks").isArray()).andExpect(jsonPath("$.data.summary").exists());
+        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan").header("Authorization", validToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tasks").isArray())
+                .andExpect(jsonPath("$.data.tasks[0].task_type").value("LEARN"))
+                .andExpect(jsonPath("$.data.tasks[0].minutes").value(120))
+                .andExpect(jsonPath("$.data.summary.planned_minutes").value(120))
+                .andExpect(jsonPath("$.data.summary.study_days").value(1));
+    }
+
+    @Test
+    void testJoinCourse_PastOrTodayExamDate_Returns400() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now(), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testJoinCourse_InvalidRestWeekday_Returns400() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL", null, java.util.List.of(7));
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void testTaskCompletionToggle_AntiDoubleXp_AndOwnershipCheck() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        Long taskId = planTaskRepository.findByStudyPlanId(sp.getId()).get(0).getId();
+
+        // First completion grants XP
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("XP_GRANTED"))
+                .andExpect(jsonPath("$.data.is_completed").value(true))
+                .andExpect(jsonPath("$.data.xp_awarded").value(true));
+
+        // Uncheck then re-check must NOT grant XP twice
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.is_completed").value(false));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Task updated"))
+                .andExpect(jsonPath("$.data.is_completed").value(true));
+
+        // Another student cannot toggle someone else's task
+        Student other = Student.builder()
+                .email("other@test.com")
+                .password("pwd")
+                .fullName("Other Student")
+                .build();
+        other = studentRepository.save(other);
+        String otherToken = "Bearer " + jwtService.generateAccessToken(other.getId(), other.getEmail());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", otherToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":false}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void testRegeneratePlan_PreservesCompletedTasks() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        Long taskId = planTaskRepository.findByStudyPlanId(sp.getId()).get(0).getId();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":true}"))
+                .andExpect(status().isOk());
+
+        // Regenerate: completed task (full 2.0h) must be preserved
+        JoinCourseRequest regenReq = new JoinCourseRequest(LocalDate.now().plusDays(20), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/plan")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(regenReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tasks[0].id").value(taskId))
+                .andExpect(jsonPath("$.data.tasks[0].is_completed").value(true));
+    }
+
+    @Test
+    void testRegeneratePlan_KeepsOrReschedulesIncompleteReviewsForCompletedStudyTopics() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        com.studygenie.backend.entity.PlanTask studyTask = planTaskRepository.findByStudyPlanId(sp.getId()).get(0);
+        studyTask.setIsCompleted(true);
+        studyTask.setCompletedAt(java.time.LocalDateTime.now());
+        planTaskRepository.save(studyTask);
+
+        com.studygenie.backend.entity.PlanTask pastReview = com.studygenie.backend.entity.PlanTask.builder()
+                .studyPlan(sp)
+                .topic(topic)
+                .scheduledDate(LocalDate.now().minusDays(2))
+                .taskType("REVIEW")
+                .minutes(15)
+                .description("Active Recall: Chapter 1")
+                .isCompleted(false)
+                .xpAwarded(false)
+                .build();
+        pastReview = planTaskRepository.save(pastReview);
+
+        JoinCourseRequest regenReq = new JoinCourseRequest(LocalDate.now().plusDays(20), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/plan")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(regenReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tasks", hasSize(2)))
+                .andExpect(jsonPath("$.data.tasks[?(@.task_type == 'REVIEW')]").exists());
+
+        com.studygenie.backend.entity.PlanTask keptReview = planTaskRepository.findById(pastReview.getId()).orElseThrow();
+        assert !keptReview.getScheduledDate().isBefore(LocalDate.now());
+    }
+
+    @Test
+    void testRegeneratePlan_SubtractsMinutesCompletedTodayFromTodayCapacity() throws Exception {
+        Topic topic2 = Topic.builder().syllabus(syllabus).chapterTitle("Chapter 2").orderIndex(2).estimatedHours(2.0).build();
+        topicRepository.save(topic2);
+
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        com.studygenie.backend.entity.PlanTask task1 = planTaskRepository.findByStudyPlanId(sp.getId()).get(0);
+        task1.setMinutes(60);
+        task1.setScheduledDate(LocalDate.now());
+        task1.setIsCompleted(true);
+        task1.setCompletedAt(java.time.LocalDateTime.now());
+        planTaskRepository.save(task1);
+
+        JoinCourseRequest regenReq = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/plan")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(regenReq)))
+                .andExpect(status().isOk());
+
+        int incompleteTodayMins = planTaskRepository.findByStudyPlanId(sp.getId()).stream()
+                .filter(pt -> !Boolean.TRUE.equals(pt.getIsCompleted()) && LocalDate.now().equals(pt.getScheduledDate()))
+                .mapToInt(pt -> pt.getMinutes() != null ? pt.getMinutes() : 0)
+                .sum();
+        assert incompleteTodayMins <= 60;
+    }
+
+    @Test
+    void testRegeneratePlan_WeekdayHoursCanBeClearedAndPreloadedInGetPlan() throws Exception {
+        String joinBody = """
+                {
+                  "examDate": "%s",
+                  "dailyHours": 2.0,
+                  "mode": "NORMAL",
+                  "weekday_hours": {"0": 3.0, "1": 4.0}
+                }
+                """.formatted(LocalDate.now().plusDays(14));
+
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(joinBody))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan")
+                .header("Authorization", validToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.weekday_hours['0']").value(3.0))
+                .andExpect(jsonPath("$.data.weekday_hours['1']").value(4.0));
+
+        String clearBody = """
+                {
+                  "examDate": "%s",
+                  "dailyHours": 2.0,
+                  "mode": "NORMAL",
+                  "weekday_hours": {}
+                }
+                """.formatted(LocalDate.now().plusDays(14));
+
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/plan")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(clearBody))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/courses/" + readyCourse.getId() + "/plan")
+                .header("Authorization", validToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.weekday_hours").doesNotExist());
+    }
+
+    @Test
+    void testSubmitFeedback_ResolvesCourseIdAndRejectsUnresolvable() throws Exception {
+        mockMvc.perform(post("/api/enrollments/enroll_unknown/feedback")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"difficulty\":\"HARD\",\"hardTopicIds\":[],\"testedTopicIds\":[]}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/enrollments/enroll_valid/feedback")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"courseId\":" + readyCourse.getId() + ",\"difficulty\":\"HARD\",\"hardTopicIds\":[],\"testedTopicIds\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.success").value(true));
+    }
+
+    @Test
+    void testXpAwarding_ServerSidePointsAndSurvivesUncheckedRegeneration() throws Exception {
+        int initialXp = studentRepository.findById(student.getId()).orElseThrow().getGeniePoints();
+
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        Long taskId = planTaskRepository.findByStudyPlanId(sp.getId()).get(0).getId();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("XP_GRANTED"));
+
+        assert studentRepository.findById(student.getId()).orElseThrow().getGeniePoints() == initialXp + 15;
+
+        // Uncheck the task, then regenerate the plan
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + taskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":false}"))
+                .andExpect(status().isOk());
+
+        JoinCourseRequest regenReq = new JoinCourseRequest(LocalDate.now().plusDays(20), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/plan")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(regenReq)))
+                .andExpect(status().isOk());
+
+        Long regeneratedTaskId = planTaskRepository.findByStudyPlanId(sp.getId()).get(0).getId();
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/v1/courses/" + readyCourse.getId() + "/plan/tasks/" + regeneratedTaskId)
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"isCompleted\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Task updated"));
+
+        assert studentRepository.findById(student.getId()).orElseThrow().getGeniePoints() == initialXp + 15;
+    }
+
+    @Test
+    void testReschedulePlan_PastOrTodayExamDate_Returns400() throws Exception {
+        JoinCourseRequest req = new JoinCourseRequest(LocalDate.now().plusDays(14), 2.0, "NORMAL");
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/join")
+                .header("Authorization", validToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        com.studygenie.backend.entity.StudyPlan sp = studyPlanRepository.findByStudentId(student.getId()).get(0);
+        sp.setExamDate(LocalDate.now());
+        studyPlanRepository.save(sp);
+
+        mockMvc.perform(post("/api/v1/courses/" + readyCourse.getId() + "/plan/reschedule")
+                .header("Authorization", validToken))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

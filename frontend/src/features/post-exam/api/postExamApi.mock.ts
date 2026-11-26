@@ -412,6 +412,8 @@ export const mockPostExamApi = {
     const store = readStore();
     const idx = store.enrollments.findIndex((e) => e.id === enrollmentId);
     store.feedbackByEnrollment[enrollmentId] = {
+      courseId: payload.courseId ?? (idx !== -1 ? store.enrollments[idx]!.courseId : undefined),
+      courseName: payload.courseName ?? (idx !== -1 ? store.enrollments[idx]!.courseName : undefined),
       difficulty: payload.difficulty,
       hardTopicIds: [...payload.hardTopicIds],
       testedTopicIds: [...payload.testedTopicIds],

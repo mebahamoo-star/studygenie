@@ -27,6 +27,8 @@ export interface PostExamEnrollment {
 }
 
 export interface ExamFeedbackPayload {
+  courseId?: number | undefined;
+  courseName?: string | undefined;
   difficulty: ExamDifficulty;
   hardTopicIds: number[];
   testedTopicIds: number[];

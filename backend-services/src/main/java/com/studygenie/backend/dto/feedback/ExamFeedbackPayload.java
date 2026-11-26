@@ -15,6 +15,14 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ExamFeedbackPayload {
+    @JsonProperty("courseId")
+    @JsonAlias({"course_id", "courseId"})
+    private Long courseId;
+
+    @JsonProperty("courseName")
+    @JsonAlias({"course_name", "courseName"})
+    private String courseName;
+
     private String difficulty; // EASY | MEDIUM | HARD
 
     @JsonProperty("hardTopicIds")

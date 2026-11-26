@@ -20,6 +20,7 @@ import type {
   GamificationProfile,
   LeaderboardEntry,
   PlanResponseData,
+  PlanTask,
   ProgressResponse,
   QuizSubmissionResponse,
   ReviewItem,
@@ -422,7 +423,10 @@ export const browseService = {
       examDate: string;
       dailyHours: number;
       mode: "normal" | "survival";
-      selectedTopicIds?: (number | string)[];
+      selectedTopicIds?: (number | string)[] | undefined;
+      restWeekdays?: number[] | undefined;
+      weekdayHours?: Record<number, number> | null | undefined;
+      clearWeekdayHours?: boolean | undefined;
     },
   ): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/join`, {
@@ -432,6 +436,9 @@ export const browseService = {
         dailyHours: params.dailyHours,
         mode: params.mode,
         selected_topic_ids: params.selectedTopicIds,
+        rest_weekdays: params.restWeekdays,
+        weekday_hours: params.clearWeekdayHours ? {} : (params.weekdayHours ?? undefined),
+        clear_weekday_hours: params.clearWeekdayHours,
       }),
     });
 
@@ -444,7 +451,10 @@ export const browseService = {
       examDate: string;
       dailyHours: number;
       mode: "normal" | "survival";
-      selectedTopicIds?: (number | string)[];
+      selectedTopicIds?: (number | string)[] | undefined;
+      restWeekdays?: number[] | undefined;
+      weekdayHours?: Record<number, number> | null | undefined;
+      clearWeekdayHours?: boolean | undefined;
     },
   ): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan`, {
@@ -454,6 +464,9 @@ export const browseService = {
         dailyHours: params.dailyHours,
         mode: params.mode,
         selected_topic_ids: params.selectedTopicIds,
+        rest_weekdays: params.restWeekdays,
+        weekday_hours: params.clearWeekdayHours ? {} : (params.weekdayHours ?? undefined),
+        clear_weekday_hours: params.clearWeekdayHours,
       }),
     });
     return res.data!;
@@ -462,6 +475,39 @@ export const browseService = {
   async getCoursePlan(courseId: number | string): Promise<PlanResponseData> {
     const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan`);
 
+    return res.data!;
+  },
+
+  async togglePlanTaskCompletion(
+    courseId: number | string,
+    taskId: number | string,
+    isCompleted: boolean,
+  ): Promise<{ task: PlanTask; xpGranted: boolean }> {
+    const res = await fetchApi<PlanTask>(`/api/v1/courses/${courseId}/plan/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ isCompleted, is_completed: isCompleted }),
+    });
+    return {
+      task: res.data!,
+      xpGranted: res.message === "XP_GRANTED",
+    };
+  },
+
+  async migratePlanCompletions(
+    courseId: number | string,
+    completedKeys: string[],
+  ): Promise<PlanResponseData> {
+    const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan/tasks/migrate`, {
+      method: "POST",
+      body: JSON.stringify({ completedKeys, completed_keys: completedKeys }),
+    });
+    return res.data!;
+  },
+
+  async rescheduleCoursePlan(courseId: number | string): Promise<PlanResponseData> {
+    const res = await fetchApi<PlanResponseData>(`/api/v1/courses/${courseId}/plan/reschedule`, {
+      method: "POST",
+    });
     return res.data!;
   },
 };

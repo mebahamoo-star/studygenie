@@ -96,6 +96,8 @@ describe("Post-Exam Phase 2: CelebrationModal & FeedbackStepper", () => {
 
     await waitFor(() => {
       expect(submitSpy).toHaveBeenCalledWith("enroll_cs305", {
+        courseId: 305,
+        courseName: "Database Management Systems",
         difficulty: "HARD",
         hardTopicIds: [4],
         testedTopicIds: [4],

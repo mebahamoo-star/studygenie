@@ -958,7 +958,7 @@ function EmptyUpload({
 
     const files = Array.from(fileList).filter((f) =>
 
-      f.name.match(/\.(pdf|pptx|ppt|txt|md)$/i) ||
+      f.name.match(/\.(pdf|pptx|ppt|ppsx|pps|potx|pptm|txt|md)$/i) ||
 
       f.type === "application/pdf" ||
 
@@ -1373,7 +1373,7 @@ function EmptyUpload({
 
           <span className="font-semibold text-primary">Click to upload</span> or drag and drop
 
-          <span className="block text-xs text-muted-foreground">PDF (.pdf) or PowerPoint (.ppt, .pptx) files up to 25MB</span>
+          <span className="block text-xs text-muted-foreground">PDF (.pdf) or PowerPoint (.ppt, .pptx) files up to 50MB</span>
 
         </label>
 
@@ -1647,6 +1647,16 @@ function groupTopicsIntoChapters(topics: Topic[], courseName?: string): ChapterF
   ];
 }
 
+const DEFAULT_WEEKDAY_HOURS: Record<number, number> = {
+  0: 2.5,
+  1: 2.5,
+  2: 2.5,
+  3: 2.5,
+  4: 0,
+  5: 2.5,
+  6: 2.5,
+};
+
 function JoinChallenge({
 
   course,
@@ -1691,6 +1701,102 @@ function JoinChallenge({
 
   const [mode, setMode] = useState<"normal" | "survival">("normal");
   const [dailyHours, setDailyHours] = useState<number>(2.5);
+  const [restWeekdays, setRestWeekdays] = useState<number[]>(() => {
+    try {
+      const prefix = getUserStoragePrefix();
+      const saved = localStorage.getItem(`sg-${prefix}-rest-days-${course.id || course.name}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((d) => typeof d === "number" && d >= 0 && d <= 6);
+        }
+      }
+    } catch {}
+    return [4]; // Default: Friday (Python weekday 4)
+  });
+  const [customWeekdayHoursEnabled, setCustomWeekdayHoursEnabled] = useState(false);
+  const [weekdayHoursMap, setWeekdayHoursMap] = useState<Record<number, number>>({ ...DEFAULT_WEEKDAY_HOURS });
+
+  useEffect(() => {
+    let active = true;
+    const prefix = getUserStoragePrefix();
+
+    const applySavedPlanSettings = (savedPlan: any, fromServer: boolean) => {
+      if (!active || !savedPlan) return;
+      const savedExamDate = savedPlan.exam_date ?? savedPlan.examDate;
+      if (savedExamDate && typeof savedExamDate === "string") {
+        const parsed = new Date(savedExamDate + "T00:00:00");
+        if (!isNaN(parsed.getTime())) {
+          setDate(parsed);
+        }
+      }
+      const savedDailyHours = savedPlan.daily_hours ?? savedPlan.dailyHours;
+      if (typeof savedDailyHours === "number" && savedDailyHours > 0) {
+        setDailyHours(savedDailyHours);
+      }
+      const savedMode = savedPlan.summary?.mode;
+      if (savedMode && typeof savedMode === "string") {
+        setMode(savedMode.toLowerCase() === "survival" ? "survival" : "normal");
+      }
+      const savedRest = savedPlan.rest_weekdays ?? savedPlan.restWeekdays;
+      if (Array.isArray(savedRest)) {
+        setRestWeekdays(savedRest.filter((d: any) => typeof d === "number" && d >= 0 && d <= 6));
+      }
+      const savedWh = savedPlan.weekday_hours ?? savedPlan.weekdayHours;
+      if (savedWh && typeof savedWh === "object" && Object.keys(savedWh).length > 0) {
+        const normalized: Record<number, number> = { ...DEFAULT_WEEKDAY_HOURS };
+        Object.entries(savedWh).forEach(([k, v]) => {
+          const dayNum = Number(k);
+          const hrsVal = Number(v);
+          if (!isNaN(dayNum) && dayNum >= 0 && dayNum <= 6 && !isNaN(hrsVal)) {
+            normalized[dayNum] = hrsVal;
+          }
+        });
+        setWeekdayHoursMap(normalized);
+        setCustomWeekdayHoursEnabled(true);
+      } else if (fromServer) {
+        setCustomWeekdayHoursEnabled(false);
+        setWeekdayHoursMap({ ...DEFAULT_WEEKDAY_HOURS });
+        try {
+          localStorage.removeItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`);
+        } catch {}
+      }
+    };
+
+    try {
+      const rawPlan =
+        localStorage.getItem(`sg-${prefix}-plan-${course.id}`) ||
+        localStorage.getItem(`sg-${prefix}-plan-${course.name}`);
+      if (rawPlan) {
+        applySavedPlanSettings(JSON.parse(rawPlan), false);
+      }
+      const rawWh = localStorage.getItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`);
+      if (rawWh) {
+        const parsedWh = JSON.parse(rawWh);
+        if (parsedWh && typeof parsedWh === "object" && Object.keys(parsedWh).length > 0) {
+          setWeekdayHoursMap((prev) => ({ ...prev, ...parsedWh }));
+          setCustomWeekdayHoursEnabled(true);
+        }
+      }
+    } catch {}
+
+    const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
+    if (isRealId) {
+      browseService
+        .getCoursePlan(course.id)
+        .then((remote) => {
+          if (active && remote) {
+            applySavedPlanSettings(remote, true);
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [course.id, course.name]);
+  const [planDateError, setPlanDateError] = useState<string | null>(null);
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [isExamExpanded, setIsExamExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1897,7 +2003,7 @@ function JoinChallenge({
     try {
       let courseFeedback = { dominantDifficulty: "MEDIUM", heavilyTestedTopicIds: [] as number[], hardTopicIds: [] as number[] };
       try {
-        courseFeedback = await postExamApi.getCourseFeedbackSummary(course.name || course.id);
+        courseFeedback = await postExamApi.getCourseFeedbackSummary(course.id || course.name);
       } catch {}
 
       const testedSet = new Set((courseFeedback?.heavilyTestedTopicIds || []).map(Number));
@@ -2242,7 +2348,7 @@ function JoinChallenge({
     if (!fileList || fileList.length === 0) return;
 
     const files = Array.from(fileList).filter((f) =>
-      f.name.match(/\.(pdf|pptx|ppt)$/i) ||
+      f.name.match(/\.(pdf|pptx|ppt|ppsx|pps|potx|pptm|txt|md)$/i) ||
       f.type === "application/pdf" ||
       f.type.includes("presentation") ||
       f.type.includes("powerpoint")
@@ -2526,31 +2632,39 @@ function JoinChallenge({
 
     }
 
-    setPlanModalOpen(false);
-
-    setLoading(true);
+    if (!date) {
+      const msg = "Please pick a future exam date (after today).";
+      setPlanDateError(msg);
+      toast.error(msg);
+      return;
+    }
 
     const now = new Date();
-
     now.setHours(0, 0, 0, 0);
 
-
-
-    let targetDate = date ? new Date(date) : new Date();
-
+    const targetDate = new Date(date);
     targetDate.setHours(0, 0, 0, 0);
 
-
-
-    // If target date is today or in past, automatically bump to 14 days ahead
-
     if (targetDate.getTime() <= now.getTime()) {
-
-      targetDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-
-      setDate(targetDate);
-
+      const msg = "Exam date must be in the future (after today).";
+      setPlanDateError(msg);
+      toast.error(msg);
+      return;
     }
+
+    setPlanDateError(null);
+    setPlanModalOpen(false);
+    setLoading(true);
+
+    try {
+      const prefix = getUserStoragePrefix();
+      localStorage.setItem(`sg-${prefix}-rest-days-${course.id || course.name}`, JSON.stringify(restWeekdays));
+      if (customWeekdayHoursEnabled) {
+        localStorage.setItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`, JSON.stringify(weekdayHoursMap));
+      } else {
+        localStorage.removeItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`);
+      }
+    } catch {}
 
 
 
@@ -2603,58 +2717,46 @@ function JoinChallenge({
       const isRealId = course.id && !String(course.id).startsWith("course-") && !String(course.id).startsWith("c-");
 
       if (isRealId) {
-
+        const selectedIds = effectiveTopics.map((t) => t.id).filter((id): id is number => typeof id === "number");
+        const whPayload = customWeekdayHoursEnabled ? weekdayHoursMap : {};
+        const clearWh = !customWeekdayHoursEnabled;
         try {
-
-          const selectedIds = effectiveTopics.map((t) => t.id).filter((id): id is number => typeof id === "number");
           planData = await browseService.generateOrUpdatePlan(course.id, {
             examDate: dateStr,
             dailyHours: effDailyHours,
             mode,
             selectedTopicIds: selectedIds.length > 0 ? selectedIds : undefined,
+            restWeekdays,
+            weekdayHours: whPayload,
+            clearWeekdayHours: clearWh,
           });
-
         } catch (planErr) {
-
           console.warn("Could not regenerate via /plan endpoint, trying fallback joinCourse:", planErr);
-
           try {
-
             planData = await browseService.joinCourse(course.id, {
-
               examDate: dateStr,
-
               dailyHours: effDailyHours,
-
               mode,
-
+              selectedTopicIds: selectedIds.length > 0 ? selectedIds : undefined,
+              restWeekdays,
+              weekdayHours: whPayload,
+              clearWeekdayHours: clearWh,
             });
-
           } catch (joinErr) {
-
             console.warn("Could not join via course ID, attempting direct plan generation", joinErr);
-
           }
-
         }
-
       }
 
-
-
       if (!planData) {
-
         const activeTopics: Topic[] = effectiveTopics;
-
         if (!activeTopics || activeTopics.length === 0) {
-
           throw new Error("No syllabus topics available to generate a study plan. Please upload course material first.");
-
         }
 
         let courseFeedback = { dominantDifficulty: "MEDIUM", heavilyTestedTopicIds: [] as number[], hardTopicIds: [] as number[] };
         try {
-          courseFeedback = await postExamApi.getCourseFeedbackSummary(course?.name || course?.id);
+          courseFeedback = await postExamApi.getCourseFeedbackSummary(course?.id || course?.name);
         } catch {}
 
         const testedSet = new Set((courseFeedback?.heavilyTestedTopicIds || []).map(Number));
@@ -2687,15 +2789,19 @@ function JoinChallenge({
         const res = await fetchApi<any>("/api/v1/study-plans/generate", {
           method: "POST",
           body: JSON.stringify({
+            courseId: typeof course.id === "number" ? course.id : undefined,
+            course_id: typeof course.id === "number" ? course.id : undefined,
             startDate: startDateStr,
             start_date: startDateStr,
             examDate: dateStr,
             exam_date: dateStr,
             topics: topicsPayload,
-            dailyHours: mode === "survival" ? 4.0 : 2.5,
-            daily_hours: mode === "survival" ? 4.0 : 2.5,
-            restDays: [6],
-            rest_weekdays: [6],
+            dailyHours: effDailyHours,
+            daily_hours: effDailyHours,
+            restDays: restWeekdays,
+            rest_weekdays: restWeekdays,
+            weekday_hours: customWeekdayHoursEnabled ? weekdayHoursMap : undefined,
+            weekdayHours: customWeekdayHoursEnabled ? weekdayHoursMap : undefined,
             mode: mode.toUpperCase(),
             bufferDays: bufferDays,
             buffer_days_before_exam: bufferDays,
@@ -3718,11 +3824,17 @@ function JoinChallenge({
 
                         if (newDate.getTime() <= today.getTime()) {
 
-                          toast.info("Please pick a future date for your exam.");
+                          const msg = "Exam date must be in the future (after today).";
+
+                          setPlanDateError(msg);
+
+                          toast.error(msg);
 
                           return;
 
                         }
+
+                        setPlanDateError(null);
 
                         handleUpdateTargetExamDate(newDate);
 
@@ -3748,6 +3860,113 @@ function JoinChallenge({
 
               </Popover>
 
+              {planDateError && (
+                <p className="text-xs font-medium text-destructive">{planDateError}</p>
+              )}
+
+            </div>
+
+            {/* Rest Days Selection (Python 0=Monday .. 6=Sunday, default Friday=4) */}
+            <div className="rounded-xl border border-border/70 bg-muted/40 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                  Rest Days (No Study Scheduled)
+                </Label>
+                <span className="text-[11px] text-muted-foreground">
+                  {restWeekdays.length === 0 ? "None" : `${restWeekdays.length} day(s)`}
+                </span>
+              </div>
+              <div className="grid grid-cols-7 gap-1.5">
+                {[
+                  { label: "Mon", val: 0 },
+                  { label: "Tue", val: 1 },
+                  { label: "Wed", val: 2 },
+                  { label: "Thu", val: 3 },
+                  { label: "Fri", val: 4 },
+                  { label: "Sat", val: 5 },
+                  { label: "Sun", val: 6 },
+                ].map((day) => {
+                  const selected = restWeekdays.includes(day.val);
+                  return (
+                    <button
+                      key={day.val}
+                      type="button"
+                      onClick={() =>
+                        setRestWeekdays((prev) =>
+                          prev.includes(day.val)
+                            ? prev.filter((d) => d !== day.val)
+                            : [...prev, day.val].sort((a, b) => a - b)
+                        )
+                      }
+                      className={cn(
+                        "rounded-lg py-1.5 text-xs font-bold transition border",
+                        selected
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-background border-border/60 hover:bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="pt-2 border-t border-border/40">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomWeekdayHoursEnabled((v) => !v)}
+                    className="text-xs font-semibold text-primary hover:underline"
+                  >
+                    {customWeekdayHoursEnabled ? "Hide per-weekday hours" : "Customize hours per weekday (optional)"}
+                  </button>
+                  {customWeekdayHoursEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomWeekdayHoursEnabled(false);
+                        setWeekdayHoursMap({ ...DEFAULT_WEEKDAY_HOURS });
+                        try {
+                          const prefix = getUserStoragePrefix();
+                          localStorage.removeItem(`sg-${prefix}-weekday-hours-${course.id || course.name}`);
+                        } catch {}
+                      }}
+                      className="text-xs font-semibold text-destructive hover:underline"
+                    >
+                      Clear custom weekday hours
+                    </button>
+                  )}
+                </div>
+                {customWeekdayHoursEnabled && (
+                  <div className="mt-2 grid grid-cols-7 gap-1.5">
+                    {[
+                      { label: "Mon", val: 0 },
+                      { label: "Tue", val: 1 },
+                      { label: "Wed", val: 2 },
+                      { label: "Thu", val: 3 },
+                      { label: "Fri", val: 4 },
+                      { label: "Sat", val: 5 },
+                      { label: "Sun", val: 6 },
+                    ].map((day) => (
+                      <div key={day.val} className="flex flex-col items-center gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground">{day.label}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={12}
+                          step={0.5}
+                          disabled={restWeekdays.includes(day.val)}
+                          value={restWeekdays.includes(day.val) ? 0 : (weekdayHoursMap[day.val] ?? dailyHours)}
+                          onChange={(e) => {
+                            const val = Math.min(12, Math.max(0, parseFloat(e.target.value) || 0));
+                            setWeekdayHoursMap((prev) => ({ ...prev, [day.val]: val }));
+                          }}
+                          className="w-full rounded-md border border-border/70 bg-background px-1 py-1 text-center text-xs font-mono disabled:opacity-50"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
 

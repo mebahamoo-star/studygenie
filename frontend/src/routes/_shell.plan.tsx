@@ -31,6 +31,7 @@ export const Route = createFileRoute("/_shell/plan")({
 });
 
 interface DayTask {
+  id?: number;
   ref: string;
   title: string;
   tag: string;
@@ -38,6 +39,9 @@ interface DayTask {
   desc?: string;
   subtopics?: string[];
   contentExcerpt?: string;
+  isCompleted?: boolean;
+  completedAt?: string | null;
+  xpAwarded?: boolean;
 }
 
 interface DayPlan {
@@ -46,14 +50,18 @@ interface DayPlan {
 }
 
 function Plan() {
-  const { addPoints } = useApp();
+  const { addPoints, refreshGamification } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRescheduling, setIsRescheduling] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const [doneMap, setDoneMap] = useState<Record<string, string[]>>({});
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [survival, setSurvival] = useState(false);
   const [planDays, setPlanDays] = useState<DayPlan[]>([]);
   const [fullPlanDays, setFullPlanDays] = useState<DayPlan[]>([]);
+  const [skippedTopics, setSkippedTopics] = useState<{ ref: string; title: string; reason: string }[]>([]);
+  const [planWarnings, setPlanWarnings] = useState<string[]>([]);
   const [courseInfo, setCourseInfo] = useState<{ name: string; code?: string }>({
     name: "Study Plan",
     code: "",
@@ -127,19 +135,43 @@ function Plan() {
   }, [planDays]);
 
   const isTaskDone = (dateStr: string, t: DayTask) => {
-    const prefix = getUserStoragePrefix();
+    if (typeof t.isCompleted === "boolean" && t.id) {
+      return t.isCompleted;
+    }
     const taskId = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
     const list = doneMap[dateStr] || [];
     return list.includes(taskId) || list.includes(t.ref) || list.includes(t.title);
   };
 
-  const togglePlanTaskDone = (dateStr: string, t: DayTask) => {
+  const togglePlanTaskDone = async (dateStr: string, t: DayTask) => {
     const prefix = getUserStoragePrefix();
-    const taskId = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
-    const currentList = doneMap[dateStr] || [];
-    const isDone = currentList.includes(taskId) || currentList.includes(t.ref) || currentList.includes(t.title);
-    const nextList = isDone ? currentList.filter((id) => id !== taskId && id !== t.ref && id !== t.title) : [...currentList, taskId];
+    const taskKey = `${selectedCourse?.name || "course"}-${dateStr}-${t.ref || t.title}`;
+    const isCurrentlyDone = isTaskDone(dateStr, t);
+    const nextCompleted = !isCurrentlyDone;
 
+    // Optimistic update on server-backed planDays / fullPlanDays
+    const patchDays = (days: DayPlan[]) =>
+      days.map((d) =>
+        d.date !== dateStr
+          ? d
+          : {
+              ...d,
+              tasks: d.tasks.map((item) =>
+                (t.id && item.id === t.id) || (!t.id && item.ref === t.ref && item.tag === t.tag && item.title === t.title)
+                  ? { ...item, isCompleted: nextCompleted, xpAwarded: item.xpAwarded || nextCompleted }
+                  : item
+              ),
+            }
+      );
+    setPlanDays((prev) => patchDays(prev));
+    setFullPlanDays((prev) => patchDays(prev));
+
+    // Keep localStorage cache synchronized for offline/guest fallback
+    const currentList = doneMap[dateStr] || [];
+    const taskIdStr = t.id ? String(t.id) : null;
+    const nextList = nextCompleted
+      ? Array.from(new Set([...currentList, taskKey, ...(taskIdStr ? [taskIdStr] : [])]))
+      : currentList.filter((id) => id !== taskKey && id !== taskIdStr && id !== t.ref && id !== t.title);
     setDoneMap((prev) => ({ ...prev, [dateStr]: nextList }));
     try {
       localStorage.setItem(`sg-${prefix}-checklist-done-${dateStr}`, JSON.stringify(nextList));
@@ -147,12 +179,96 @@ function Plan() {
       if (dateStr === todayStr) {
         localStorage.setItem(`sg-${prefix}-checklist-done`, JSON.stringify(nextList));
       }
+      if (selectedCourse) {
+        const planKey = `sg-${prefix}-plan-${selectedCourse.id}`;
+        const rawPlan = localStorage.getItem(planKey);
+        if (rawPlan) {
+          try {
+            const parsedPlan = JSON.parse(rawPlan);
+            if (Array.isArray(parsedPlan?.tasks)) {
+              parsedPlan.tasks = parsedPlan.tasks.map((item: any) =>
+                (t.id && item.id === t.id) ||
+                (!t.id && item.date === dateStr && (item.topic_ref === t.ref || item.topicRef === t.ref) && (item.task_type || item.taskType || "STUDY").toUpperCase() === t.tag)
+                  ? { ...item, is_completed: nextCompleted, isCompleted: nextCompleted }
+                  : item
+              );
+              localStorage.setItem(planKey, JSON.stringify(parsedPlan));
+              localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.name}`, JSON.stringify(parsedPlan));
+            }
+          } catch {}
+        }
+      }
       window.dispatchEvent(new CustomEvent("sg-checklist-updated", { detail: { date: dateStr, list: nextList } }));
     } catch {}
 
-    if (!isDone) {
-      addPoints(15);
-      toast.success("+15 XP! Topic marked as completed 🎉");
+    const isRealCourse =
+      selectedCourse?.id &&
+      !String(selectedCourse.id).startsWith("course-") &&
+      !String(selectedCourse.id).startsWith("c-");
+
+    if (t.id && isRealCourse && selectedCourse) {
+      try {
+        const res = await browseService.togglePlanTaskCompletion(selectedCourse.id, t.id, nextCompleted);
+        if (res.xpGranted) {
+          await refreshGamification();
+          toast.success("+15 XP! Topic marked as completed 🎉");
+        }
+        return;
+      } catch (err: any) {
+        // Revert optimistic update on failure
+        setPlanDays((prev) => patchDays(prev).map((d) => (d.date !== dateStr ? d : { ...d, tasks: d.tasks.map((item) => (item.id === t.id ? { ...item, isCompleted: isCurrentlyDone } : item)) })));
+        toast.error(err?.message || "Could not update task completion on server.");
+        return;
+      }
+    }
+
+    // Offline/guest anti-double-XP tracking
+    if (nextCompleted) {
+      const xpKey = `sg-${prefix}-xp-awarded`;
+      let awardedIds: string[] = [];
+      try {
+        awardedIds = JSON.parse(localStorage.getItem(xpKey) || "[]");
+      } catch {}
+      if (!t.xpAwarded && !awardedIds.includes(taskKey)) {
+        try {
+          localStorage.setItem(xpKey, JSON.stringify([...awardedIds, taskKey]));
+        } catch {}
+        addPoints(15);
+        toast.success("+15 XP! Topic marked as completed 🎉");
+      }
+    }
+  };
+
+  const handleRescheduleBehind = async () => {
+    if (!selectedCourse) return;
+    const isRealCourse =
+      selectedCourse.id &&
+      !String(selectedCourse.id).startsWith("course-") &&
+      !String(selectedCourse.id).startsWith("c-");
+    if (!isRealCourse) {
+      toast.info("Open Course Configuration to regenerate your local schedule.");
+      return;
+    }
+    setIsRescheduling(true);
+    setRescheduleError(null);
+    try {
+      const updated = await browseService.rescheduleCoursePlan(selectedCourse.id);
+      const prefix = getUserStoragePrefix();
+      try {
+        localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.id}`, JSON.stringify(updated));
+        localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.name}`, JSON.stringify(updated));
+      } catch {}
+      if (updated?.tasks) {
+        formatAndSetTasks(updated.tasks, selectedCourse);
+      }
+      extractAndSetPlanMeta(updated, selectedCourse);
+      toast.success("Remaining uncompleted work rescheduled from today!");
+    } catch (err: any) {
+      const msg = err?.message || "Could not reschedule remaining plan. Ensure your exam date is in the future.";
+      setRescheduleError(msg);
+      toast.error(msg);
+    } finally {
+      setIsRescheduling(false);
     }
   };
 
@@ -167,6 +283,7 @@ function Plan() {
           localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.id}`, JSON.stringify(remote));
           localStorage.setItem(`sg-${prefix}-plan-${selectedCourse.name}`, JSON.stringify(remote));
           formatAndSetTasks(remote.tasks, selectedCourse);
+          extractAndSetPlanMeta(remote, selectedCourse);
           toast.success("Plan refreshed successfully from server!");
           return;
         }
@@ -209,15 +326,41 @@ function Plan() {
     setCourseInfo({ name: currentCourse.name, code: currentCourse.code });
     setPlanDays([]);
     setFullPlanDays([]);
+    setSkippedTopics([]);
+    setPlanWarnings([]);
+    setRescheduleError(null);
     setSurvival(false);
 
     let planData: any = null;
     if (currentCourse.id && !String(currentCourse.id).startsWith("course-") && !String(currentCourse.id).startsWith("c-")) {
       try {
-        const res = await browseService.getCoursePlan(currentCourse.id);
+        let res = await browseService.getCoursePlan(currentCourse.id);
+        const prefix = getUserStoragePrefix();
+        const migratedFlagKey = `sg-${prefix}-migrated-plan-${currentCourse.id}`;
+        if (res?.tasks && res.tasks.length > 0 && !localStorage.getItem(migratedFlagKey)) {
+          const legacyKeys: string[] = [];
+          res.tasks.forEach((task: any) => {
+            if (!task.is_completed && !task.isCompleted && task.date) {
+              const rawDone = localStorage.getItem(`sg-${prefix}-checklist-done-${task.date}`);
+              if (rawDone) {
+                try {
+                  const arr = JSON.parse(rawDone);
+                  if (Array.isArray(arr)) legacyKeys.push(...arr);
+                } catch {}
+              }
+            }
+          });
+          if (legacyKeys.length > 0) {
+            try {
+              res = await browseService.migratePlanCompletions(currentCourse.id, Array.from(new Set(legacyKeys)));
+            } catch {}
+          }
+          try {
+            localStorage.setItem(migratedFlagKey, "1");
+          } catch {}
+        }
         if (res?.tasks && res.tasks.length > 0) {
           planData = res;
-          const prefix = getUserStoragePrefix();
           try {
             localStorage.setItem(`sg-${prefix}-plan-${currentCourse.id}`, JSON.stringify(res));
             localStorage.setItem(`sg-plan-${currentCourse.id}`, JSON.stringify(res));
@@ -245,6 +388,36 @@ function Plan() {
     if (planData?.tasks && planData.tasks.length > 0) {
       formatAndSetTasks(planData.tasks, currentCourse);
     }
+    if (planData) {
+      extractAndSetPlanMeta(planData, currentCourse);
+    }
+  };
+
+  const extractAndSetPlanMeta = (planData: any, courseParam?: Course) => {
+    const curCourse = courseParam || selectedCourse;
+    const topicTitleByRef: Record<string, string> = {};
+    if (curCourse?.topics && Array.isArray(curCourse.topics)) {
+      curCourse.topics.forEach((t: any, idx: number) => {
+        const key = String(t.id || idx + 1);
+        topicTitleByRef[key] = t.name || t.chapter_title || t.chapterTitle || `Topic ${key}`;
+      });
+    }
+
+    const rawSkipped = planData?.skipped_topics || planData?.skippedTopics || [];
+    const mappedSkipped = Array.isArray(rawSkipped)
+      ? rawSkipped.map((s: any) => {
+          const ref = String(s.ref ?? s.topicRef ?? "");
+          return {
+            ref,
+            title: topicTitleByRef[ref] || `Topic ${ref}`,
+            reason: String(s.reason || "NO_CAPACITY"),
+          };
+        })
+      : [];
+    setSkippedTopics(mappedSkipped);
+
+    const rawWarnings = planData?.summary?.warnings || [];
+    setPlanWarnings(Array.isArray(rawWarnings) ? rawWarnings.filter(Boolean) : []);
   };
 
   const formatAndSetTasks = (tasks: any[], courseParam?: Course) => {
@@ -307,6 +480,7 @@ function Plan() {
       }
 
       grouped[d].push({
+        id: typeof item.id === "number" ? item.id : undefined,
         ref,
         title,
         tag,
@@ -314,6 +488,9 @@ function Plan() {
         desc,
         subtopics,
         contentExcerpt,
+        isCompleted: Boolean(item.is_completed ?? item.isCompleted),
+        completedAt: item.completed_at ?? item.completedAt ?? null,
+        xpAwarded: Boolean(item.xp_awarded ?? item.xpAwarded),
       });
     });
 
@@ -511,6 +688,92 @@ function Plan() {
           </Button>
         </div>
       )}
+
+      {(skippedTopics.length > 0 || planWarnings.length > 0) && (
+        <div className="mb-6 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm shadow-sm space-y-2.5">
+          {planWarnings.length > 0 && (
+            <div className="flex items-start gap-2.5 text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                {planWarnings.map((w, idx) => (
+                  <p key={idx} className="text-xs font-medium leading-relaxed">
+                    {w}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {skippedTopics.length > 0 && (
+            <div className="border-t border-amber-500/25 pt-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                  Skipped Topics ({skippedTopics.length}) — Insufficient Time Before Exam
+                </span>
+                <Link to="/courses" className="text-xs font-semibold text-primary hover:underline">
+                  Adjust Daily Hours / Exam Date →
+                </Link>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {skippedTopics.map((st) => (
+                  <span
+                    key={st.ref}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground"
+                  >
+                    <span>{st.title}</span>
+                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                      {st.reason === "NOT_ESSENTIAL" ? "Low Priority" : "No Capacity"}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(() => {
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const overdueTasks = planDays
+          .filter((d) => d.date < todayIso)
+          .flatMap((d) => d.tasks.filter((t) => !isTaskDone(d.date, t)));
+        if (overdueTasks.length === 0) return null;
+        return (
+          <div className="mb-6 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-4 shadow-sm">
+              <div className="flex items-start gap-2.5">
+                <Clock className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-sm font-bold text-foreground">
+                    Falling Behind? You have {overdueTasks.length} overdue study task(s).
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Completed progress will be preserved while remaining study hours are redistributed from today forward.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="magic"
+                size="sm"
+                onClick={handleRescheduleBehind}
+                disabled={isRescheduling}
+                className="gap-1.5 font-semibold"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isRescheduling && "animate-spin")} />
+                {isRescheduling ? "Rescheduling..." : "Reschedule Remaining Work"}
+              </Button>
+            </div>
+            {rescheduleError && (
+              <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-xs font-medium text-destructive">
+                <span>{rescheduleError}</span>
+                <Link to="/courses" className="font-bold underline hover:opacity-80">
+                  Update Exam Date →
+                </Link>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {!isCourseMaterialUploaded(selectedCourse) ? (
         <Card className="flex flex-col items-center justify-center py-16 px-6 text-center border-amber-500/40 bg-gradient-to-b from-amber-500/5 to-transparent shadow-soft">

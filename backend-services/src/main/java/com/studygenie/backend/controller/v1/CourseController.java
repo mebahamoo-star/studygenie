@@ -330,8 +330,48 @@ public class CourseController {
         Double dailyHours = body.dailyHours();
         String mode = body.mode();
         Long userId = requireUserId(userDetails);
-        PlanResponseData data = courseService.regeneratePlan(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds());
+        PlanResponseData data = courseService.regeneratePlan(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds(), body.restWeekdays(), body.weekdayHours(), body.clearWeekdayHours());
         return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
+    }
+
+    @Operation(summary = "Toggle completion status for a study plan task")
+    @SecurityRequirement(name = "bearerAuth")
+    @PatchMapping("/courses/{courseId}/plan/tasks/{taskId}")
+    public ResponseEntity<ApiResponse<com.studygenie.backend.dto.ai.Task>> togglePlanTaskCompletion(
+            @PathVariable Long courseId,
+            @PathVariable Long taskId,
+            @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails,
+            @RequestBody java.util.Map<String, Boolean> body) {
+        Long userId = requireUserId(userDetails);
+        boolean completed = body != null && Boolean.TRUE.equals(body.getOrDefault("isCompleted", body.get("is_completed")));
+        boolean wasAlreadyAwarded = false;
+        com.studygenie.backend.dto.ai.Task task = courseService.toggleTaskCompletion(courseId, taskId, userId, completed);
+        String msg = Boolean.TRUE.equals(task.xpAwarded()) ? "XP_GRANTED" : "Task updated";
+        return ResponseEntity.ok(ApiResponse.ok(msg, task));
+    }
+
+    @Operation(summary = "Migrate legacy localStorage task completions to server")
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/courses/{courseId}/plan/tasks/migrate")
+    public ResponseEntity<ApiResponse<PlanResponseData>> migratePlanCompletions(
+            @PathVariable Long courseId,
+            @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails,
+            @RequestBody java.util.Map<String, List<String>> body) {
+        Long userId = requireUserId(userDetails);
+        List<String> keys = body != null ? body.getOrDefault("completedKeys", body.get("completed_keys")) : List.of();
+        PlanResponseData data = courseService.migrateCompletedTasks(courseId, userId, keys);
+        return ResponseEntity.ok(ApiResponse.ok("Task completions migrated", data));
+    }
+
+    @Operation(summary = "Reschedule remaining incomplete tasks from today forward")
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/courses/{courseId}/plan/reschedule")
+    public ResponseEntity<ApiResponse<PlanResponseData>> reschedulePlan(
+            @PathVariable Long courseId,
+            @AuthenticationPrincipal com.studygenie.backend.security.AuthenticatedUser userDetails) {
+        Long userId = requireUserId(userDetails);
+        PlanResponseData data = courseService.rescheduleRemainingPlan(courseId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Remaining study plan rescheduled", data));
     }
 
     @Operation(summary = "Join a course and generate a study plan")
@@ -362,7 +402,7 @@ public class CourseController {
 
         
 
-        PlanResponseData data = courseService.joinChallenge(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds());
+        PlanResponseData data = courseService.joinChallenge(courseId, userId, examDate, dailyHours, mode, body.selectedTopicIds(), body.restWeekdays(), body.weekdayHours());
 
         return ResponseEntity.ok(ApiResponse.ok("Study plan generated successfully", data));
 
