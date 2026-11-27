@@ -94,41 +94,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!getStoredAccessToken()) return;
     try {
       const prefix = getUserStoragePrefix();
-      const rawPoints =
-        localStorage.getItem(`sg-${prefix}-points`) || localStorage.getItem("sg-points");
-      const localPoints = rawPoints !== null ? Number(rawPoints) : 0;
-      const safeLocalPoints = isNaN(localPoints) ? 0 : localPoints;
-
-      const rawStreak =
-        localStorage.getItem(`sg-${prefix}-streak`) || localStorage.getItem("sg-streak");
-      const localStreak = rawStreak !== null ? Number(rawStreak) : 0;
-      const safeLocalStreak = isNaN(localStreak) ? 0 : localStreak;
-
-      let profile = await gamificationService.getProfile();
+      const profile = await gamificationService.getProfile();
       if (profile) {
-        // If local storage has higher points or streak (from offline or client activities), sync to backend
-        if (
-          safeLocalPoints > (profile.currentXp || 0) ||
-          safeLocalStreak > (profile.currentStreakDays || 0)
-        ) {
-          try {
-            const synced = await gamificationService.syncProgress({
-              points: Math.max(profile.currentXp || 0, safeLocalPoints),
-              streak: Math.max(profile.currentStreakDays || 0, safeLocalStreak),
-            });
-            if (synced) profile = synced;
-          } catch {}
-        }
-
-        const best = Math.max(profile.currentXp || 0, safeLocalPoints);
-
+        // Server XP & streak are the authoritative source of truth
+        const serverXp = Math.max(0, profile.currentXp || 0);
         try {
-          localStorage.setItem(`sg-${prefix}-points`, String(best));
-          localStorage.setItem("sg-points", String(best));
+          localStorage.setItem(`sg-${prefix}-points`, String(serverXp));
+          localStorage.setItem("sg-points", String(serverXp));
         } catch {}
-        setPoints(best);
+        setPoints(serverXp);
 
-        const currentStreak = Math.max(profile.currentStreakDays || 0, safeLocalStreak, 1);
+        const currentStreak = Math.max(profile.currentStreakDays || 0, 1);
         setStreak(currentStreak);
         try {
           localStorage.setItem(`sg-${prefix}-streak`, String(currentStreak));

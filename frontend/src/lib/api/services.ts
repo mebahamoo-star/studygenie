@@ -588,8 +588,12 @@ export const studyService = {
 
   async submitQuiz(
     kitId: string | number,
-
-    answers: { questionId: string; selectedOptionIndex?: number | null; answerText?: string | null }[],
+    answers: {
+      questionId: string;
+      selectedOptionIndex?: number | null;
+      answerText?: string | null;
+      selfAssessedCorrect?: boolean | null;
+    }[],
   ): Promise<QuizSubmissionResponse> {
     const submissionId = crypto.randomUUID();
 
@@ -603,6 +607,30 @@ export const studyService = {
       },
     );
 
+    return res.data!;
+  },
+
+  async getQuizQuestions(kitId: string | number): Promise<ClientQuizQuestion[]> {
+    const res = await fetchApi<ClientQuizQuestion[]>(`/api/v1/study-kits/${kitId}/quiz`);
+    return res.data || [];
+  },
+
+  async checkQuizAnswer(
+    kitId: string | number,
+    answer: {
+      questionId: string;
+      selectedOptionIndex?: number | null;
+      answerText?: string | null;
+      selfAssessedCorrect?: boolean | null;
+    },
+  ): Promise<QuizSubmissionResponse["results"][number]> {
+    const res = await fetchApi<QuizSubmissionResponse["results"][number]>(
+      `/api/v1/study-kits/${kitId}/quiz-check`,
+      {
+        method: "POST",
+        body: JSON.stringify(answer),
+      },
+    );
     return res.data!;
   },
 

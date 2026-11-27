@@ -71,7 +71,7 @@ interface FlashcardItem {
 }
 
 function Flashcards() {
-  const { addPoints } = useApp();
+  const { refreshGamification } = useApp();
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [cards, setCards] = useState<FlashcardItem[]>([]);
@@ -233,21 +233,26 @@ function Flashcards() {
 
   const handleRate = async (r: Sm2Rating) => {
     setFlip(false);
-    addPoints(20);
 
     const ratingKey = r.toLowerCase() as "again" | "hard" | "good" | "easy";
-    setSessionStats((prev) => ({
-      ...prev,
-      [ratingKey]: (prev[ratingKey] || 0) + 1,
-      totalPoints: prev.totalPoints + 20,
-    }));
+    let earnedThisCard = 0;
 
     const currentCard = cards[cardIndex];
     if (kitId && currentCard?.id) {
       try {
-        await studyService.reviewCards(kitId, [{ cardId: currentCard.id, rating: r }]);
+        const res = await studyService.reviewCards(kitId, [{ cardId: currentCard.id, rating: r }]);
+        if (res.counted > 0 && (r === "GOOD" || r === "EASY")) {
+          earnedThisCard = 20;
+        }
+        await refreshGamification();
       } catch {}
     }
+
+    setSessionStats((prev) => ({
+      ...prev,
+      [ratingKey]: (prev[ratingKey] || 0) + 1,
+      totalPoints: prev.totalPoints + earnedThisCard,
+    }));
 
     if (cardIndex + 1 < cards.length) {
       setCardIndex((prev) => prev + 1);
@@ -564,7 +569,7 @@ function Flashcards() {
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full max-w-md">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center">
               <div className="font-display text-xl font-bold text-primary">
-                +{sessionStats.totalPoints || cards.length * 20}
+                +{sessionStats.totalPoints}
               </div>
               <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Points Earned</div>
             </div>

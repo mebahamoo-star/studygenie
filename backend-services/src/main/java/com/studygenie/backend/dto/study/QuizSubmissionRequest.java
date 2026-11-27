@@ -11,10 +11,15 @@ public record QuizSubmissionRequest(
     public record QuizAnswer(
             @NotNull String questionId,
             Integer selectedOptionIndex,
-            String answerText
+            String answerText,
+            Boolean selfAssessedCorrect
     ) {
         public QuizAnswer(String questionId, Integer selectedOptionIndex) {
-            this(questionId, selectedOptionIndex, null);
+            this(questionId, selectedOptionIndex, null, null);
+        }
+
+        public QuizAnswer(String questionId, Integer selectedOptionIndex, String answerText) {
+            this(questionId, selectedOptionIndex, answerText, null);
         }
     }
 }

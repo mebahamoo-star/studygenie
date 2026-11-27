@@ -17,7 +17,7 @@ public record ClientTopicKit(
                 stored.ref(),
                 stored.chapterTitle(),
                 stored.flashcards(),
-                stored.quiz().stream().map(ClientQuizQuestion::fromStored).toList()
+                stored.quiz().stream().map(q -> ClientQuizQuestion.fromStored(q, stored.ref(), stored.chapterTitle())).toList()
         );
     }
 }

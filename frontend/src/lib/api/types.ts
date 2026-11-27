@@ -143,9 +143,16 @@ export interface ClientQuizQuestion {
   type?: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | string;
   question: string;
   options: string[];
-  correctOptionIndex?: number;
-  correctAnswerText?: string;
-  explanation?: string;
+  topicRef?: string;
+  chapterTitle?: string;
+}
+
+export interface QuizQuestionResult {
+  questionId: string;
+  correct: boolean;
+  correctOptionIndex?: number | null;
+  correctAnswerText?: string | null;
+  explanation: string;
 }
 
 export interface QuizSubmissionResponse {
@@ -154,13 +161,7 @@ export interface QuizSubmissionResponse {
   percentage: number;
   passed: boolean;
   xpEligible: boolean;
-  results: {
-    questionId: string;
-    correct: boolean;
-    correctOptionIndex?: number | null;
-    correctAnswerText?: string | null;
-    explanation: string;
-  }[];
+  results: QuizQuestionResult[];
 }
 
 export interface GamificationProfile {

@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import java.text.Normalizer;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -180,37 +181,13 @@ public class StudySessionService {
                 throw new IllegalArgumentException("Unknown questionId: " + answer.questionId());
             }
 
-            boolean isCorrect;
-            String qType = q.type() != null ? q.type().toUpperCase(Locale.ROOT) : "MCQ";
-
-            if ("SHORT_ANSWER".equals(qType) || "TEXT".equals(qType)) {
-                String expected = q.correctAnswerText() != null ? q.correctAnswerText().trim() :
-                        (q.options() != null && !q.options().isEmpty() ? q.options().get(0).trim() : "");
-                String given = answer.answerText() != null ? answer.answerText().trim() : "";
-
-                isCorrect = isShortAnswerCorrect(given, expected);
-                if (isCorrect) correctCount++;
-                results.add(new QuizSubmissionResponse.QuestionResult(
-                        q.questionId(), isCorrect, q.correctOptionIndex(), expected, q.explanation()));
-            } else {
-                if (answer.selectedOptionIndex() == null || answer.selectedOptionIndex() < 0 ||
-                        (q.options() != null && answer.selectedOptionIndex() >= q.options().size())) {
-                    throw new IllegalArgumentException("Option index out of range for question: " + answer.questionId());
-                }
-
-                isCorrect = (answer.selectedOptionIndex() == q.correctOptionIndex());
-                if (isCorrect) correctCount++;
-
-                String expectedText = q.correctAnswerText();
-                if (expectedText == null && q.options() != null && q.correctOptionIndex() >= 0 && q.correctOptionIndex() < q.options().size()) {
-                    expectedText = q.options().get(q.correctOptionIndex());
-                }
-
-                results.add(new QuizSubmissionResponse.QuestionResult(
-                        q.questionId(), isCorrect, q.correctOptionIndex(), expectedText, q.explanation()));
+            QuizSubmissionResponse.QuestionResult result = gradeQuestion(q, answer);
+            if (result.correct()) {
+                correctCount++;
             }
+            results.add(result);
 
-            persistQuizAttempt(userId, kitId, q.questionId(), answer.selectedOptionIndex(), answer.answerText(), isCorrect);
+            persistQuizAttempt(userId, kitId, q.questionId(), answer.selectedOptionIndex(), answer.answerText(), result.correct());
         }
 
         // Unanswered questions are implicitly wrong. The total comes from the kit.
@@ -304,27 +281,221 @@ public class StudySessionService {
         return new ProgressResponse(total, newCards, learning, mature, dueToday, avgEf, nextDue);
     }
 
-    private boolean isShortAnswerCorrect(String given, String expected) {
+    public List<ClientQuizQuestion> getQuizQuestions(Long userId, String kitId) {
+        StoredStudyKit kit = kitStore.findById(kitId)
+                .filter(k -> k.ownerId().equals(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("Study kit not found"));
+
+        List<ClientQuizQuestion> questions = new ArrayList<>();
+        for (StoredTopicKit t : kit.topics()) {
+            for (StoredQuizQuestion q : t.quiz()) {
+                questions.add(ClientQuizQuestion.fromStored(q, t.ref(), t.chapterTitle()));
+            }
+        }
+        return questions;
+    }
+
+    public QuizSubmissionResponse.QuestionResult checkQuestion(
+            Long userId,
+            String kitId,
+            QuizSubmissionRequest.QuizAnswer answer) {
+        StoredStudyKit kit = kitStore.findById(kitId)
+                .filter(k -> k.ownerId().equals(userId))
+                .orElseThrow(() -> new ResourceNotFoundException("Study kit not found"));
+
+        StoredQuizQuestion q = kit.findQuestion(answer.questionId())
+                .orElseThrow(() -> new IllegalArgumentException("Unknown questionId: " + answer.questionId()));
+
+        return gradeQuestion(q, answer);
+    }
+
+    private QuizSubmissionResponse.QuestionResult gradeQuestion(
+            StoredQuizQuestion q,
+            QuizSubmissionRequest.QuizAnswer answer) {
+        String qType = q.type() != null ? q.type().toUpperCase(Locale.ROOT) : "MCQ";
+
+        if ("SHORT_ANSWER".equals(qType) || "TEXT".equals(qType)) {
+            String expected = q.correctAnswerText() != null ? q.correctAnswerText().trim() :
+                    (q.options() != null && !q.options().isEmpty() ? q.options().get(0).trim() : "");
+            String given = answer.answerText() != null ? answer.answerText().trim() : "";
+
+            boolean autoCorrect = isShortAnswerCorrect(given, expected);
+            boolean isCorrect = autoCorrect || (Boolean.TRUE.equals(answer.selfAssessedCorrect()) && !given.isBlank());
+            return new QuizSubmissionResponse.QuestionResult(
+                    q.questionId(), isCorrect, q.correctOptionIndex(), expected, q.explanation());
+        }
+
+        if (answer.selectedOptionIndex() == null || answer.selectedOptionIndex() < 0 ||
+                (q.options() != null && answer.selectedOptionIndex() >= q.options().size())) {
+            throw new IllegalArgumentException("Option index out of range for question: " + answer.questionId());
+        }
+
+        boolean isCorrect = (answer.selectedOptionIndex() == q.correctOptionIndex());
+        String expectedText = q.correctAnswerText();
+        if (expectedText == null && q.options() != null && q.correctOptionIndex() >= 0 && q.correctOptionIndex() < q.options().size()) {
+            expectedText = q.options().get(q.correctOptionIndex());
+        }
+
+        return new QuizSubmissionResponse.QuestionResult(
+                q.questionId(), isCorrect, q.correctOptionIndex(), expectedText, q.explanation());
+    }
+
+    public boolean isShortAnswerCorrect(String given, String expected) {
         if (given == null || given.isBlank() || expected == null || expected.isBlank()) {
             return false;
         }
         String normGiven = normalizeAnswer(given);
         String normExpected = normalizeAnswer(expected);
-        if (normGiven.equalsIgnoreCase(normExpected)) {
+        if (normGiven.isEmpty() || normExpected.isEmpty()) {
+            return false;
+        }
+        if (normGiven.equals(normExpected)) {
             return true;
         }
-        if (normGiven.contains(normExpected) || (normExpected.length() > 3 && normGiven.length() > 3 && normExpected.contains(normGiven))) {
+
+        String cleanGiven = stripLeadingArticles(normGiven);
+        String cleanExpected = stripLeadingArticles(normExpected);
+        if (cleanGiven.equals(cleanExpected)) {
             return true;
         }
+
+        List<String> givenTokens = tokenize(cleanGiven);
+        List<String> expectedTokens = tokenize(cleanExpected);
+        if (givenTokens.isEmpty() || expectedTokens.isEmpty()) {
+            return false;
+        }
+
+        // Single-token expected answer: exact match (already checked) or narrow typo tolerance, never arbitrary substring
+        if (expectedTokens.size() == 1 && givenTokens.size() == 1) {
+            return isTokenMatch(givenTokens.get(0), expectedTokens.get(0));
+        }
+
+        // Multi-token expected or phrasing variations: require high token overlap and comparable length
+        if (expectedTokens.size() >= 2) {
+            int matched = 0;
+            for (String expTok : expectedTokens) {
+                for (String givTok : givenTokens) {
+                    if (isTokenMatch(givTok, expTok)) {
+                        matched++;
+                        break;
+                    }
+                }
+            }
+            double coverage = (double) matched / expectedTokens.size();
+            boolean enoughLength = cleanGiven.length() >= Math.round(cleanExpected.length() * 0.65);
+            boolean enoughTokens = givenTokens.size() >= Math.ceil(expectedTokens.size() * 0.65);
+            return coverage >= 0.8 && enoughLength && enoughTokens;
+        }
+
+        // Expected is single token (>= 3 chars) embedded cleanly as a full token inside a short explanatory phrase (e.g. "it is Paris")
+        String target = expectedTokens.get(0);
+        if (target.length() >= 3 && givenTokens.size() <= 4) {
+            for (String givTok : givenTokens) {
+                if (givTok.equals(target)) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
-    private String normalizeAnswer(String s) {
-        return s.trim()
+    public String normalizeAnswer(String s) {
+        if (s == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(s, Normalizer.Form.NFKC);
+        // Strip Arabic diacritics (tashkeel), tatweel, and Unicode combining marks
+        normalized = normalized.replaceAll("[\\u064B-\\u065F\\u0670\\u0640\\p{M}]", "");
+        // Unify Arabic Alef forms, Teh Marbuta, and Alef Maqsura
+        normalized = normalized
+                .replace('\u0623', '\u0627') // أ -> ا
+                .replace('\u0625', '\u0627') // إ -> ا
+                .replace('\u0622', '\u0627') // آ -> ا
+                .replace('\u0671', '\u0627') // ٱ -> ا
+                .replace('\u0629', '\u0647') // ة -> ه
+                .replace('\u0649', '\u064A'); // ى -> ي
+        // Convert Arabic-Indic and Eastern Arabic-Indic digits to ASCII digits
+        StringBuilder sb = new StringBuilder(normalized.length());
+        for (int i = 0; i < normalized.length(); i++) {
+            char ch = normalized.charAt(i);
+            if (ch >= '\u0660' && ch <= '\u0669') {
+                sb.append((char) ('0' + (ch - '\u0660')));
+            } else if (ch >= '\u06F0' && ch <= '\u06F9') {
+                sb.append((char) ('0' + (ch - '\u06F0')));
+            } else {
+                sb.append(ch);
+            }
+        }
+        return sb.toString()
+                .trim()
                 .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-zA-Z0-9\\s]", "")
+                .replaceAll("[^\\p{L}\\p{N}\\s]", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
+    }
+
+    private String stripLeadingArticles(String normalized) {
+        if (normalized.isEmpty()) {
+            return normalized;
+        }
+        String[] parts = normalized.split("\\s+");
+        List<String> cleaned = new ArrayList<>(parts.length);
+        for (String p : parts) {
+            if ("the".equals(p) || "a".equals(p) || "an".equals(p)) {
+                continue;
+            }
+            if (p.startsWith("\u0627\u0644") && p.length() >= 5) { // strip "ال" prefix when stem >= 3 chars
+                cleaned.add(p.substring(2));
+            } else {
+                cleaned.add(p);
+            }
+        }
+        return String.join(" ", cleaned).trim();
+    }
+
+    private List<String> tokenize(String s) {
+        if (s == null || s.isBlank()) {
+            return List.of();
+        }
+        String[] raw = s.trim().split("\\s+");
+        List<String> tokens = new ArrayList<>(raw.length);
+        for (String r : raw) {
+            if (!r.isEmpty()) {
+                tokens.add(r);
+            }
+        }
+        return tokens;
+    }
+
+    private boolean isTokenMatch(String given, String expected) {
+        if (given.equals(expected)) {
+            return true;
+        }
+        int len = expected.length();
+        int maxDist = len >= 10 ? 2 : (len >= 5 ? 1 : 0);
+        if (maxDist == 0) {
+            return false;
+        }
+        if (Math.abs(given.length() - expected.length()) > maxDist) {
+            return false;
+        }
+        return levenshteinDistance(given, expected) <= maxDist;
+    }
+
+    private int levenshteinDistance(String a, String b) {
+        int[][] dp = new int[a.length() + 1][b.length() + 1];
+        for (int i = 0; i <= a.length(); i++) dp[i][0] = i;
+        for (int j = 0; j <= b.length(); j++) dp[0][j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                dp[i][j] = Math.min(
+                        Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
+                        dp[i - 1][j - 1] + cost);
+            }
+        }
+        return dp[a.length()][b.length()];
     }
 
     private void persistQuizAttempt(

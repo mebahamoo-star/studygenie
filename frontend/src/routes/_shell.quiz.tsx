@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, HelpCircle, Lock, Plus, RotateCcw, Sparkles, Upload, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, Plus, RotateCcw, Upload, XCircle } from "lucide-react";
 import { Card, PageTitle } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
 import { ProgressRing } from "@/components/ProgressRing";
@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { pageHead } from "@/lib/head";
 import { studyService } from "@/lib/api/services";
+import type { ClientQuizQuestion, QuizQuestionResult } from "@/lib/api/types";
 import { useApp } from "@/lib/app-state";
-import { useGenie } from "@/lib/genie-context";
 import {
   hasUserEnrolledCourses,
   hasUserUploadedMaterial,
@@ -34,43 +34,46 @@ interface QuestionItem {
   type?: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | string;
   q: string;
   options?: string[];
-  answer?: number;
-  correctAnswerText?: string;
-  explain: string;
+  chapter?: string | undefined;
+}
+
+interface AnswerSubmission {
+  questionId: string;
+  selectedOptionIndex?: number | null;
+  answerText?: string | null;
+  selfAssessedCorrect?: boolean | null;
+}
+
+function mapClientQuestion(q: ClientQuizQuestion): QuestionItem {
+  const qType = (q.type || "MCQ").toUpperCase();
+  return {
+    id: q.questionId,
+    type: qType,
+    q: q.question,
+    options: qType === "SHORT_ANSWER" ? [] : q.options || [],
+    chapter: q.chapterTitle || undefined,
+  };
 }
 
 function Quiz() {
-  const { addPoints, refreshGamification } = useApp();
-  const { triggerCelebration, triggerEncourage, triggerWarn } = useGenie();
+  const { refreshGamification } = useApp();
   const [hasCourses, setHasCourses] = useState<boolean | null>(null);
   const [hasMaterial, setHasMaterial] = useState<boolean | null>(null);
+  const [kitId, setKitId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [i, setI] = useState(0);
   const [pick, setPick] = useState<number | null>(null);
   const [shortInput, setShortInput] = useState("");
   const [shortSubmitted, setShortSubmitted] = useState(false);
-  const [shortIsCorrect, setShortIsCorrect] = useState<boolean | null>(null);
+  const [gradingQuestion, setGradingQuestion] = useState(false);
+  const [questionResults, setQuestionResults] = useState<Record<string, QuizQuestionResult>>({});
   const [score, setScore] = useState(0);
+  const [xpAwardedThisSession, setXpAwardedThisSession] = useState(0);
   const [finished, setFinished] = useState(false);
-  const [answers, setAnswers] = useState<
-    { questionId: string; selectedOptionIndex?: number | null; answerText?: string | null }[]
-  >([]);
+  const [answers, setAnswers] = useState<AnswerSubmission[]>([]);
   const [pastScores, setPastScores] = useState<SavedQuizScore[]>([]);
   const [lastSavedScore, setLastSavedScore] = useState<SavedQuizScore | null>(null);
   const isFinishingRef = useRef(false);
-
-  const isShortAnswerMatch = (given: string, expected: string) => {
-    if (!given || !expected) return false;
-    const normalize = (s: string) =>
-      s.trim().toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
-    const g = normalize(given);
-    const e = normalize(expected);
-    if (!g || !e) return false;
-    if (g === e) return true;
-    if (g.length > 2 && e.includes(g)) return true;
-    if (e.length > 2 && g.includes(e)) return true;
-    return false;
-  };
 
   useEffect(() => {
     const enrolled = hasUserEnrolledCourses();
@@ -83,70 +86,98 @@ function Quiz() {
     if (enrolled) {
       try {
         const prefix = getUserStoragePrefix();
+        const savedKit =
+          localStorage.getItem(`sg-${prefix}-active-kit`) ||
+          localStorage.getItem("sg-active-kit");
+        const validServerKit =
+          savedKit && !savedKit.startsWith("local-") && !savedKit.startsWith("kit-")
+            ? savedKit
+            : null;
+
+        if (validServerKit) {
+          setKitId(validServerKit);
+          studyService
+            .getQuizQuestions(validServerKit)
+            .then((qs) => {
+              if (Array.isArray(qs) && qs.length > 0) {
+                setQuestions(qs.map(mapClientQuestion));
+                return;
+              }
+              const activeQuizRaw =
+                localStorage.getItem(`sg-${prefix}-active-quiz`) ||
+                localStorage.getItem("sg-active-quiz");
+              if (activeQuizRaw) {
+                const parsed = JSON.parse(activeQuizRaw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  setQuestions(parsed);
+                }
+              }
+            })
+            .catch(() => {
+              const activeQuizRaw =
+                localStorage.getItem(`sg-${prefix}-active-quiz`) ||
+                localStorage.getItem("sg-active-quiz");
+              if (activeQuizRaw) {
+                try {
+                  const parsed = JSON.parse(activeQuizRaw);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    setQuestions(parsed);
+                  }
+                } catch {}
+              }
+            });
+          return;
+        }
+
         const activeQuizRaw =
           localStorage.getItem(`sg-${prefix}-active-quiz`) ||
           localStorage.getItem("sg-active-quiz");
         if (activeQuizRaw) {
           const parsedQuestions = JSON.parse(activeQuizRaw);
-          if (parsedQuestions && parsedQuestions.length > 0) {
+          if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
             setQuestions(parsedQuestions);
-            return;
           }
-        }
-
-        const savedKit =
-          localStorage.getItem(`sg-${prefix}-active-kit`) ||
-          localStorage.getItem("sg-active-kit");
-        if (savedKit && !savedKit.startsWith("local-")) {
-          studyService
-            .getProgress(savedKit)
-            .then((prog) => {
-              if (prog?.questions) {
-                setQuestions(prog.questions);
-              }
-            })
-            .catch(() => {});
         }
       } catch {}
     }
   }, []);
 
-  const handleFinish = async (finalScore: number) => {
+  const handleFinish = async () => {
     if (finished || isFinishingRef.current) return;
     isFinishingRef.current = true;
-    // 1. Compute exact score from verified answers to prevent stale state desync
-    let computedCorrect = 0;
-    questions.forEach((qItem, idx) => {
-      const userAns = answers.find(
-        (a) => a.questionId === (qItem.id || `q-${idx + 1}`)
-      );
-      if (userAns) {
-        const qType = (qItem.type || "MCQ").toUpperCase();
-        if (qType === "SHORT_ANSWER") {
-          const expected = qItem.correctAnswerText || (qItem.options && qItem.options[0]) || "";
-          if (isShortAnswerMatch(userAns.answerText || "", expected)) {
-            computedCorrect++;
-          }
-        } else {
-          if (userAns.selectedOptionIndex === qItem.answer) {
-            computedCorrect++;
-          }
-        }
-      }
-    });
 
-    const resolvedScore = Math.max(finalScore, computedCorrect);
-    setScore(resolvedScore);
+    let finalScore = Object.values(questionResults).filter((r) => r.correct).length;
+    let total = questions.length;
+    let pct = total > 0 ? Math.round((finalScore / total) * 100) : 0;
+    let earnedXp = 0;
+
+    if (kitId) {
+      try {
+        const res = await studyService.submitQuiz(kitId, answers);
+        finalScore = res.score;
+        total = res.total || questions.length;
+        pct = Math.round(res.percentage);
+        earnedXp = res.xpEligible ? res.score * 50 : 0;
+
+        if (Array.isArray(res.results)) {
+          const merged: Record<string, QuizQuestionResult> = {};
+          res.results.forEach((r) => {
+            merged[r.questionId] = r;
+          });
+          setQuestionResults((prev) => ({ ...prev, ...merged }));
+        }
+        await refreshGamification();
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to grade quiz on the server.");
+        isFinishingRef.current = false;
+        return;
+      }
+    }
+
+    setScore(finalScore);
+    setXpAwardedThisSession(earnedXp);
     setFinished(true);
 
-    const total = questions.length;
-    const pct = total > 0 ? Math.round((resolvedScore / total) * 100) : 0;
-    const earnedPoints = resolvedScore * 10;
-
-    // 2. Add points (persisted in localStorage and synchronized with app state)
-    addPoints(earnedPoints);
-
-    // 3. Save score in localStorage for persistence across reloads & sessions
     const prefix = getUserStoragePrefix();
     const activeCourse = getActiveCourse();
     const courseName =
@@ -159,28 +190,19 @@ function Quiz() {
       id: `quiz-${Date.now()}`,
       date: new Date().toISOString(),
       courseName,
-      score: resolvedScore,
+      score: finalScore,
       total,
       percentage: pct,
-      xpAwarded: earnedPoints,
+      xpAwarded: earnedXp,
     };
 
     saveQuizScore(scoreRecord);
     setLastSavedScore(scoreRecord);
     setPastScores(getQuizScores());
-    toast.success(`Score saved! You earned +${earnedPoints} XP (${resolvedScore}/${total}) ✨`);
-
-    // 4. Submit to backend if kitId is available and valid
-    try {
-      const kitId =
-        localStorage.getItem(`sg-${prefix}-active-kit`) ||
-        localStorage.getItem("sg-active-kit");
-      if (kitId && !kitId.startsWith("local-")) {
-        await studyService.submitQuiz(kitId, answers);
-        await refreshGamification();
-      }
-    } catch (err) {
-      console.warn("Backend quiz sync deferred, score safely stored locally:", err);
+    if (earnedXp > 0) {
+      toast.success(`Quiz passed! Server awarded +${earnedXp} XP (${finalScore}/${total}) ✨`);
+    } else {
+      toast.success(`Quiz submitted (${finalScore}/${total}) ✨`);
     }
   };
 
@@ -305,7 +327,7 @@ function Quiz() {
         <Card className="flex flex-col items-center py-10 text-center">
           <Genie pose={pct >= 70 ? "high" : pct >= 40 ? "mid" : "low"} className="h-32 w-32" />
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Score & XP Saved
+            <CheckCircle2 className="h-3.5 w-3.5" /> Server Graded & Saved
           </div>
           <h1 className="mt-2 text-3xl font-semibold">Quiz complete!</h1>
           <div className="my-6">
@@ -325,8 +347,8 @@ function Quiz() {
               <div className="text-xs font-bold">Wrong</div>
             </div>
             <div className="rounded-xl bg-gold/20 p-3 text-gold-foreground dark:text-gold">
-              <div className="font-display text-2xl font-semibold">+{score * 10}</div>
-              <div className="text-xs font-bold">XP Saved</div>
+              <div className="font-display text-2xl font-semibold">+{xpAwardedThisSession}</div>
+              <div className="text-xs font-bold">Server XP</div>
             </div>
           </div>
 
@@ -367,8 +389,9 @@ function Quiz() {
               setPick(null);
               setShortInput("");
               setShortSubmitted(false);
-              setShortIsCorrect(null);
+              setQuestionResults({});
               setScore(0);
+              setXpAwardedThisSession(0);
               setAnswers([]);
               setFinished(false);
               isFinishingRef.current = false;
@@ -392,33 +415,84 @@ function Quiz() {
 
   const isShort = currentType === "SHORT_ANSWER";
   const isTrueFalse = currentType === "TRUE_FALSE";
-  const answered = isShort ? shortSubmitted : pick !== null;
-  const isCurrentCorrect = isShort ? Boolean(shortIsCorrect) : pick === q.answer;
+  const currentResult = questionResults[q.id];
+  const answered = isShort ? shortSubmitted && Boolean(currentResult) : pick !== null && Boolean(currentResult);
+  const isCurrentCorrect = Boolean(currentResult?.correct);
 
-  const handlePickOption = (idx: number) => {
-    if (answered) return;
+  const handlePickOption = async (idx: number) => {
+    if (answered || gradingQuestion) return;
     setPick(idx);
-    const correct = idx === q.answer;
-    if (correct) setScore((s) => s + 1);
-    setAnswers((prev) => [
-      ...prev,
-      { questionId: q.id || `q-${i + 1}`, selectedOptionIndex: idx },
-    ]);
+    const submission: AnswerSubmission = { questionId: q.id, selectedOptionIndex: idx };
+    setAnswers((prev) => [...prev.filter((a) => a.questionId !== q.id), submission]);
+
+    if (kitId) {
+      setGradingQuestion(true);
+      try {
+        const res = await studyService.checkQuizAnswer(kitId, submission);
+        setQuestionResults((prev) => ({ ...prev, [q.id]: res }));
+        if (res.correct) setScore((s) => s + 1);
+      } catch (err: any) {
+        toast.error(err?.message || "Could not grade answer on server.");
+        setPick(null);
+      } finally {
+        setGradingQuestion(false);
+      }
+    } else {
+      setQuestionResults((prev) => ({
+        ...prev,
+        [q.id]: { questionId: q.id, correct: false, explanation: "Server kit unavailable for grading." },
+      }));
+    }
   };
 
-  const handleShortSubmit = () => {
-    if (answered || !shortInput.trim()) return;
-    const expected = (q.correctAnswerText || (q.options && q.options[0]) || "").trim();
+  const handleShortSubmit = async () => {
+    if (answered || gradingQuestion || !shortInput.trim()) return;
     const given = shortInput.trim();
-    const isMatch = isShortAnswerMatch(given, expected);
+    const submission: AnswerSubmission = { questionId: q.id, answerText: given };
+    setAnswers((prev) => [...prev.filter((a) => a.questionId !== q.id), submission]);
 
-    setShortIsCorrect(isMatch);
-    setShortSubmitted(true);
-    if (isMatch) setScore((s) => s + 1);
-    setAnswers((prev) => [
-      ...prev,
-      { questionId: q.id || `q-${i + 1}`, answerText: given },
-    ]);
+    if (kitId) {
+      setGradingQuestion(true);
+      try {
+        const res = await studyService.checkQuizAnswer(kitId, submission);
+        setQuestionResults((prev) => ({ ...prev, [q.id]: res }));
+        setShortSubmitted(true);
+        if (res.correct) setScore((s) => s + 1);
+      } catch (err: any) {
+        toast.error(err?.message || "Could not grade answer on server.");
+      } finally {
+        setGradingQuestion(false);
+      }
+    } else {
+      setQuestionResults((prev) => ({
+        ...prev,
+        [q.id]: { questionId: q.id, correct: false, explanation: "Server kit unavailable for grading." },
+      }));
+      setShortSubmitted(true);
+    }
+  };
+
+  const handleSelfAssessCorrect = async () => {
+    if (!kitId || !currentResult || currentResult.correct || gradingQuestion) return;
+    const updatedSub: AnswerSubmission = {
+      questionId: q.id,
+      answerText: shortInput.trim(),
+      selfAssessedCorrect: true,
+    };
+    setAnswers((prev) => [...prev.filter((a) => a.questionId !== q.id), updatedSub]);
+    setGradingQuestion(true);
+    try {
+      const res = await studyService.checkQuizAnswer(kitId, updatedSub);
+      setQuestionResults((prev) => ({ ...prev, [q.id]: res }));
+      if (res.correct) {
+        setScore((s) => s + 1);
+        toast.success("Marked correct via self-assessment.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Could not update self-assessment.");
+    } finally {
+      setGradingQuestion(false);
+    }
   };
 
   return (
@@ -462,15 +536,15 @@ function Quiz() {
         {isTrueFalse && (
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { label: "True", sub: "Statement is correct", val: 0, color: "emerald" },
-              { label: "False", sub: "Statement is incorrect", val: 1, color: "rose" },
+              { label: "True", sub: "Statement is correct", val: 0 },
+              { label: "False", sub: "Statement is incorrect", val: 1 },
             ].map((tf) => {
               const isSelected = pick === tf.val;
-              const isTargetAnswer = q.answer === tf.val;
+              const isTargetAnswer = answered && currentResult?.correctOptionIndex === tf.val;
               return (
                 <button
                   key={tf.label}
-                  disabled={answered}
+                  disabled={answered || gradingQuestion}
                   onClick={() => handlePickOption(tf.val)}
                   className={cn(
                     "group relative flex items-center justify-between rounded-2xl border-2 p-5 text-left font-bold transition shadow-sm",
@@ -508,36 +582,36 @@ function Quiz() {
           <div className="mt-6 space-y-3">
             <div className="relative">
               <Input
-                disabled={answered}
+                disabled={answered || gradingQuestion}
                 value={shortInput}
                 onChange={(e) => setShortInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !answered && shortInput.trim()) {
+                  if (e.key === "Enter" && !answered && !gradingQuestion && shortInput.trim()) {
                     handleShortSubmit();
                   }
                 }}
                 placeholder="Type your answer here (press Enter to submit)..."
                 className={cn(
                   "h-14 text-base px-4 pr-32 rounded-xl transition font-medium",
-                  answered && shortIsCorrect && "border-emerald-500 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
-                  answered && !shortIsCorrect && "border-destructive bg-destructive/5 text-destructive"
+                  answered && isCurrentCorrect && "border-emerald-500 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
+                  answered && !isCurrentCorrect && "border-destructive bg-destructive/5 text-destructive"
                 )}
               />
               {!answered && (
                 <Button
                   size="sm"
                   variant="magic"
-                  disabled={!shortInput.trim()}
+                  disabled={!shortInput.trim() || gradingQuestion}
                   onClick={handleShortSubmit}
                   className="absolute right-2 top-2 h-10 px-4 font-bold"
                 >
-                  Submit Answer
+                  {gradingQuestion ? "Grading..." : "Submit Answer"}
                 </Button>
               )}
             </div>
             {!answered && (
               <p className="text-[11px] text-muted-foreground">
-                Tip: Press <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted font-mono text-[10px]">Enter</kbd> to submit. Spaced repetition evaluates key terms and synonyms.
+                Tip: Press <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted font-mono text-[10px]">Enter</kbd> to submit. Graded on the server with Unicode & Arabic normalization.
               </p>
             )}
           </div>
@@ -548,11 +622,11 @@ function Quiz() {
           <div className="mt-6 grid gap-3">
             {(q.options || []).map((o, idx) => {
               const letters = ["A", "B", "C", "D", "E"];
-              const correct = idx === q.answer;
+              const correct = answered && currentResult?.correctOptionIndex === idx;
               return (
                 <button
-                  key={o}
-                  disabled={answered}
+                  key={`${q.id}-${idx}`}
+                  disabled={answered || gradingQuestion}
                   onClick={() => handlePickOption(idx)}
                   className={cn(
                     "flex items-center justify-between rounded-xl border-2 px-4 py-3.5 text-left font-semibold transition shadow-sm",
@@ -582,8 +656,8 @@ function Quiz() {
           </div>
         )}
 
-        {/* FEEDBACK & EXPLANATION */}
-        {answered && (
+        {/* SERVER-GRADED FEEDBACK & EXPLANATION */}
+        {answered && currentResult && (
           <div
             className={cn(
               "mt-5 rounded-xl border p-4 text-sm transition",
@@ -592,7 +666,7 @@ function Quiz() {
                 : "border-destructive/30 bg-destructive/5 text-foreground"
             )}
           >
-            <div className="flex items-center gap-2 font-bold mb-1.5">
+            <div className="flex items-center justify-between gap-2 font-bold mb-1.5">
               {isCurrentCorrect ? (
                 <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="h-4 w-4" /> Correct!
@@ -602,34 +676,46 @@ function Quiz() {
                   <XCircle className="h-4 w-4" /> Not quite.
                 </span>
               )}
+
+              {isShort && !isCurrentCorrect && kitId && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={gradingQuestion}
+                  onClick={handleSelfAssessCorrect}
+                  className="h-7 text-xs font-semibold border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10"
+                >
+                  My answer was right (Self-Assess)
+                </Button>
+              )}
             </div>
 
-            {isShort && !shortIsCorrect && (
+            {isShort && !isCurrentCorrect && currentResult.correctAnswerText && (
               <div className="mb-2 text-xs">
                 <span className="font-semibold text-muted-foreground">Expected answer: </span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  {q.correctAnswerText || (q.options && q.options[0]) || "N/A"}
+                  {currentResult.correctAnswerText}
                 </span>
               </div>
             )}
 
-            <div className="text-xs text-muted-foreground leading-relaxed">{q.explain}</div>
+            <div className="text-xs text-muted-foreground leading-relaxed">{currentResult.explanation}</div>
           </div>
         )}
 
         <div className="mt-6 flex justify-end">
           <Button
             variant="magic"
-            disabled={!answered}
+            disabled={!answered || gradingQuestion}
             onClick={() => {
               if (i === questions.length - 1) {
-                handleFinish(score);
+                handleFinish();
               } else {
                 setI(i + 1);
                 setPick(null);
                 setShortInput("");
                 setShortSubmitted(false);
-                setShortIsCorrect(null);
               }
             }}
           >

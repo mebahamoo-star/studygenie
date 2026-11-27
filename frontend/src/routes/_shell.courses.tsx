@@ -2042,31 +2042,14 @@ function JoinChallenge({
           res.data.topics.forEach((tk: any) => {
             (tk.quiz || []).forEach((q: any, qIdx: number) => {
               const qType = (q.type || "MCQ").toUpperCase();
-              let answer = 0;
-              let correctAnswerText: string | undefined = q.correctAnswerText || undefined;
-              let options = q.options || [];
-
-              if (qType === "TRUE_FALSE") {
-                options = ["True", "False"];
-                answer = typeof q.correctOptionIndex === "number" ? q.correctOptionIndex : (typeof q.answer === "number" ? q.answer : 0);
-                correctAnswerText = answer === 1 ? "False" : "True";
-              } else if (qType === "SHORT_ANSWER") {
-                options = [];
-                correctAnswerText = q.correctAnswerText || (q.options && q.options[0]) || "";
-                answer = 0;
-              } else {
-                answer = typeof q.correctOptionIndex === "number" ? q.correctOptionIndex : (typeof q.answer === "number" ? q.answer : 0);
-                correctAnswerText = options[answer] || "";
-              }
+              const options = qType === "TRUE_FALSE" ? ["True", "False"] : qType === "SHORT_ANSWER" ? [] : (q.options || []);
 
               generatedQuestions.push({
                 id: q.questionId || `q-${Date.now()}-${qIdx}`,
                 type: qType,
                 q: q.question || q.q,
                 options,
-                answer,
-                correctAnswerText,
-                explain: q.explain || q.explanation || `Key takeaway from ${tk.ref || "chapter concepts"}.`,
+                chapter: tk.chapterTitle || tk.ref || course.name,
               });
             });
           });
