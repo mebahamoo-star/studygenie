@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lock, Plus, RotateCcw, Upload, XCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, BookOpen, CheckCircle2, Lock, Plus, RotateCcw, Upload, XCircle } from "lucide-react";
 import { Card, PageTitle } from "@/components/AppShell";
 import { Genie } from "@/components/Genie";
 import { ProgressRing } from "@/components/ProgressRing";
@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { pageHead } from "@/lib/head";
-import { studyService } from "@/lib/api/services";
-import type { ClientQuizQuestion, QuizQuestionResult } from "@/lib/api/types";
+import { browseService, studyService } from "@/lib/api/services";
+import type { ClientQuizQuestion, Course, QuizQuestionResult } from "@/lib/api/types";
 import { useApp } from "@/lib/app-state";
 import {
   hasUserEnrolledCourses,
   hasUserUploadedMaterial,
+  getUserCourses,
   getUserStoragePrefix,
   getActiveCourse,
   saveQuizScore,
@@ -44,6 +45,13 @@ interface AnswerSubmission {
   selfAssessedCorrect?: boolean | null;
 }
 
+interface CourseQuizOption {
+  kitId: string;
+  label: string;
+  language?: string | undefined;
+  questions: QuestionItem[];
+}
+
 function mapClientQuestion(q: ClientQuizQuestion): QuestionItem {
   const qType = (q.type || "MCQ").toUpperCase();
   return {
@@ -64,9 +72,14 @@ function Quiz() {
   const { refreshGamification, lang } = useApp();
   const [hasCourses, setHasCourses] = useState<boolean | null>(null);
   const [hasMaterial, setHasMaterial] = useState<boolean | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
+  const [courseQuizzes, setCourseQuizzes] = useState<CourseQuizOption[]>([]);
   const [kitId, setKitId] = useState<string | null>(null);
   const [kitLang, setKitLang] = useState<string>(lang);
+  const [allQuizQuestions, setAllQuizQuestions] = useState<QuestionItem[]>([]);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
+  const [isRetryWrongMode, setIsRetryWrongMode] = useState(false);
   const [i, setI] = useState(0);
   const [pick, setPick] = useState<number | null>(null);
   const [shortInput, setShortInput] = useState("");
@@ -81,7 +94,137 @@ function Quiz() {
   const [lastSavedScore, setLastSavedScore] = useState<SavedQuizScore | null>(null);
   const isFinishingRef = useRef(false);
 
+  const resetSessionState = useCallback((loadedQuestions: QuestionItem[], retryWrong: boolean) => {
+    setQuestions(loadedQuestions);
+    setIsRetryWrongMode(retryWrong);
+    setI(0);
+    setPick(null);
+    setShortInput("");
+    setShortSubmitted(false);
+    setQuestionResults({});
+    setScore(0);
+    setXpAwardedThisSession(0);
+    setAnswers([]);
+    setFinished(false);
+    isFinishingRef.current = false;
+  }, []);
+
+  const loadQuizForCourse = useCallback(
+    async (courseObj: Course | null) => {
+      const prefix = getUserStoragePrefix();
+      const targetCourseId = courseObj?.id ? String(courseObj.id) : "";
+      const options: CourseQuizOption[] = [];
+
+      const isRealCourseId =
+        targetCourseId &&
+        !targetCourseId.startsWith("c-") &&
+        !targetCourseId.startsWith("course-");
+
+      if (isRealCourseId) {
+        try {
+          const kits = await studyService.getStudyKits(targetCourseId);
+          if (Array.isArray(kits)) {
+            kits.forEach((sk: any, idx: number) => {
+              const qs: QuestionItem[] = [];
+              const titles: string[] = [];
+              (sk.topics || []).forEach((tk: any) => {
+                if (tk.chapterTitle && !titles.includes(tk.chapterTitle)) {
+                  titles.push(tk.chapterTitle);
+                }
+                (tk.quiz || []).forEach((q: ClientQuizQuestion) => {
+                  qs.push(mapClientQuestion({ ...q, chapterTitle: tk.chapterTitle || q.chapterTitle }));
+                });
+              });
+              if (qs.length > 0 && sk.kitId) {
+                options.push({
+                  kitId: sk.kitId,
+                  label: titles.length > 0 ? titles.join(", ") : `${courseObj?.name || "Course"} Quiz #${idx + 1}`,
+                  language: sk.language,
+                  questions: qs,
+                });
+              }
+            });
+          }
+        } catch {}
+      }
+
+      // Per-course saved quiz metadata fallback
+      if (options.length === 0 && targetCourseId) {
+        try {
+          const rawCourseQuiz = localStorage.getItem(`sg-${prefix}-course-quiz-${targetCourseId}`);
+          if (rawCourseQuiz) {
+            const parsed = JSON.parse(rawCourseQuiz);
+            if (parsed?.kitId && !String(parsed.kitId).startsWith("kit-") && !String(parsed.kitId).startsWith("local-")) {
+              const qs = await studyService.getQuizQuestions(parsed.kitId).catch(() => []);
+              if (Array.isArray(qs) && qs.length > 0) {
+                options.push({
+                  kitId: parsed.kitId,
+                  label: parsed.chapterTitle || courseObj?.name || "Course Quiz",
+                  language: parsed.language,
+                  questions: qs.map(mapClientQuestion),
+                });
+              }
+            } else if (Array.isArray(parsed?.questions) && parsed.questions.length > 0) {
+              options.push({
+                kitId: parsed.kitId || `local-${targetCourseId}`,
+                label: parsed.chapterTitle || courseObj?.name || "Course Quiz",
+                language: parsed.language,
+                questions: parsed.questions,
+              });
+            }
+          }
+        } catch {}
+      }
+
+      // Backward-compatible single kit fallback when no per-course kits are stored
+      if (options.length === 0) {
+        const savedKit =
+          (targetCourseId ? localStorage.getItem(`sg-${prefix}-course-kit-${targetCourseId}`) : null) ||
+          localStorage.getItem(`sg-${prefix}-active-kit`) ||
+          localStorage.getItem("sg-active-kit");
+        const validServerKit =
+          savedKit && !savedKit.startsWith("local-") && !savedKit.startsWith("kit-")
+            ? savedKit
+            : null;
+        if (validServerKit) {
+          try {
+            const qs = await studyService.getQuizQuestions(validServerKit);
+            if (Array.isArray(qs) && qs.length > 0) {
+              options.push({
+                kitId: validServerKit,
+                label: courseObj?.name || "Chapter Quiz",
+                language:
+                  localStorage.getItem(`sg-${prefix}-active-kit-lang`) ||
+                  localStorage.getItem("sg-active-kit-lang") ||
+                  undefined,
+                questions: qs.map(mapClientQuestion),
+              });
+            }
+          } catch {}
+        }
+      }
+
+      setCourseQuizzes(options);
+      if (options.length > 0) {
+        const first = options[0]!;
+        const serverId = first.kitId && !first.kitId.startsWith("local-") ? first.kitId : null;
+        setKitId(serverId);
+        if (first.language === "ar" || first.language === "en") {
+          setKitLang(first.language);
+        }
+        setAllQuizQuestions(first.questions);
+        resetSessionState(first.questions, false);
+      } else {
+        setKitId(null);
+        setAllQuizQuestions([]);
+        resetSessionState([], false);
+      }
+    },
+    [resetSessionState]
+  );
+
   useEffect(() => {
+    const enrolledCourses = getUserCourses();
     const enrolled = hasUserEnrolledCourses();
     const uploaded = hasUserUploadedMaterial();
     setHasCourses(enrolled);
@@ -89,70 +232,50 @@ function Quiz() {
     setPastScores(getQuizScores());
     setLastSavedScore(getLastQuizScore());
 
-    if (enrolled) {
+    const init = async () => {
+      let list = enrolledCourses;
       try {
-        const prefix = getUserStoragePrefix();
-        const storedLang =
-          localStorage.getItem(`sg-${prefix}-active-kit-lang`) ||
-          localStorage.getItem("sg-active-kit-lang");
-        if (storedLang === "ar" || storedLang === "en") {
-          setKitLang(storedLang);
-        }
-        const savedKit =
-          localStorage.getItem(`sg-${prefix}-active-kit`) ||
-          localStorage.getItem("sg-active-kit");
-        const validServerKit =
-          savedKit && !savedKit.startsWith("local-") && !savedKit.startsWith("kit-")
-            ? savedKit
-            : null;
-
-        if (validServerKit) {
-          setKitId(validServerKit);
-          studyService
-            .getQuizQuestions(validServerKit)
-            .then((qs) => {
-              if (Array.isArray(qs) && qs.length > 0) {
-                setQuestions(qs.map(mapClientQuestion));
-                return;
-              }
-              const activeQuizRaw =
-                localStorage.getItem(`sg-${prefix}-active-quiz`) ||
-                localStorage.getItem("sg-active-quiz");
-              if (activeQuizRaw) {
-                const parsed = JSON.parse(activeQuizRaw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  setQuestions(parsed);
-                }
-              }
-            })
-            .catch(() => {
-              const activeQuizRaw =
-                localStorage.getItem(`sg-${prefix}-active-quiz`) ||
-                localStorage.getItem("sg-active-quiz");
-              if (activeQuizRaw) {
-                try {
-                  const parsed = JSON.parse(activeQuizRaw);
-                  if (Array.isArray(parsed) && parsed.length > 0) {
-                    setQuestions(parsed);
-                  }
-                } catch {}
-              }
-            });
-          return;
-        }
-
-        const activeQuizRaw =
-          localStorage.getItem(`sg-${prefix}-active-quiz`) ||
-          localStorage.getItem("sg-active-quiz");
-        if (activeQuizRaw) {
-          const parsedQuestions = JSON.parse(activeQuizRaw);
-          if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
-            setQuestions(parsedQuestions);
-          }
+        const remote = await browseService.getEnrolledCourses();
+        if (Array.isArray(remote) && remote.length > 0) {
+          list = remote;
         }
       } catch {}
+      setCourses(list);
+
+      const prefix = getUserStoragePrefix();
+      const storedLang =
+        localStorage.getItem(`sg-${prefix}-active-kit-lang`) ||
+        localStorage.getItem("sg-active-kit-lang");
+      if (storedLang === "ar" || storedLang === "en") {
+        setKitLang(storedLang);
+      }
+
+      const preferredCourseId =
+        localStorage.getItem(`sg-${prefix}-selected-quiz-course-id`) ||
+        (getActiveCourse()?.id ? String(getActiveCourse()?.id) : "") ||
+        (list[0]?.id ? String(list[0].id) : "");
+
+      const matched = list.find((c) => String(c.id) === preferredCourseId) || list[0] || null;
+      if (matched) {
+        setSelectedCourseId(String(matched.id));
+        await loadQuizForCourse(matched);
+      } else if (enrolled) {
+        await loadQuizForCourse(null);
+      }
+    };
+
+    init();
+  }, [loadQuizForCourse]);
+
+  const handleSelectQuizKit = (opt: CourseQuizOption) => {
+    const serverId = opt.kitId && !opt.kitId.startsWith("local-") ? opt.kitId : null;
+    setKitId(serverId);
+    if (opt.language === "ar" || opt.language === "en") {
+      setKitLang(opt.language);
     }
-  }, []);
+    setAllQuizQuestions(opt.questions);
+    resetSessionState(opt.questions, false);
+  };
 
   const handleFinish = async () => {
     if (finished || isFinishingRef.current) return;
@@ -163,7 +286,7 @@ function Quiz() {
     let pct = total > 0 ? Math.round((finalScore / total) * 100) : 0;
     let earnedXp = 0;
 
-    if (kitId) {
+    if (kitId && !isRetryWrongMode) {
       try {
         const res = await studyService.submitQuiz(kitId, answers);
         finalScore = res.score;
@@ -190,31 +313,30 @@ function Quiz() {
     setXpAwardedThisSession(earnedXp);
     setFinished(true);
 
-    const prefix = getUserStoragePrefix();
-    const activeCourse = getActiveCourse();
-    const courseName =
-      activeCourse?.name ||
-      localStorage.getItem(`sg-${prefix}-active-course-name`) ||
-      localStorage.getItem("sg-active-course-name") ||
-      "Course Practice";
+    if (!isRetryWrongMode) {
+      const selectedCourseObj = courses.find((c) => String(c.id) === selectedCourseId);
+      const courseName = selectedCourseObj?.name || getActiveCourse()?.name || "Course Practice";
 
-    const scoreRecord: SavedQuizScore = {
-      id: `quiz-${Date.now()}`,
-      date: new Date().toISOString(),
-      courseName,
-      score: finalScore,
-      total,
-      percentage: pct,
-      xpAwarded: earnedXp,
-    };
+      const scoreRecord: SavedQuizScore = {
+        id: `quiz-${Date.now()}`,
+        date: new Date().toISOString(),
+        courseName,
+        score: finalScore,
+        total,
+        percentage: pct,
+        xpAwarded: earnedXp,
+      };
 
-    saveQuizScore(scoreRecord);
-    setLastSavedScore(scoreRecord);
-    setPastScores(getQuizScores());
-    if (earnedXp > 0) {
-      toast.success(`Quiz passed! Server awarded +${earnedXp} XP (${finalScore}/${total}) ✨`);
+      saveQuizScore(scoreRecord);
+      setLastSavedScore(scoreRecord);
+      setPastScores(getQuizScores());
+      if (earnedXp > 0) {
+        toast.success(`Quiz passed! Server awarded +${earnedXp} XP (${finalScore}/${total}) ✨`);
+      } else {
+        toast.success(`Quiz submitted (${finalScore}/${total}) ✨`);
+      }
     } else {
-      toast.success(`Quiz submitted (${finalScore}/${total}) ✨`);
+      toast.success(`Wrong-answer retry complete (${finalScore}/${total}) ✨`);
     }
   };
 
@@ -273,19 +395,66 @@ function Quiz() {
     );
   }
 
+  const courseSwitcher = courses.length > 0 && (
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card/70 p-2.5">
+      <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground px-1">
+        <BookOpen className="h-3.5 w-3.5 text-primary" />
+        <span>Course:</span>
+      </div>
+      <select
+        aria-label="Select quiz course"
+        value={selectedCourseId}
+        onChange={async (e) => {
+          const nextId = e.target.value;
+          setSelectedCourseId(nextId);
+          const prefix = getUserStoragePrefix();
+          localStorage.setItem(`sg-${prefix}-selected-quiz-course-id`, nextId);
+          const nextCourse = courses.find((c) => String(c.id) === nextId) || null;
+          await loadQuizForCourse(nextCourse);
+        }}
+        className="rounded-lg border border-border/70 bg-background px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/40"
+      >
+        {courses.map((c) => (
+          <option key={c.id} value={String(c.id)}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+
+      {courseQuizzes.length > 1 && (
+        <select
+          aria-label="Select chapter quiz"
+          value={kitId || ""}
+          onChange={(e) => {
+            const chosen = courseQuizzes.find((oq) => oq.kitId === e.target.value);
+            if (chosen) handleSelectQuizKit(chosen);
+          }}
+          className="rounded-lg border border-border/70 bg-background px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          {courseQuizzes.map((oq) => (
+            <option key={oq.kitId} value={oq.kitId}>
+              {oq.label} ({oq.questions.length} Qs)
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+
   if (!questions || questions.length === 0) {
     return (
       <div className="mx-auto max-w-xl">
         <PageTitle title="Quiz" sub="Active Recall Practice" />
+        {courseSwitcher}
         <Card className="flex flex-col items-center py-10 text-center">
           <Genie pose="mid" className="mb-4 h-24 w-24" />
           <h2 className="text-xl font-semibold text-foreground">
-            {pastScores.length > 0 ? "Saved Quiz History" : "No active quizzes"}
+            {pastScores.length > 0 ? "Saved Quiz History" : "No active quizzes for this course"}
           </h2>
           <p className="mt-1 max-w-sm text-sm text-muted-foreground">
             {pastScores.length > 0
-              ? `You have completed and saved ${pastScores.length} quizzes. Select a course to generate a new quiz!`
-              : "Once you enroll in courses and generate a study kit, quizzes will appear here to test your retention and earn XP."}
+              ? `You have completed and saved ${pastScores.length} quizzes. Select a course or generate a new chapter quiz!`
+              : "Once you generate a quiz from a course's chapters, it will appear here scoped to that course."}
           </p>
 
           {pastScores.length > 0 && (
@@ -334,14 +503,19 @@ function Quiz() {
 
   if (finished) {
     const pct = Math.round((score / questions.length) * 100);
+    const wrongQuestions = questions.filter((qItem) => !questionResults[qItem.id]?.correct);
+
     return (
-      <div className="mx-auto max-w-xl">
+      <div className="mx-auto max-w-2xl" dir={isRtlContent(questions[0]?.q, kitLang) ? "rtl" : "ltr"}>
+        {courseSwitcher}
         <Card className="flex flex-col items-center py-10 text-center">
           <Genie pose={pct >= 70 ? "high" : pct >= 40 ? "mid" : "low"} className="h-32 w-32" />
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="h-3.5 w-3.5" /> Server Graded & Saved
           </div>
-          <h1 className="mt-2 text-3xl font-semibold">Quiz complete!</h1>
+          <h1 className="mt-2 text-3xl font-semibold">
+            {isRetryWrongMode ? "Retry wrong complete!" : "Quiz complete!"}
+          </h1>
           <div className="my-6">
             <ProgressRing value={pct}>
               <div className="font-display text-4xl font-semibold">
@@ -363,6 +537,44 @@ function Quiz() {
               <div className="text-xs font-bold">Server XP</div>
             </div>
           </div>
+
+          {wrongQuestions.length > 0 && (
+            <div className="mt-6 w-full rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-left" data-testid="wrong-answers-review">
+              <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-destructive mb-3">
+                <span>Review Wrong Answers ({wrongQuestions.length})</span>
+              </div>
+              <div className="space-y-3">
+                {wrongQuestions.map((wq) => {
+                  const res = questionResults[wq.id];
+                  const userAns = answers.find((a) => a.questionId === wq.id);
+                  const userAnswerDisplay =
+                    userAns?.answerText ||
+                    (userAns?.selectedOptionIndex != null && wq.options
+                      ? wq.options[userAns.selectedOptionIndex]
+                      : "Unanswered");
+                  const correctAnswerDisplay =
+                    res?.correctAnswerText ||
+                    (res?.correctOptionIndex != null && wq.options
+                      ? wq.options[res.correctOptionIndex]
+                      : "N/A");
+                  return (
+                    <div key={wq.id} className="rounded-lg border border-border/60 bg-background p-3 text-xs space-y-1.5" dir={isRtlContent(wq.q, kitLang) ? "rtl" : "ltr"}>
+                      <div className="font-bold text-foreground">{wq.q}</div>
+                      <div className="text-destructive">
+                        Your answer: <span className="font-semibold">{userAnswerDisplay}</span>
+                      </div>
+                      <div className="text-emerald-600 dark:text-emerald-400">
+                        Correct answer: <span className="font-semibold">{correctAnswerDisplay}</span>
+                      </div>
+                      {res?.explanation && (
+                        <div className="text-muted-foreground leading-relaxed">{res.explanation}</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {pastScores.length > 1 && (
             <div className="mt-6 w-full rounded-xl border border-border bg-card/60 p-4 text-left">
@@ -393,24 +605,29 @@ function Quiz() {
               </div>
             </div>
           )}
-          <Button
-            variant="magic"
-            className="mt-6"
-            onClick={() => {
-              setI(0);
-              setPick(null);
-              setShortInput("");
-              setShortSubmitted(false);
-              setQuestionResults({});
-              setScore(0);
-              setXpAwardedThisSession(0);
-              setAnswers([]);
-              setFinished(false);
-              isFinishingRef.current = false;
-            }}
-          >
-            <RotateCcw /> Retry
-          </Button>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            {wrongQuestions.length > 0 && (
+              <Button
+                variant="destructive"
+                data-testid="retry-wrong-only"
+                onClick={() => resetSessionState(wrongQuestions, true)}
+              >
+                <RotateCcw className="mr-1.5 h-4 w-4" /> Retry Wrong Only ({wrongQuestions.length})
+              </Button>
+            )}
+            <Button
+              variant="magic"
+              onClick={() =>
+                resetSessionState(
+                  allQuizQuestions.length > 0 ? allQuizQuestions : questions,
+                  false
+                )
+              }
+            >
+              <RotateCcw className="mr-1.5 h-4 w-4" /> Retry Full Quiz
+            </Button>
+          </div>
         </Card>
       </div>
     );
@@ -511,9 +728,16 @@ function Quiz() {
 
   return (
     <div className="mx-auto max-w-2xl" dir={isRtl ? "rtl" : "ltr"}>
+      {courseSwitcher}
       <PageTitle
         title="Quiz"
-        sub={lastSavedScore ? `Chapter review · Last score: ${lastSavedScore.score}/${lastSavedScore.total} (${lastSavedScore.percentage}%)` : "Chapter review"}
+        sub={
+          isRetryWrongMode
+            ? "Retrying missed questions"
+            : lastSavedScore
+            ? `Chapter review · Last score: ${lastSavedScore.score}/${lastSavedScore.total} (${lastSavedScore.percentage}%)`
+            : "Chapter review"
+        }
         right={
           <span className="text-sm font-bold text-muted-foreground">
             {i + 1} / {questions.length}
@@ -546,7 +770,6 @@ function Quiz() {
 
         <h2 className="text-xl sm:text-2xl font-semibold leading-relaxed">{q.q}</h2>
 
-        {/* 1. TRUE / FALSE RENDER */}
         {isTrueFalse && (
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
@@ -591,7 +814,6 @@ function Quiz() {
           </div>
         )}
 
-        {/* 2. SHORT ANSWER RENDER */}
         {isShort && (
           <div className="mt-6 space-y-3">
             <div className="relative">
@@ -632,7 +854,6 @@ function Quiz() {
           </div>
         )}
 
-        {/* 3. MULTIPLE CHOICE (MCQ) RENDER */}
         {!isTrueFalse && !isShort && (
           <div className="mt-6 grid gap-3">
             {(q.options || []).map((o, idx) => {
@@ -671,7 +892,6 @@ function Quiz() {
           </div>
         )}
 
-        {/* SERVER-GRADED FEEDBACK & EXPLANATION */}
         {answered && currentResult && (
           <div
             className={cn(

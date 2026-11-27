@@ -132,10 +132,13 @@ export interface ReviewResponse {
 }
 
 export interface ProgressResponse {
-  newCount?: number;
-  learningCount?: number;
-  matureCount?: number;
-  totalCards?: number;
+  totalCards: number;
+  newCards: number;
+  learningCards: number;
+  matureCards: number;
+  dueToday: number;
+  averageEaseFactor?: number;
+  nextDueDate?: string | null;
 }
 
 export interface ClientQuizQuestion {

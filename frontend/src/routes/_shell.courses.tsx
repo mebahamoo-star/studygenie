@@ -2072,15 +2072,21 @@ function JoinChallenge({
 
       const prefix = getUserStoragePrefix();
       saveActiveCourse(course);
-      localStorage.setItem("sg-active-course-id", String(course.id));
-      localStorage.setItem("sg-active-course-name", course.name);
-      localStorage.setItem(`sg-${prefix}-active-course-id`, String(course.id));
-      localStorage.setItem(`sg-${prefix}-active-course-name`, course.name);
-      localStorage.setItem("sg-active-quiz", JSON.stringify(generatedQuestions));
-      localStorage.setItem(`sg-${prefix}-active-quiz`, JSON.stringify(generatedQuestions));
+      localStorage.setItem(`sg-${prefix}-selected-quiz-course-id`, String(course.id));
       localStorage.setItem("sg-active-kit-lang", kitLanguage);
       localStorage.setItem(`sg-${prefix}-active-kit-lang`, kitLanguage);
+
+      const courseQuizEntry = {
+        kitId,
+        courseId: course.id,
+        courseName: course.name,
+        chapterTitle: selectedTopics.map((t) => t.name).join(", "),
+        language: kitLanguage,
+        questions: generatedQuestions,
+      };
+      localStorage.setItem(`sg-${prefix}-course-quiz-${course.id}`, JSON.stringify(courseQuizEntry));
       if (kitId) {
+        localStorage.setItem(`sg-${prefix}-course-kit-${course.id}`, kitId);
         localStorage.setItem("sg-active-kit", kitId);
         localStorage.setItem(`sg-${prefix}-active-kit`, kitId);
       }
@@ -2159,19 +2165,20 @@ function JoinChallenge({
       }
 
       const prefix = getUserStoragePrefix();
-      localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(generatedCards));
-      localStorage.setItem("sg-active-cards", JSON.stringify(generatedCards));
+      saveActiveCourse(course);
       localStorage.setItem("sg-active-kit-lang", kitLanguage);
       localStorage.setItem(`sg-${prefix}-active-kit-lang`, kitLanguage);
       if (serverKitId) {
+        localStorage.setItem(`sg-${prefix}-course-kit-${course.id}`, serverKitId);
         localStorage.setItem(`sg-${prefix}-active-kit`, serverKitId);
         localStorage.setItem("sg-active-kit", serverKitId);
       }
 
       const allKits = getUserTaskKits();
-      const kitKey = course.name.toLowerCase().trim();
+      const kitKey = `course-${String(course.id)}`;
       allKits[kitKey] = {
         kitId: serverKitId,
+        courseId: course.id,
         language: kitLanguage,
         flashcards: generatedCards,
         quiz: [],

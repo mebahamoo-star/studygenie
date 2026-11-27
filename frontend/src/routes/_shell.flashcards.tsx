@@ -1,15 +1,12 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
   Brain,
-  Check,
   CheckCircle2,
-  GraduationCap,
-  HelpCircle,
   Loader2,
   AlertTriangle,
   Lock,
@@ -17,7 +14,6 @@ import {
   Upload,
   RotateCcw,
   Sparkles,
-  Trophy,
 } from "lucide-react";
 import { playCelebrationSound } from "@/lib/sound";
 import { toast } from "sonner";
@@ -47,7 +43,7 @@ import {
   saveUserTaskKits,
   isCourseMaterialUploaded,
 } from "@/lib/courses-util";
-import type { Course, Sm2Rating } from "@/lib/api/types";
+import type { Course, ProgressResponse, Sm2Rating } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_shell/flashcards")({
@@ -55,19 +51,21 @@ export const Route = createFileRoute("/_shell/flashcards")({
   component: Flashcards,
 });
 
-const ratings: { label: string; cls: string; sub: string; rating: Sm2Rating }[] = [
-  { label: "Again", cls: "bg-destructive text-destructive-foreground", sub: "<1m", rating: "AGAIN" },
-  { label: "Hard", cls: "bg-warning text-primary-foreground", sub: "6m", rating: "HARD" },
-  { label: "Good", cls: "bg-success text-primary-foreground", sub: "1d", rating: "GOOD" },
-  { label: "Easy", cls: "bg-info text-primary-foreground", sub: "4d", rating: "EASY" },
+const ratings: { label: string; keyHint: string; cls: string; sub: string; rating: Sm2Rating }[] = [
+  { label: "Again", keyHint: "1", cls: "bg-destructive text-destructive-foreground", sub: "<1m", rating: "AGAIN" },
+  { label: "Hard", keyHint: "2", cls: "bg-warning text-primary-foreground", sub: "6m", rating: "HARD" },
+  { label: "Good", keyHint: "3", cls: "bg-success text-primary-foreground", sub: "1d", rating: "GOOD" },
+  { label: "Easy", keyHint: "4", cls: "bg-info text-primary-foreground", sub: "4d", rating: "EASY" },
 ];
 
 interface FlashcardItem {
   id: string;
   q: string;
   a: string;
-  chapter?: string;
-  hint?: string;
+  chapter?: string | undefined;
+  hint?: string | undefined;
+  isDue?: boolean | undefined;
+  requeued?: boolean | undefined;
 }
 
 function isRtlContent(text?: string, langHint?: string): boolean {
@@ -85,6 +83,7 @@ function Flashcards() {
   const [kitId, setKitId] = useState<string | null>(null);
   const [kitLang, setKitLang] = useState<"en" | "ar">(lang === "ar" ? "ar" : "en");
   const [genLanguage, setGenLanguage] = useState<"en" | "ar">(lang === "ar" ? "ar" : "en");
+  const [deckProgress, setDeckProgress] = useState<ProgressResponse | null>(null);
   const [sessionCompleted, setSessionCompleted] = useState(false);
   const [sessionStats, setSessionStats] = useState({
     again: 0,
@@ -94,21 +93,26 @@ function Flashcards() {
     totalPoints: 0,
   });
 
+  // Track cards already rated against the backend in this session so requeued "Again" cards aren't double-submitted
+  const reviewedOnServerRef = useRef<Set<string>>(new Set());
+
   // Generate more modal state
   const [genModalOpen, setGenModalOpen] = useState(false);
   const [requestedCount, setRequestedCount] = useState<number>(10);
   const [selectedTopicRef, setSelectedTopicRef] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Load enrolled courses for the authenticated user from cloud database
+  // Load enrolled courses for the authenticated user
   useEffect(() => {
     const loadUserCourses = async () => {
       let enrolled: Course[] = [];
       try {
         const remote = await browseService.getEnrolledCourses();
         enrolled = remote || [];
-        saveUserCourses(enrolled);
       } catch {
+        enrolled = getUserCourses();
+      }
+      if (enrolled.length === 0) {
         enrolled = getUserCourses();
       }
       setCourses(enrolled);
@@ -117,20 +121,54 @@ function Flashcards() {
     loadUserCourses();
   }, []);
 
-  // When a user selects a course, load flashcards specifically for that course
+  const refreshDeckMeta = useCallback(async (activeKitId: string, loadedCards: FlashcardItem[]) => {
+    const [progRes, dueRes] = await Promise.allSettled([
+      studyService.getProgress(activeKitId),
+      studyService.getDueCards(activeKitId, 200),
+    ]);
+
+    if (progRes.status === "fulfilled" && progRes.value) {
+      setDeckProgress(progRes.value);
+    }
+
+    if (dueRes.status === "fulfilled" && Array.isArray(dueRes.value)) {
+      const dueOrder = new Map<string, number>();
+      dueRes.value.forEach((d: any, idx: number) => {
+        if (d?.cardId) dueOrder.set(String(d.cardId), idx);
+      });
+
+      const sorted = [...loadedCards]
+        .map((c) => ({ ...c, isDue: dueOrder.has(c.id) }))
+        .sort((a, b) => {
+          const aDue = dueOrder.has(a.id);
+          const bDue = dueOrder.has(b.id);
+          if (aDue && !bDue) return -1;
+          if (!aDue && bDue) return 1;
+          if (aDue && bDue) return (dueOrder.get(a.id) ?? 0) - (dueOrder.get(b.id) ?? 0);
+          return 0;
+        });
+      return sorted;
+    }
+    return loadedCards;
+  }, []);
+
+  // Load flashcards strictly scoped by courseId (no fuzzy name matching or global fallback)
   const handleSelectCourse = async (course: Course) => {
     if (!isCourseMaterialUploaded(course)) {
       toast.warning(`Cannot generate flashcards: Please upload the syllabus for "${course.name}" first.`);
     }
     setSelectedCourse(course);
     setKitId(null);
+    setDeckProgress(null);
     setCardIndex(0);
     setFlip(false);
     setSessionCompleted(false);
     setSessionStats({ again: 0, hard: 0, good: 0, easy: 0, totalPoints: 0 });
+    reviewedOnServerRef.current = new Set();
 
-    const courseCards: FlashcardItem[] = [];
+    let courseCards: FlashcardItem[] = [];
     let resolvedKitId: string | null = null;
+    let resolvedLang: "en" | "ar" = lang === "ar" ? "ar" : "en";
     const isRealId = course.id && !String(course.id).startsWith("c-") && !String(course.id).startsWith("course-");
 
     // 1. Load persisted study kits from server scoped by courseId
@@ -138,11 +176,17 @@ function Flashcards() {
       try {
         const serverKits = await studyService.getStudyKits(course.id);
         if (Array.isArray(serverKits) && serverKits.length > 0) {
-          resolvedKitId = serverKits[0].kitId || null;
-          serverKits.forEach((sk: any) => {
-            (sk.topics || []).forEach((tk: any) => {
+          const primaryKit = serverKits.find((sk: any) =>
+            (sk.topics || []).some((t: any) => Array.isArray(t.flashcards) && t.flashcards.length > 0)
+          ) || serverKits[0];
+          resolvedKitId = primaryKit?.kitId || null;
+          if (primaryKit?.language === "ar" || primaryKit?.language === "en") {
+            resolvedLang = primaryKit.language;
+          }
+          if (primaryKit?.topics) {
+            primaryKit.topics.forEach((tk: any) => {
               (tk.flashcards || []).forEach((fc: any) => {
-                if (fc.front && !courseCards.some((c) => c.id === fc.cardId || c.q === fc.front)) {
+                if (fc.front && !courseCards.some((c) => c.id === fc.cardId)) {
                   courseCards.push({
                     id: fc.cardId,
                     q: fc.front,
@@ -152,82 +196,46 @@ function Flashcards() {
                 }
               });
             });
-          });
+          }
         }
       } catch {}
     }
 
-    // 2. Supplement/fallback from user-scoped local kits if server returned none
-    const allKits = getUserTaskKits();
-    const courseNorm = (course.name || "").toLowerCase().trim();
-    const courseIdStr = String(course.id || "");
-    const topicNames = (course.topics || []).map((t) => (t.name || "").toLowerCase().trim());
-
+    // 2. Fallback strictly by courseId in user-scoped cache (no fuzzy name matching, no global sg-active-cards)
     if (courseCards.length === 0) {
-      Object.entries(allKits).forEach(([key, kit]: [string, any]) => {
-        const kNorm = key.toLowerCase().trim();
-        const belongsToCourse =
-          kNorm.includes(courseNorm) ||
-          courseNorm.includes(kNorm) ||
-          kNorm.startsWith(courseIdStr) ||
-          topicNames.some((tName) => tName && (kNorm.includes(tName) || tName.includes(kNorm)));
-
-        if (belongsToCourse && kit?.flashcards && Array.isArray(kit.flashcards)) {
-          if (!resolvedKitId && kit.kitId && !String(kit.kitId).startsWith("kit-") && !String(kit.kitId).startsWith("local-")) {
-            resolvedKitId = kit.kitId;
-          }
-          kit.flashcards.forEach((f: any, idx: number) => {
-            if (!courseCards.some((c) => c.q === (f.q || f.front || f.question))) {
-              courseCards.push({
-                id: f.cardId || f.id || `${key}-${idx}`,
-                q: f.q || f.front || f.question,
-                a: f.a || f.back || f.answer,
-                chapter: f.chapter || key,
-              });
-            }
+      const allKits = getUserTaskKits();
+      const exactKey = `course-${String(course.id)}`;
+      const courseKit = allKits[exactKey];
+      if (courseKit?.flashcards && Array.isArray(courseKit.flashcards)) {
+        if (courseKit.kitId && !String(courseKit.kitId).startsWith("kit-") && !String(courseKit.kitId).startsWith("local-")) {
+          resolvedKitId = courseKit.kitId;
+        }
+        if (courseKit.language === "ar" || courseKit.language === "en") {
+          resolvedLang = courseKit.language;
+        }
+        courseKit.flashcards.forEach((f: any, idx: number) => {
+          courseCards.push({
+            id: f.cardId || f.id || `${exactKey}-${idx}`,
+            q: f.q || f.front || f.question,
+            a: f.a || f.back || f.answer,
+            chapter: f.chapter || course.name,
           });
-        }
-      });
-    }
-
-    // Fallback if no direct course kits match yet
-    if (courseCards.length === 0) {
-      const prefix = getUserStoragePrefix();
-      const activeCardsRaw = localStorage.getItem(`sg-${prefix}-active-cards`) || localStorage.getItem("sg-active-cards");
-      if (activeCardsRaw) {
-        try {
-          const parsed = JSON.parse(activeCardsRaw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            parsed.forEach((f: any, idx: number) => {
-              if (!courseCards.some((c) => c.q === (f.q || f.front))) {
-                courseCards.push({
-                  id: f.cardId || f.id || `active-${idx}`,
-                  q: f.q || f.front,
-                  a: f.a || f.back,
-                  chapter: course.name,
-                });
-              }
-            });
-          }
-        } catch {}
-      }
-      if (!resolvedKitId) {
-        const activeKit = localStorage.getItem(`sg-${prefix}-active-kit`) || localStorage.getItem("sg-active-kit");
-        if (activeKit && !activeKit.startsWith("kit-") && !activeKit.startsWith("local-")) {
-          resolvedKitId = activeKit;
-        }
+        });
       }
     }
 
     setKitId(resolvedKitId);
+    setKitLang(resolvedLang);
 
-    // STRICT LIMIT: strictly enforce requested deck limit (default 10)
+    if (resolvedKitId && courseCards.length > 0) {
+      courseCards = await refreshDeckMeta(resolvedKitId, courseCards);
+    }
+
     const targetSessionLimit = Math.min(25, Math.max(1, requestedCount || 10));
     setCards(courseCards.slice(0, targetSessionLimit));
 
-    // Fetch topics if course topics are not populated
     if (!course.topics || course.topics.length === 0) {
-      if (course.id && !String(course.id).startsWith("c-") && !String(course.id).startsWith("course-")) {
+      if (isRealId) {
         try {
           const freshTopics = await browseService.getCourseTopics(course.id);
           if (freshTopics && freshTopics.length > 0) {
@@ -238,19 +246,23 @@ function Flashcards() {
     }
   };
 
-  const handleRate = async (r: Sm2Rating) => {
-    setFlip(false);
+  const handleRate = useCallback(async (r: Sm2Rating) => {
+    const currentCard = cards[cardIndex];
+    if (!currentCard) return;
 
+    setFlip(false);
     const ratingKey = r.toLowerCase() as "again" | "hard" | "good" | "easy";
     let earnedThisCard = 0;
 
-    const currentCard = cards[cardIndex];
-    if (kitId && currentCard?.id) {
+    if (kitId && currentCard.id && !reviewedOnServerRef.current.has(currentCard.id)) {
+      reviewedOnServerRef.current.add(currentCard.id);
       try {
         const res = await studyService.reviewCards(kitId, [{ cardId: currentCard.id, rating: r }]);
         if (res.counted > 0 && (r === "GOOD" || r === "EASY")) {
           earnedThisCard = 20;
         }
+        const prog = await studyService.getProgress(kitId).catch(() => null);
+        if (prog) setDeckProgress(prog);
         await refreshGamification();
       } catch {}
     }
@@ -261,23 +273,73 @@ function Flashcards() {
       totalPoints: prev.totalPoints + earnedThisCard,
     }));
 
+    if (r === "AGAIN") {
+      // Requeue "Again" cards at the end of the current session queue
+      setCards((prev) => [...prev, { ...currentCard, requeued: true }]);
+      setCardIndex((prev) => prev + 1);
+      toast.info("Card requeued for later in this session.");
+      return;
+    }
+
     if (cardIndex + 1 < cards.length) {
       setCardIndex((prev) => prev + 1);
     } else {
-      // Reached the end of the deck! Stop rolling around and finish the session cleanly!
       setSessionCompleted(true);
       try {
         playCelebrationSound();
       } catch {}
       toast.success("Deck completed! Fantastic job! 🎉");
     }
-  };
+  }, [cards, cardIndex, kitId, refreshGamification]);
+
+  // Keyboard shortcuts: Space to flip, 1-4 to rate when flipped
+  useEffect(() => {
+    if (!selectedCourse || cards.length === 0 || sessionCompleted || genModalOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.code === "Space" || e.key === " ") {
+        e.preventDefault();
+        setFlip((f) => !f);
+        return;
+      }
+
+      if (!flip) return;
+      if (e.key === "1") {
+        e.preventDefault();
+        handleRate("AGAIN");
+      } else if (e.key === "2") {
+        e.preventDefault();
+        handleRate("HARD");
+      } else if (e.key === "3") {
+        e.preventDefault();
+        handleRate("GOOD");
+      } else if (e.key === "4") {
+        e.preventDefault();
+        handleRate("EASY");
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedCourse, cards.length, sessionCompleted, genModalOpen, flip, handleRate]);
 
   const handleRestartDeck = () => {
     setCardIndex(0);
     setFlip(false);
     setSessionCompleted(false);
     setSessionStats({ again: 0, hard: 0, good: 0, easy: 0, totalPoints: 0 });
+    reviewedOnServerRef.current = new Set();
     toast.info("Deck reset. Starting fresh session! ✨");
   };
 
@@ -335,34 +397,33 @@ function Flashcards() {
         console.warn("AI engine generation failed:", err);
       }
 
-      // Strictly ensure flashcards are never fabricated without syllabus
       if (newFlashcards.length === 0) {
         toast.error("Could not generate flashcards from syllabus. Please ensure the syllabus contains readable chapter text.");
         setIsGenerating(false);
         return;
       }
 
-      // Save to user storage with real server kitId
       const prefix = getUserStoragePrefix();
       const allKits = getUserTaskKits();
-      const kitKey = chapterTitle.toLowerCase().trim();
+      const kitKey = `course-${String(selectedCourse.id)}`;
       allKits[kitKey] = {
         kitId: serverKitId,
+        courseId: selectedCourse.id,
         language: genLanguage,
         flashcards: newFlashcards,
         quiz: [],
       };
       saveUserTaskKits(allKits);
-      localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(newFlashcards));
       localStorage.setItem(`sg-${prefix}-active-kit-lang`, genLanguage);
       localStorage.setItem("sg-active-kit-lang", genLanguage);
       setKitLang(genLanguage);
       if (serverKitId) {
-        localStorage.setItem(`sg-${prefix}-active-kit`, serverKitId);
-        localStorage.setItem("sg-active-kit", serverKitId);
+        localStorage.setItem(`sg-${prefix}-course-kit-${selectedCourse.id}`, serverKitId);
         setKitId(serverKitId);
+        newFlashcards = await refreshDeckMeta(serverKitId, newFlashcards);
       }
 
+      reviewedOnServerRef.current = new Set();
       newFlashcards = newFlashcards.slice(0, sanitizedCount);
       setCards(newFlashcards);
       setCardIndex(0);
@@ -371,16 +432,13 @@ function Flashcards() {
       setSessionStats({ again: 0, hard: 0, good: 0, easy: 0, totalPoints: 0 });
       setGenModalOpen(false);
       toast.success(`Generated ${newFlashcards.length} active-recall flashcards! ✨`);
-    } catch (err: any) {
+    } catch {
       toast.error("Failed to generate flashcards.");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // --------------------------------------------------------------------------
-  // SCREEN 1: Course Selection First (Matches Study Plan layout)
-  // --------------------------------------------------------------------------
   if (!selectedCourse) {
     return (
       <div className="mx-auto max-w-5xl">
@@ -426,7 +484,6 @@ function Flashcards() {
                           {course.code}
                         </span>
                       ) : <span />}
-
 
                       <StatusBadge status={course.status} />
                     </div>
@@ -478,14 +535,10 @@ function Flashcards() {
     );
   }
 
-  // --------------------------------------------------------------------------
-  // SCREEN 2: Flashcard Deck View for Selected Course
-  // --------------------------------------------------------------------------
   const currentCard = cards[cardIndex] || cards[0];
 
   return (
     <div className="mx-auto max-w-2xl">
-      {/* Top Navigation Bar: Back to Courses */}
       <div className="mb-4 flex items-center justify-between">
         <Button
           variant="outline"
@@ -574,7 +627,7 @@ function Flashcards() {
             Study Session Complete! 🎉
           </h2>
           <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-            You reviewed all {cards.length} active-recall flashcards for <span className="font-semibold text-foreground">{selectedCourse.name}</span>.
+            You completed active-recall flashcards for <span className="font-semibold text-foreground">{selectedCourse.name}</span>.
           </p>
 
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full max-w-md">
@@ -647,13 +700,46 @@ function Flashcards() {
         </Card>
       ) : (
         <>
+          {deckProgress && (
+            <div className="mb-4 grid grid-cols-4 gap-2 text-center" data-testid="deck-progress-counts">
+              <div className="rounded-xl border border-border/60 bg-card/80 px-2 py-2">
+                <div className="font-display text-base font-bold text-blue-600 dark:text-blue-400">{deckProgress.newCards}</div>
+                <div className="text-[10px] font-bold uppercase text-muted-foreground">New</div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/80 px-2 py-2">
+                <div className="font-display text-base font-bold text-amber-600 dark:text-amber-400">{deckProgress.learningCards}</div>
+                <div className="text-[10px] font-bold uppercase text-muted-foreground">Learning</div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/80 px-2 py-2">
+                <div className="font-display text-base font-bold text-emerald-600 dark:text-emerald-400">{deckProgress.matureCards}</div>
+                <div className="text-[10px] font-bold uppercase text-muted-foreground">Mature</div>
+              </div>
+              <div className="rounded-xl border border-primary/30 bg-primary/5 px-2 py-2">
+                <div className="font-display text-base font-bold text-primary">{deckProgress.dueToday}</div>
+                <div className="text-[10px] font-bold uppercase text-primary/80">Due Today</div>
+              </div>
+            </div>
+          )}
+
           <div className="mb-5 flex items-center justify-between rounded-2xl border bg-card/60 px-5 py-3 shadow-soft backdrop-blur">
             <div className="flex items-center gap-4">
               <div className="h-14 w-14 overflow-hidden rounded-xl bg-muted/50 p-1">
                 <Riffle play intensity={0.7} className="h-full w-full" />
               </div>
               <div>
-                <h3 className="text-sm font-bold">Interactive Deck</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold">Interactive Deck</h3>
+                  {currentCard?.isDue && (
+                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
+                      Due Now
+                    </span>
+                  )}
+                  {currentCard?.requeued && (
+                    <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                      Requeued
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {cards.length - cardIndex} {cards.length - cardIndex === 1 ? "card" : "cards"} remaining in this session
                 </p>
@@ -699,7 +785,7 @@ function Flashcards() {
                   {currentCard?.q}
                 </p>
                 <span className="mt-6 text-xs text-muted-foreground font-semibold">
-                  Click / Tap to flip
+                  Click / Tap or press <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">Space</kbd> to flip
                 </span>
               </div>
               <div
@@ -754,10 +840,11 @@ function Flashcards() {
                 key={r.label}
                 onClick={() => handleRate(r.rating)}
                 className={cn(
-                  "rounded-2xl py-3 font-bold shadow-soft transition hover:-translate-y-0.5",
+                  "rounded-2xl py-3 font-bold shadow-soft transition hover:-translate-y-0.5 relative",
                   r.cls
                 )}
               >
+                <span className="absolute right-2 top-1.5 text-[10px] font-mono opacity-75">{r.keyHint}</span>
                 {r.label}
                 <div className="text-xs font-semibold opacity-80">{r.sub}</div>
               </button>
@@ -766,7 +853,6 @@ function Flashcards() {
         </>
       )}
 
-      {/* Generate Flashcards Dialog (1 to 25 cards max) */}
       <Dialog open={genModalOpen} onOpenChange={setGenModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
