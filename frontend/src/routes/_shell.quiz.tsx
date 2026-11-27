@@ -55,11 +55,17 @@ function mapClientQuestion(q: ClientQuizQuestion): QuestionItem {
   };
 }
 
+function isRtlContent(text?: string, langHint?: string): boolean {
+  if (langHint === "ar") return true;
+  return Boolean(text && /[\u0600-\u06FF]/.test(text));
+}
+
 function Quiz() {
-  const { refreshGamification } = useApp();
+  const { refreshGamification, lang } = useApp();
   const [hasCourses, setHasCourses] = useState<boolean | null>(null);
   const [hasMaterial, setHasMaterial] = useState<boolean | null>(null);
   const [kitId, setKitId] = useState<string | null>(null);
+  const [kitLang, setKitLang] = useState<string>(lang);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [i, setI] = useState(0);
   const [pick, setPick] = useState<number | null>(null);
@@ -86,6 +92,12 @@ function Quiz() {
     if (enrolled) {
       try {
         const prefix = getUserStoragePrefix();
+        const storedLang =
+          localStorage.getItem(`sg-${prefix}-active-kit-lang`) ||
+          localStorage.getItem("sg-active-kit-lang");
+        if (storedLang === "ar" || storedLang === "en") {
+          setKitLang(storedLang);
+        }
         const savedKit =
           localStorage.getItem(`sg-${prefix}-active-kit`) ||
           localStorage.getItem("sg-active-kit");
@@ -495,8 +507,10 @@ function Quiz() {
     }
   };
 
+  const isRtl = isRtlContent(q.q, kitLang);
+
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl" dir={isRtl ? "rtl" : "ltr"}>
       <PageTitle
         title="Quiz"
         sub={lastSavedScore ? `Chapter review · Last score: ${lastSavedScore.score}/${lastSavedScore.total} (${lastSavedScore.percentage}%)` : "Chapter review"}
@@ -590,9 +604,10 @@ function Quiz() {
                     handleShortSubmit();
                   }
                 }}
-                placeholder="Type your answer here (press Enter to submit)..."
+                placeholder={isRtl ? "اكتب إجابتك هنا (اضغط Enter للإرسال)..." : "Type your answer here (press Enter to submit)..."}
                 className={cn(
-                  "h-14 text-base px-4 pr-32 rounded-xl transition font-medium",
+                  "h-14 text-base px-4 rounded-xl transition font-medium",
+                  isRtl ? "pl-32 text-right" : "pr-32",
                   answered && isCurrentCorrect && "border-emerald-500 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
                   answered && !isCurrentCorrect && "border-destructive bg-destructive/5 text-destructive"
                 )}
@@ -603,7 +618,7 @@ function Quiz() {
                   variant="magic"
                   disabled={!shortInput.trim() || gradingQuestion}
                   onClick={handleShortSubmit}
-                  className="absolute right-2 top-2 h-10 px-4 font-bold"
+                  className={cn("absolute top-2 h-10 px-4 font-bold", isRtl ? "left-2" : "right-2")}
                 >
                   {gradingQuestion ? "Grading..." : "Submit Answer"}
                 </Button>

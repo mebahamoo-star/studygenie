@@ -65,9 +65,9 @@ def _validate_and_normalize_kit(topic: TopicInput, result: StudyKitResult, rand:
             opts = ["True", "False"]
             correct_idx = q.correct_option_index
             ans_text = (q.correct_answer_text or "").strip().lower()
-            if ans_text in ("true", "t", "1"):
+            if ans_text in ("true", "t", "1", "صحيح", "نعم", "صح"):
                 correct_idx = 0
-            elif ans_text in ("false", "f", "0"):
+            elif ans_text in ("false", "f", "0", "خطأ", "خطا", "لا"):
                 correct_idx = 1
             elif correct_idx not in (0, 1):
                 correct_idx = 0
@@ -123,9 +123,11 @@ async def _generate_topic_kit(req: GenerateStudyKitRequest, topic: TopicInput, r
         feedback_parts.append(f"Course Difficulty: {req.course_difficulty}")
     feedback_context = "; ".join(feedback_parts) if feedback_parts else "Standard syllabus distribution"
 
+    target_lang = (getattr(req, "language", "en") or "en").strip() or "en"
     user_prompt = USER_PROMPT_TEMPLATE.format(
         course_name=req.course_name,
         chapter_title=topic.chapter_title,
+        language=target_lang,
         subtopics=", ".join(topic.subtopics) if topic.subtopics else "None",
         source_excerpt=topic.source_excerpt or "None",
         flashcards_per_topic=req.flashcards_per_topic,

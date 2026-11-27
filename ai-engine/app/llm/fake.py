@@ -63,36 +63,68 @@ class FakeProvider(Provider):
                 ]
             }
         elif schema_name == "StudyKitResult":
-            data = {
-                "flashcards": [
-                    {"front": "What is AI?", "back": "Artificial Intelligence"}
-                ],
-                "quiz": [
-                    {
-                        "type": "MCQ",
-                        "question": "Which is an AI subfield?",
-                        "options": ["Machine Learning", "Cooking", "Driving"],
-                        "correct_option_index": 0,
-                        "explanation": "ML is a subfield of AI."
-                    },
-                    {
-                        "type": "TRUE_FALSE",
-                        "question": "AI stands for Artificial Intelligence.",
-                        "options": ["True", "False"],
-                        "correct_option_index": 0,
-                        "correct_answer_text": "True",
-                        "explanation": "Standard acronym."
-                    },
-                    {
-                        "type": "SHORT_ANSWER",
-                        "question": "What does the letter P stand for in NLP?",
-                        "options": ["Processing"],
-                        "correct_option_index": 0,
-                        "correct_answer_text": "Processing",
-                        "explanation": "NLP stands for Natural Language Processing."
-                    }
-                ]
-            }
+            if "Target Output Language: ar" in user:
+                data = {
+                    "flashcards": [
+                        {"front": "ما هو الذكاء الاصطناعي؟", "back": "قدرة الأنظمة الحاسوبية على محاكاة الذكاء البشري."}
+                    ],
+                    "quiz": [
+                        {
+                            "type": "MCQ",
+                            "question": "أي مما يلي يُعد فرعاً من فروع الذكاء الاصطناعي؟",
+                            "options": ["التعلم الآلي", "الطبخ", "السباحة", "الرسم"],
+                            "correct_option_index": 0,
+                            "explanation": "التعلم الآلي فرع أساسي من الذكاء الاصطناعي."
+                        },
+                        {
+                            "type": "TRUE_FALSE",
+                            "question": "تستخدم الشبكات العصبية طبقات مترابطة لمعالجة البيانات.",
+                            "options": ["True", "False"],
+                            "correct_option_index": 0,
+                            "correct_answer_text": "True",
+                            "explanation": "الشبكات العصبية تتكون من عقد وطبقات مترابطة."
+                        },
+                        {
+                            "type": "SHORT_ANSWER",
+                            "question": "ما الاسم العربي لاختصار NLP؟",
+                            "options": ["معالجة اللغات الطبيعية"],
+                            "correct_option_index": 0,
+                            "correct_answer_text": "معالجة اللغات الطبيعية",
+                            "explanation": "NLP تعني معالجة اللغات الطبيعية."
+                        }
+                    ]
+                }
+            else:
+                data = {
+                    "flashcards": [
+                        {"front": "What is AI?", "back": "Artificial Intelligence"}
+                    ],
+                    "quiz": [
+                        {
+                            "type": "MCQ",
+                            "question": "Which is an AI subfield?",
+                            "options": ["Machine Learning", "Cooking", "Driving"],
+                            "correct_option_index": 0,
+                            "explanation": "ML is a subfield of AI."
+                        },
+                        {
+                            "type": "TRUE_FALSE",
+                            "question": "AI stands for Artificial Intelligence.",
+                            "options": ["True", "False"],
+                            "correct_option_index": 0,
+                            "correct_answer_text": "True",
+                            "explanation": "Standard acronym."
+                        },
+                        {
+                            "type": "SHORT_ANSWER",
+                            "question": "What does the letter P stand for in NLP?",
+                            "options": ["Processing"],
+                            "correct_option_index": 0,
+                            "correct_answer_text": "Processing",
+                            "explanation": "NLP stands for Natural Language Processing."
+                        }
+                    ]
+                }
         else:
             data = {}
 

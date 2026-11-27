@@ -44,17 +44,24 @@ FLASHCARD ARCHITECTURAL PRINCIPLES:
      * Provide a balanced mix of "MCQ", "TRUE_FALSE", and "SHORT_ANSWER" questions across the requested question count.
    - For all questions, provide a concise `explanation` (1-2 sentences) explaining why the answer is correct.
 
-5. STUDENT EXAM FEEDBACK & HIGH-YIELD CALIBRATION:
+5. LANGUAGE & MULTILINGUAL RULES:
+   - Strictly obey Target Output Language (`{language}`):
+     * If `ar` (Arabic): write all flashcard `front` & `back`, quiz `question`, `options` (for MCQ), `correct_answer_text`, and `explanation` in clear, accurate academic Arabic (you may include standard English technical acronyms in parentheses when appropriate). For `TRUE_FALSE` questions, still set `options` to `["True", "False"]` and `correct_option_index` to 0 or 1, while writing `question` and `explanation` in Arabic.
+     * If `en` (English): write all content in clear academic English.
+     * If `auto`: match the primary language of the chapter content.
+
+6. STUDENT EXAM FEEDBACK & HIGH-YIELD CALIBRATION:
    - When feedback indicates the topic is HEAVILY TESTED: Emphasize high-yield exam problem types, calculation steps, core formulas, and critical distinctions tested under exam conditions.
    - When feedback indicates the topic was RATED HARD: Ensure flashcards deliver crystal-clear intuitive breakdowns of tricky mechanisms, and quiz questions target common pitfalls with insightful explanations.
 
-6. OUTPUT FORMAT:
+7. OUTPUT FORMAT:
    - Output strictly valid JSON matching the schema, with no markdown formatting outside the JSON object.
 """
 
 USER_PROMPT_TEMPLATE = """
 Academic Course: {course_name}
 Target Chapter / Topic: {chapter_title}
+Target Output Language: {language}
 Key Subtopics: {subtopics}
 Quiz Format Requested: {quiz_type}
 Student Exam Feedback Calibration: {feedback_context}
@@ -64,5 +71,5 @@ Chapter Body Content & Excerpt:
 {source_excerpt}
 </content>
 
-Please generate EXACTLY {flashcards_per_topic} NotebookLM-style flashcards (with short 1-2 sentence answers under 35 words) and {questions_per_topic} exam quiz questions ({quiz_type}) for this chapter.
+Please generate EXACTLY {flashcards_per_topic} NotebookLM-style flashcards (with short 1-2 sentence answers under 35 words) and {questions_per_topic} exam quiz questions ({quiz_type}) in language `{language}` for this chapter.
 """

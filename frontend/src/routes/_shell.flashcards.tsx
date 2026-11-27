@@ -70,14 +70,21 @@ interface FlashcardItem {
   hint?: string;
 }
 
+function isRtlContent(text?: string, langHint?: string): boolean {
+  if (langHint === "ar") return true;
+  return Boolean(text && /[\u0600-\u06FF]/.test(text));
+}
+
 function Flashcards() {
-  const { refreshGamification } = useApp();
+  const { refreshGamification, lang } = useApp();
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [cards, setCards] = useState<FlashcardItem[]>([]);
   const [cardIndex, setCardIndex] = useState(0);
   const [flip, setFlip] = useState(false);
   const [kitId, setKitId] = useState<string | null>(null);
+  const [kitLang, setKitLang] = useState<"en" | "ar">(lang === "ar" ? "ar" : "en");
+  const [genLanguage, setGenLanguage] = useState<"en" | "ar">(lang === "ar" ? "ar" : "en");
   const [sessionCompleted, setSessionCompleted] = useState(false);
   const [sessionStats, setSessionStats] = useState({
     again: 0,
@@ -293,7 +300,7 @@ function Flashcards() {
       const payload = {
         course_id: typeof selectedCourse.id === "number" ? selectedCourse.id : undefined,
         course_name: selectedCourse.name,
-        language: "en",
+        language: genLanguage,
         topics: [
           {
             ref: topicObj?.id ? String(topicObj.id) : "1",
@@ -325,7 +332,7 @@ function Flashcards() {
           }));
         }
       } catch (err) {
-        console.warn("AI engine generation offline or failed, using high-yield template:", err);
+        console.warn("AI engine generation failed:", err);
       }
 
       // Strictly ensure flashcards are never fabricated without syllabus
@@ -341,11 +348,15 @@ function Flashcards() {
       const kitKey = chapterTitle.toLowerCase().trim();
       allKits[kitKey] = {
         kitId: serverKitId,
+        language: genLanguage,
         flashcards: newFlashcards,
         quiz: [],
       };
       saveUserTaskKits(allKits);
       localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(newFlashcards));
+      localStorage.setItem(`sg-${prefix}-active-kit-lang`, genLanguage);
+      localStorage.setItem("sg-active-kit-lang", genLanguage);
+      setKitLang(genLanguage);
       if (serverKitId) {
         localStorage.setItem(`sg-${prefix}-active-kit`, serverKitId);
         localStorage.setItem("sg-active-kit", serverKitId);
@@ -677,7 +688,10 @@ function Flashcards() {
               transition={{ duration: 0.5 }}
               className="relative h-80 w-full preserve-3d cursor-pointer text-left"
             >
-              <div className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl border bg-card p-10 shadow-soft backface-hidden text-center">
+              <div
+                dir={isRtlContent(currentCard?.q, kitLang) ? "rtl" : "ltr"}
+                className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl border bg-card p-10 shadow-soft backface-hidden text-center"
+              >
                 <span className="mb-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   QUESTION
                 </span>
@@ -688,7 +702,10 @@ function Flashcards() {
                   Click / Tap to flip
                 </span>
               </div>
-              <div className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl bg-gradient-magic p-10 text-primary-foreground shadow-glow backface-hidden [transform:rotateY(180deg)] text-center overflow-y-auto">
+              <div
+                dir={isRtlContent(currentCard?.a, kitLang) ? "rtl" : "ltr"}
+                className="absolute inset-0 flex flex-col items-center justify-center rounded-3xl bg-gradient-magic p-10 text-primary-foreground shadow-glow backface-hidden [transform:rotateY(180deg)] text-center overflow-y-auto"
+              >
                 <span className="mb-4 text-xs font-bold uppercase tracking-wider opacity-85">
                   ANSWER & EXPLANATION
                 </span>
@@ -766,6 +783,34 @@ function Flashcards() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 px-3 py-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                Language
+              </Label>
+              <div className="inline-flex items-center rounded-lg border border-border/70 bg-background p-0.5 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setGenLanguage("en")}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 transition",
+                    genLanguage === "en" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  English
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGenLanguage("ar")}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 transition",
+                    genLanguage === "ar" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  العربية (Arabic)
+                </button>
+              </div>
+            </div>
+
             {selectedCourse?.topics && selectedCourse.topics.length > 0 && (
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
