@@ -19,6 +19,14 @@ public record TopicInput(
     @JsonAlias({"is_hard", "isHard", "hard_topic", "hardTopic"})
     Boolean isHard
 ) {
+    public TopicInput {
+        isHeavilyTested = Boolean.TRUE.equals(isHeavilyTested);
+        isHard = Boolean.TRUE.equals(isHard);
+        if (subtopics == null) {
+            subtopics = List.of();
+        }
+    }
+
     public TopicInput(String ref, String chapterTitle, List<String> subtopics, String sourceExcerpt) {
         this(ref, chapterTitle, subtopics, sourceExcerpt, false, false);
     }

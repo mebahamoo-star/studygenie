@@ -363,12 +363,15 @@ function Flashcards() {
         course_id: typeof selectedCourse.id === "number" ? selectedCourse.id : undefined,
         course_name: selectedCourse.name,
         language: genLanguage,
+        quiz_type: "MIXED",
         topics: [
           {
             ref: topicObj?.id ? String(topicObj.id) : "1",
             chapter_title: chapterTitle,
             subtopics: topicObj?.subtopics || [chapterTitle],
             source_excerpt: sourceExcerpt,
+            is_heavily_tested: false,
+            is_hard: false,
           },
         ],
         flashcards_per_topic: sanitizedCount,

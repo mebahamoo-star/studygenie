@@ -40,6 +40,33 @@ public record GenerateStudyKitRequest(
     @JsonAlias({"course_id", "courseId"})
     Long courseId
 ) {
+    public GenerateStudyKitRequest {
+        if (quizType == null || quizType.isBlank()) {
+            quizType = "MIXED";
+        }
+        if (language == null || language.isBlank()) {
+            language = "auto";
+        }
+        if (flashcardsPerTopic <= 0) {
+            flashcardsPerTopic = 10;
+        }
+        if (questionsPerTopic <= 0) {
+            questionsPerTopic = 5;
+        }
+        if (topics != null) {
+            topics = topics.stream()
+                    .map(t -> t == null ? null : new TopicInput(
+                            t.ref(),
+                            t.chapterTitle(),
+                            t.subtopics(),
+                            t.sourceExcerpt(),
+                            Boolean.TRUE.equals(t.isHeavilyTested()),
+                            Boolean.TRUE.equals(t.isHard())
+                    ))
+                    .toList();
+        }
+    }
+
     public GenerateStudyKitRequest(String courseName, String language, List<TopicInput> topics, int flashcardsPerTopic, int questionsPerTopic) {
         this(courseName, language, topics, flashcardsPerTopic, questionsPerTopic, "MIXED", null, null);
     }

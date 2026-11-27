@@ -90,4 +90,31 @@ class StudyKitServiceTest {
 
         assertThrows(BadRequestException.class, () -> service.generateAndSave(req));
     }
+
+    @Test
+    void generateAndSave_normalizesNullFieldsInRequestAndTopics() {
+        TopicInput topicWithNulls = new TopicInput("t-1", "Chapter 1", null, "Excerpt", null, null);
+        assertNotNull(topicWithNulls.isHeavilyTested());
+        assertFalse(topicWithNulls.isHeavilyTested());
+        assertNotNull(topicWithNulls.isHard());
+        assertFalse(topicWithNulls.isHard());
+
+        GenerateStudyKitRequest req = new GenerateStudyKitRequest("Test Course", null, List.of(topicWithNulls), 0, 0, null, null, 1L);
+        assertEquals("MIXED", req.quizType());
+        assertEquals("auto", req.language());
+        assertEquals(10, req.flashcardsPerTopic());
+        assertEquals(5, req.questionsPerTopic());
+        assertFalse(req.topics().get(0).isHeavilyTested());
+        assertFalse(req.topics().get(0).isHard());
+
+        when(aiEngineClient.generateStudyKit(any())).thenReturn(new StudyKitResponseData(
+                List.of(new TopicKit("t-1", List.of(), List.of())),
+                List.of(),
+                null
+        ));
+
+        ClientStudyKitResponse kit = service.generateAndSave(req);
+        assertNotNull(kit);
+        assertEquals("Test Course", kit.courseName());
+    }
 }

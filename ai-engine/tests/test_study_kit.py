@@ -78,3 +78,34 @@ async def test_generate_study_kit_arabic_and_shuffled_options():
     assert mcq_a.options[mcq_a.correct_option_index] == mcq_a.correct_answer_text
     assert mcq_b.options[mcq_b.correct_option_index] == mcq_b.correct_answer_text
     assert mcq_a.options != mcq_b.options or mcq_a.correct_option_index >= 0
+
+
+def test_study_kit_request_null_fields_normalization():
+    # Validates that null values for booleans and quiz_type from clients are safely normalized
+    raw_payload = {
+        "course_name": "CS 101",
+        "quiz_type": None,
+        "language": None,
+        "topics": [
+            {
+                "ref": "topic-0",
+                "chapter_title": "Introduction",
+                "is_heavily_tested": None,
+                "is_hard": None,
+            },
+            {
+                "ref": "topic-1",
+                "chapter_title": "Recursion",
+                "is_heavily_tested": True,
+                "is_hard": False,
+            }
+        ]
+    }
+    req = GenerateStudyKitRequest.model_validate(raw_payload)
+    assert req.quiz_type == "MIXED"
+    assert req.language == "auto"
+    assert req.topics[0].is_heavily_tested is False
+    assert req.topics[0].is_hard is False
+    assert req.topics[1].is_heavily_tested is True
+    assert req.topics[1].is_hard is False
+

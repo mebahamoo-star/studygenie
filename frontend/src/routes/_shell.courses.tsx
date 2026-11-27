@@ -2134,10 +2134,13 @@ function JoinChallenge({
             chapter_title: t.name,
             subtopics: subLabels.length > 0 ? subLabels : [t.name],
             source_excerpt: richExcerpt,
+            is_heavily_tested: false,
+            is_hard: false,
           };
         }),
         flashcards_per_topic: Math.min(5, Math.max(2, Math.ceil(12 / selectedTopics.length))),
         questions_per_topic: 1,
+        quiz_type: "MIXED",
       };
 
       const res = await fetchApi<any>("/api/v1/study-kits/generate", {
