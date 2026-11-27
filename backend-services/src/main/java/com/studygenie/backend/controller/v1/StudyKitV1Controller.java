@@ -9,10 +9,9 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/study-kits")
@@ -38,5 +37,18 @@ public class StudyKitV1Controller {
 
         ClientStudyKitResponse data = studyKitService.generateAndSave(request);
         return ResponseEntity.ok(ApiResponse.ok("Study kit generated and saved successfully", data));
+    }
+
+    @Operation(summary = "List user study kits", description = "Returns persisted study kits for the authenticated user, optionally filtered by courseId.")
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<ClientStudyKitResponse>>> getStudyKits(
+            @RequestParam(required = false) Long courseId) {
+        return ResponseEntity.ok(ApiResponse.ok("Study kits retrieved", studyKitService.getKitsForUser(courseId)));
+    }
+
+    @Operation(summary = "Get study kit by ID", description = "Returns a persisted study kit owned by the authenticated user.")
+    @GetMapping("/{kitId}")
+    public ResponseEntity<ApiResponse<ClientStudyKitResponse>> getStudyKit(@PathVariable String kitId) {
+        return ResponseEntity.ok(ApiResponse.ok("Study kit retrieved", studyKitService.getKitById(kitId)));
     }
 }

@@ -130,7 +130,8 @@ public class JpaCardScheduleStore implements CardScheduleStore {
         return findByUserId(userId).stream()
                 .filter(cs -> {
                     Flashcard f = flashcardRepository.findById(parseIdSafe(cs.cardId())).orElse(null);
-                    return f != null && f.getTopic().getId().equals(topicId);
+                    return f != null && ((kitId != null && kitId.equals(f.getKitId()))
+                            || (f.getTopic() != null && f.getTopic().getId().equals(topicId)));
                 })
                 .collect(Collectors.toList());
     }

@@ -386,19 +386,28 @@ public class ExamFeedbackService {
      */
     @Transactional(readOnly = true)
     public GenerateStudyKitRequest enrichStudyKitRequest(GenerateStudyKitRequest request) {
-        CourseFeedbackSummary summary = getFeedbackSummary(request.courseName());
+        CourseFeedbackSummary summary = request.courseId() != null
+                ? getFeedbackSummary(request.courseId())
+                : getFeedbackSummary(request.courseName());
         if (summary.getTotalSubmissions() == 0) {
             return request;
         }
 
+        Set<Long> allowedCourseTopicIds = resolveCourseTopicIds(request.courseId());
         Set<Long> testedSet = new HashSet<>(summary.getHeavilyTestedTopicIds());
         Set<Long> hardSet = new HashSet<>(summary.getHardTopicIds());
+
+        if (allowedCourseTopicIds != null) {
+            testedSet.retainAll(allowedCourseTopicIds);
+            hardSet.retainAll(allowedCourseTopicIds);
+        }
 
         List<TopicInput> enrichedTopics = new ArrayList<>();
         for (TopicInput t : request.topics()) {
             Long topicId = parseNumericTopicRef(t.ref());
-            boolean isTested = t.isHeavilyTested() || (topicId != null && testedSet.contains(topicId));
-            boolean isHard = t.isHard() || (topicId != null && hardSet.contains(topicId));
+            boolean belongsToCourse = topicId != null && (allowedCourseTopicIds == null || allowedCourseTopicIds.contains(topicId));
+            boolean isTested = Boolean.TRUE.equals(t.isHeavilyTested()) || (belongsToCourse && testedSet.contains(topicId));
+            boolean isHard = Boolean.TRUE.equals(t.isHard()) || (belongsToCourse && hardSet.contains(topicId));
 
             enrichedTopics.add(new TopicInput(
                     t.ref(),
@@ -422,7 +431,8 @@ public class ExamFeedbackService {
                 request.flashcardsPerTopic(),
                 request.questionsPerTopic(),
                 request.quizType(),
-                diff
+                diff,
+                request.courseId()
         );
     }
 

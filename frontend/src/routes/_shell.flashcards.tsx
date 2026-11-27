@@ -116,40 +116,72 @@ function Flashcards() {
       toast.warning(`Cannot generate flashcards: Please upload the syllabus for "${course.name}" first.`);
     }
     setSelectedCourse(course);
+    setKitId(null);
     setCardIndex(0);
     setFlip(false);
     setSessionCompleted(false);
     setSessionStats({ again: 0, hard: 0, good: 0, easy: 0, totalPoints: 0 });
 
-    // 1. Check user-scoped kits for this course
-    const allKits = getUserTaskKits();
     const courseCards: FlashcardItem[] = [];
+    let resolvedKitId: string | null = null;
+    const isRealId = course.id && !String(course.id).startsWith("c-") && !String(course.id).startsWith("course-");
+
+    // 1. Load persisted study kits from server scoped by courseId
+    if (isRealId) {
+      try {
+        const serverKits = await studyService.getStudyKits(course.id);
+        if (Array.isArray(serverKits) && serverKits.length > 0) {
+          resolvedKitId = serverKits[0].kitId || null;
+          serverKits.forEach((sk: any) => {
+            (sk.topics || []).forEach((tk: any) => {
+              (tk.flashcards || []).forEach((fc: any) => {
+                if (fc.front && !courseCards.some((c) => c.id === fc.cardId || c.q === fc.front)) {
+                  courseCards.push({
+                    id: fc.cardId,
+                    q: fc.front,
+                    a: fc.back,
+                    chapter: tk.chapterTitle || course.name,
+                  });
+                }
+              });
+            });
+          });
+        }
+      } catch {}
+    }
+
+    // 2. Supplement/fallback from user-scoped local kits if server returned none
+    const allKits = getUserTaskKits();
     const courseNorm = (course.name || "").toLowerCase().trim();
     const courseIdStr = String(course.id || "");
     const topicNames = (course.topics || []).map((t) => (t.name || "").toLowerCase().trim());
 
-    // Filter kits that belong specifically to this course or its chapters
-    Object.entries(allKits).forEach(([key, kit]: [string, any]) => {
-      const kNorm = key.toLowerCase().trim();
-      const belongsToCourse =
-        kNorm.includes(courseNorm) ||
-        courseNorm.includes(kNorm) ||
-        kNorm.startsWith(courseIdStr) ||
-        topicNames.some((tName) => tName && (kNorm.includes(tName) || tName.includes(kNorm)));
+    if (courseCards.length === 0) {
+      Object.entries(allKits).forEach(([key, kit]: [string, any]) => {
+        const kNorm = key.toLowerCase().trim();
+        const belongsToCourse =
+          kNorm.includes(courseNorm) ||
+          courseNorm.includes(kNorm) ||
+          kNorm.startsWith(courseIdStr) ||
+          topicNames.some((tName) => tName && (kNorm.includes(tName) || tName.includes(kNorm)));
 
-      if (belongsToCourse && kit?.flashcards && Array.isArray(kit.flashcards)) {
-        kit.flashcards.forEach((f: any, idx: number) => {
-          if (!courseCards.some((c) => c.q === (f.q || f.front || f.question))) {
-            courseCards.push({
-              id: f.id || `${key}-${idx}`,
-              q: f.q || f.front || f.question,
-              a: f.a || f.back || f.answer,
-              chapter: f.chapter || key,
-            });
+        if (belongsToCourse && kit?.flashcards && Array.isArray(kit.flashcards)) {
+          if (!resolvedKitId && kit.kitId && !String(kit.kitId).startsWith("kit-") && !String(kit.kitId).startsWith("local-")) {
+            resolvedKitId = kit.kitId;
           }
-        });
-      }
-    });
+          kit.flashcards.forEach((f: any, idx: number) => {
+            if (!courseCards.some((c) => c.q === (f.q || f.front || f.question))) {
+              courseCards.push({
+                id: f.cardId || f.id || `${key}-${idx}`,
+                q: f.q || f.front || f.question,
+                a: f.a || f.back || f.answer,
+                chapter: f.chapter || key,
+              });
+            }
+          });
+        }
+      });
+    }
 
     // Fallback if no direct course kits match yet
     if (courseCards.length === 0) {
@@ -162,7 +194,7 @@ function Flashcards() {
             parsed.forEach((f: any, idx: number) => {
               if (!courseCards.some((c) => c.q === (f.q || f.front))) {
                 courseCards.push({
-                  id: f.id || `active-${idx}`,
+                  id: f.cardId || f.id || `active-${idx}`,
                   q: f.q || f.front,
                   a: f.a || f.back,
                   chapter: course.name,
@@ -172,7 +204,15 @@ function Flashcards() {
           }
         } catch {}
       }
+      if (!resolvedKitId) {
+        const activeKit = localStorage.getItem(`sg-${prefix}-active-kit`) || localStorage.getItem("sg-active-kit");
+        if (activeKit && !activeKit.startsWith("kit-") && !activeKit.startsWith("local-")) {
+          resolvedKitId = activeKit;
+        }
+      }
     }
+
+    setKitId(resolvedKitId);
 
     // STRICT LIMIT: strictly enforce requested deck limit (default 10)
     const targetSessionLimit = Math.min(25, Math.max(1, requestedCount || 10));
@@ -246,6 +286,7 @@ function Flashcards() {
       const sourceExcerpt = topicObj?.contentExcerpt || (topicObj?.subtopics ? `Key subtopics: ${topicObj.subtopics.join(", ")}` : undefined);
 
       const payload = {
+        course_id: typeof selectedCourse.id === "number" ? selectedCourse.id : undefined,
         course_name: selectedCourse.name,
         language: "en",
         topics: [
@@ -261,6 +302,7 @@ function Flashcards() {
       };
 
       let newFlashcards: FlashcardItem[] = [];
+      let serverKitId: string | null = null;
 
       try {
         const res = await fetchApi<any>("/api/v1/study-kits/generate", {
@@ -268,6 +310,7 @@ function Flashcards() {
           body: JSON.stringify(payload),
         });
 
+        serverKitId = res?.data?.kitId || null;
         if (res?.data?.topics?.[0]?.flashcards?.length) {
           newFlashcards = res.data.topics[0].flashcards.slice(0, sanitizedCount).map((f: any, idx: number) => ({
             id: f.cardId || f.id || `gen-${Date.now()}-${idx}`,
@@ -287,17 +330,22 @@ function Flashcards() {
         return;
       }
 
-      // Save to user storage
+      // Save to user storage with real server kitId
       const prefix = getUserStoragePrefix();
       const allKits = getUserTaskKits();
       const kitKey = chapterTitle.toLowerCase().trim();
       allKits[kitKey] = {
-        kitId: `kit-${Date.now()}`,
+        kitId: serverKitId,
         flashcards: newFlashcards,
         quiz: [],
       };
       saveUserTaskKits(allKits);
       localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(newFlashcards));
+      if (serverKitId) {
+        localStorage.setItem(`sg-${prefix}-active-kit`, serverKitId);
+        localStorage.setItem("sg-active-kit", serverKitId);
+        setKitId(serverKitId);
+      }
 
       newFlashcards = newFlashcards.slice(0, sanitizedCount);
       setCards(newFlashcards);

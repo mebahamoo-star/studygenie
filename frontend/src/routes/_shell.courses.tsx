@@ -2010,6 +2010,7 @@ function JoinChallenge({
       const hardSet = new Set((courseFeedback?.hardTopicIds || []).map(Number));
 
       const payload = {
+        course_id: typeof course.id === "number" ? course.id : undefined,
         course_name: course.name,
         course_difficulty: courseFeedback.dominantDifficulty,
         language: "en",
@@ -2227,6 +2228,7 @@ function JoinChallenge({
     setLoadingCards(true);
     try {
       const payload = {
+        course_id: typeof course.id === "number" ? course.id : undefined,
         course_name: course.name,
         language: "en",
         topics: selectedTopics.map((t, idx) => ({
@@ -2240,11 +2242,13 @@ function JoinChallenge({
       };
 
       let generatedCards: any[] = [];
+      let serverKitId: string | null = null;
       try {
         const res = await fetchApi<any>("/api/v1/study-kits/generate", {
           method: "POST",
           body: JSON.stringify(payload),
         });
+        serverKitId = res?.data?.kitId || null;
         if (res?.data?.topics) {
           res.data.topics.forEach((tk: any) => {
             (tk.flashcards || []).forEach((fc: any, fcIdx: number) => {
@@ -2252,7 +2256,7 @@ function JoinChallenge({
                 id: fc.cardId || `fc-${Date.now()}-${fcIdx}`,
                 q: fc.front || fc.question || fc.q,
                 a: fc.back || fc.answer || fc.a,
-                chapter: tk.ref || course.name,
+                chapter: tk.chapterTitle || tk.ref || course.name,
               });
             });
           });
@@ -2291,11 +2295,15 @@ function JoinChallenge({
       const prefix = getUserStoragePrefix();
       localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(generatedCards));
       localStorage.setItem("sg-active-cards", JSON.stringify(generatedCards));
+      if (serverKitId) {
+        localStorage.setItem(`sg-${prefix}-active-kit`, serverKitId);
+        localStorage.setItem("sg-active-kit", serverKitId);
+      }
 
       const allKits = getUserTaskKits();
       const kitKey = course.name.toLowerCase().trim();
       allKits[kitKey] = {
-        kitId: `kit-${Date.now()}`,
+        kitId: serverKitId,
         flashcards: generatedCards,
         quiz: [],
       };

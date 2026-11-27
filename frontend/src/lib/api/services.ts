@@ -552,6 +552,20 @@ export const studyService = {
     return res.data;
   },
 
+  async getStudyKits(courseId?: number | string): Promise<any[]> {
+    const query =
+      courseId !== undefined && courseId !== null && !isNaN(Number(courseId))
+        ? `?courseId=${Number(courseId)}`
+        : "";
+    const res = await fetchApi<any[]>(`/api/v1/study-kits${query}`);
+    return res.data || [];
+  },
+
+  async getStudyKit(kitId: string): Promise<any> {
+    const res = await fetchApi<any>(`/api/v1/study-kits/${encodeURIComponent(kitId)}`);
+    return res.data;
+  },
+
   async getDueCards(kitId: string | number, limit?: number): Promise<any[]> {
     const query = limit ? `?limit=${limit}` : "";
 

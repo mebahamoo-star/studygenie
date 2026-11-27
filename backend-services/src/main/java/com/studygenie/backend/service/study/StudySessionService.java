@@ -2,12 +2,19 @@ package com.studygenie.backend.service.study;
 
 import com.studygenie.backend.config.StudyLogicProperties;
 import com.studygenie.backend.dto.study.*;
+import com.studygenie.backend.entity.QuizAttempt;
+import com.studygenie.backend.entity.QuizQuestion;
+import com.studygenie.backend.entity.Student;
 import com.studygenie.backend.enums.ActionType;
 import com.studygenie.backend.event.UserActionCompletedEvent;
 import com.studygenie.backend.exception.ResourceNotFoundException;
+import com.studygenie.backend.repository.QuizAttemptRepository;
+import com.studygenie.backend.repository.QuizQuestionRepository;
+import com.studygenie.backend.repository.StudentRepository;
 import com.studygenie.backend.service.port.CardScheduleStore;
 import com.studygenie.backend.service.port.StudyKitStore;
 import com.studygenie.backend.service.port.SubmissionLog;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -26,17 +33,32 @@ public class StudySessionService {
     private final StudyLogicProperties properties;
     private final Clock clock;
     private final ApplicationEventPublisher publisher;
+    private final QuizAttemptRepository quizAttemptRepository;
+    private final QuizQuestionRepository quizQuestionRepository;
+    private final StudentRepository studentRepository;
 
     public static final ThreadLocal<com.studygenie.backend.enums.ReviewRating> currentReviewRating = new ThreadLocal<>();
 
     public StudySessionService(StudyKitStore kitStore, CardScheduleStore scheduleStore, SubmissionLog submissionLog,
                                StudyLogicProperties properties, Clock clock, ApplicationEventPublisher publisher) {
+        this(kitStore, scheduleStore, submissionLog, properties, clock, publisher, null, null, null);
+    }
+
+    @Autowired
+    public StudySessionService(StudyKitStore kitStore, CardScheduleStore scheduleStore, SubmissionLog submissionLog,
+                               StudyLogicProperties properties, Clock clock, ApplicationEventPublisher publisher,
+                               @Autowired(required = false) QuizAttemptRepository quizAttemptRepository,
+                               @Autowired(required = false) QuizQuestionRepository quizQuestionRepository,
+                               @Autowired(required = false) StudentRepository studentRepository) {
         this.kitStore = kitStore;
         this.scheduleStore = scheduleStore;
         this.submissionLog = submissionLog;
         this.properties = properties;
         this.clock = clock;
         this.publisher = publisher;
+        this.quizAttemptRepository = quizAttemptRepository;
+        this.quizQuestionRepository = quizQuestionRepository;
+        this.studentRepository = studentRepository;
     }
 
     public ReviewResponse reviewCards(Long userId, String kitId, ReviewRequest request) {
@@ -187,6 +209,8 @@ public class StudySessionService {
                 results.add(new QuizSubmissionResponse.QuestionResult(
                         q.questionId(), isCorrect, q.correctOptionIndex(), expectedText, q.explanation()));
             }
+
+            persistQuizAttempt(userId, kitId, q.questionId(), answer.selectedOptionIndex(), answer.answerText(), isCorrect);
         }
 
         // Unanswered questions are implicitly wrong. The total comes from the kit.
@@ -301,5 +325,41 @@ public class StudySessionService {
                 .replaceAll("[^a-zA-Z0-9\\s]", "")
                 .replaceAll("\\s+", " ")
                 .trim();
+    }
+
+    private void persistQuizAttempt(
+            Long userId,
+            String kitId,
+            String questionId,
+            Integer selectedOption,
+            String answerText,
+            boolean isCorrect) {
+        if (quizAttemptRepository == null || quizQuestionRepository == null || studentRepository == null) {
+            return;
+        }
+        Optional<Student> studentOpt = studentRepository.findById(userId);
+        if (studentOpt.isEmpty()) {
+            return;
+        }
+        Optional<QuizQuestion> questionOpt = Optional.empty();
+        if (questionId != null) {
+            try {
+                questionOpt = quizQuestionRepository.findById(Long.parseLong(questionId.trim()));
+            } catch (NumberFormatException ignored) {}
+            if (questionOpt.isEmpty()) {
+                questionOpt = quizQuestionRepository.findFirstByKitIdAndExternalId(kitId, questionId);
+            }
+        }
+        if (questionOpt.isEmpty()) {
+            return;
+        }
+        QuizAttempt attempt = QuizAttempt.builder()
+                .student(studentOpt.get())
+                .question(questionOpt.get())
+                .selectedOption(selectedOption)
+                .answerText(answerText)
+                .isCorrect(isCorrect)
+                .build();
+        quizAttemptRepository.save(attempt);
     }
 }
