@@ -49,6 +49,21 @@ public class QuizQuestion {
     @Column(name = "explanation", columnDefinition = "TEXT")
     private String explanation;
 
+    @Column(name = "kit_id", length = 64)
+    private String kitId;
+
+    @Column(name = "topic_ref", length = 64)
+    private String topicRef;
+
+    @Column(name = "chapter_title", length = 255)
+    private String chapterTitle;
+
+    @Column(name = "student_id")
+    private Long studentId;
+
+    @Column(name = "external_id", length = 64)
+    private String externalId;
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

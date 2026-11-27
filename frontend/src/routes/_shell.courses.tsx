@@ -35,6 +35,7 @@ import { pageHead } from "@/lib/head";
 import { browseService, syllabusService, examService } from "@/lib/api/services";
 
 import { fetchApi, getStoredAccessToken } from "@/lib/api/client";
+import { useApp } from "@/lib/app-state";
 
 import { deduplicateTopics, getUserCourses, saveUserCourses, getUserTaskKits, saveUserTaskKits, getUserStoragePrefix, toLocalDateStr, getActiveCourse, saveActiveCourse, getActivePlan, saveActivePlan, getUserAcademicProfile, isCourseMaterialUploaded } from "@/lib/courses-util";
 import { postExamApi } from "@/features/post-exam/api/postExamApi";
@@ -1680,6 +1681,8 @@ function JoinChallenge({
 }) {
 
   const nav = useNavigate();
+  const { lang } = useApp();
+  const [kitLanguage, setKitLanguage] = useState<"en" | "ar">(lang === "ar" ? "ar" : "en");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -2010,17 +2013,27 @@ function JoinChallenge({
       const hardSet = new Set((courseFeedback?.hardTopicIds || []).map(Number));
 
       const payload = {
+        course_id: typeof course.id === "number" ? course.id : undefined,
         course_name: course.name,
         course_difficulty: courseFeedback.dominantDifficulty,
-        language: "en",
+        language: kitLanguage,
         quiz_type: quizType,
         topics: selectedTopics.map((t, idx) => {
           const topicId = Number(t.id || idx + 1);
+          const extracted = extractTopicSubtopics(t, idx);
+          const subLabels =
+            t.subtopics && t.subtopics.length > 0
+              ? t.subtopics.map((s: any) => (typeof s === "object" && s?.title ? s.title : String(s)))
+              : extracted.map((s) => s.title);
+          const richExcerpt =
+            t.contentExcerpt ||
+            extracted.map((s) => `${s.title}: ${s.explanation}`).join("\n\n") ||
+            undefined;
           return {
             ref: String(t.id || idx + 1),
             chapter_title: t.name,
-            subtopics: t.subtopics && t.subtopics.length > 0 ? t.subtopics : [t.name],
-            source_excerpt: t.contentExcerpt || (t.subtopics ? t.subtopics.join(". ") : undefined),
+            subtopics: subLabels.length > 0 ? subLabels : [t.name],
+            source_excerpt: richExcerpt,
             is_heavily_tested: testedSet.has(topicId),
             is_hard: hardSet.has(topicId),
           };
@@ -2029,175 +2042,51 @@ function JoinChallenge({
         questions_per_topic: Math.min(6, Math.max(3, Math.ceil(12 / selectedTopics.length))),
       };
 
-      let generatedQuestions: any[] = [];
-      let kitId: string | null = null;
-      try {
-        const res = await fetchApi<any>("/api/v1/study-kits/generate", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        kitId = res?.data?.id || res?.data?.kitId || null;
-        if (res?.data?.topics) {
-          res.data.topics.forEach((tk: any) => {
-            (tk.quiz || []).forEach((q: any, qIdx: number) => {
-              const qType = (q.type || "MCQ").toUpperCase();
-              let answer = 0;
-              let correctAnswerText: string | undefined = q.correctAnswerText || undefined;
-              let options = q.options || [];
+      const res = await fetchApi<any>("/api/v1/study-kits/generate", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const kitId: string | null = res?.data?.id || res?.data?.kitId || null;
+      const generatedQuestions: any[] = [];
+      if (res?.data?.topics) {
+        res.data.topics.forEach((tk: any) => {
+          (tk.quiz || []).forEach((q: any, qIdx: number) => {
+            const qType = (q.type || "MCQ").toUpperCase();
+            const options = qType === "TRUE_FALSE" ? ["True", "False"] : qType === "SHORT_ANSWER" ? [] : (q.options || []);
 
-              if (qType === "TRUE_FALSE") {
-                options = ["True", "False"];
-                answer = typeof q.correctOptionIndex === "number" ? q.correctOptionIndex : (typeof q.answer === "number" ? q.answer : 0);
-                correctAnswerText = answer === 1 ? "False" : "True";
-              } else if (qType === "SHORT_ANSWER") {
-                options = [];
-                correctAnswerText = q.correctAnswerText || (q.options && q.options[0]) || "";
-                answer = 0;
-              } else {
-                answer = typeof q.correctOptionIndex === "number" ? q.correctOptionIndex : (typeof q.answer === "number" ? q.answer : 0);
-                correctAnswerText = options[answer] || "";
-              }
-
-              generatedQuestions.push({
-                id: q.questionId || `q-${Date.now()}-${qIdx}`,
-                type: qType,
-                q: q.question || q.q,
-                options,
-                answer,
-                correctAnswerText,
-                explain: q.explain || q.explanation || `Key takeaway from ${tk.ref || "chapter concepts"}.`,
-              });
+            generatedQuestions.push({
+              id: q.questionId || `q-${Date.now()}-${qIdx}`,
+              type: qType,
+              q: q.question || q.q,
+              options,
+              chapter: tk.chapterTitle || tk.ref || course.name,
             });
           });
-        }
-      } catch (e) {
-        console.warn("Backend study-kits call failed:", e);
-      }
-
-      if (generatedQuestions.length === 0) {
-        selectedTopics.forEach((st, idx) => {
-          const sub = st.subtopics && st.subtopics[0] ? st.subtopics[0] : st.name;
-          const sub2 = st.subtopics && st.subtopics.length > 1 ? st.subtopics[1] : `principles of ${st.name}`;
-
-          if (quizType === "TRUE_FALSE") {
-            generatedQuestions.push({
-              id: `q-tf-${idx}-1`,
-              type: "TRUE_FALSE",
-              q: `True or False: In ${st.name}, ${sub} is a foundational concept.`,
-              options: ["True", "False"],
-              answer: 0,
-              correctAnswerText: "True",
-              explain: `Extracted directly from syllabus topic "${st.name}".`,
-            });
-            generatedQuestions.push({
-              id: `q-tf-${idx}-2`,
-              type: "TRUE_FALSE",
-              q: `True or False: The topic ${st.name} completely excludes the study of ${sub2}.`,
-              options: ["True", "False"],
-              answer: 1,
-              correctAnswerText: "False",
-              explain: `${sub2} is explicitly listed as a key component under ${st.name}.`,
-            });
-          } else if (quizType === "SHORT_ANSWER") {
-            generatedQuestions.push({
-              id: `q-sa-${idx}-1`,
-              type: "SHORT_ANSWER",
-              q: `In the study of ${st.name}, what primary concept or mechanism is represented by ${sub}?`,
-              options: [],
-              answer: 0,
-              correctAnswerText: sub,
-              explain: `Key terminology from ${st.name}.`,
-            });
-            generatedQuestions.push({
-              id: `q-sa-${idx}-2`,
-              type: "SHORT_ANSWER",
-              q: `Name a key subtopic or mechanism studied within ${st.name}.`,
-              options: [],
-              answer: 0,
-              correctAnswerText: sub2,
-              explain: `Extracted from core concepts of ${st.name}.`,
-            });
-          } else if (quizType === "MCQ") {
-            generatedQuestions.push({
-              id: `q-mcq-${idx}-1`,
-              type: "MCQ",
-              q: `Which concept is a core component of "${st.name}"?`,
-              options: [
-                sub,
-                `Inverted logic of ${st.name}`,
-                `Unrelated legacy protocol`,
-                `None of the above`,
-              ],
-              answer: 0,
-              correctAnswerText: sub,
-              explain: `Based on your course syllabus for ${st.name}.`,
-            });
-            generatedQuestions.push({
-              id: `q-mcq-${idx}-2`,
-              type: "MCQ",
-              q: `In the context of ${st.name}, what is the significance of "${sub2}"?`,
-              options: [
-                `It establishes foundational principles for ${st.name}`,
-                `It is deprecated syntax`,
-                `It is only used in peripheral architectures`,
-                `No relevant relationship`,
-              ],
-              answer: 0,
-              correctAnswerText: `It establishes foundational principles for ${st.name}`,
-              explain: `Extracted directly from syllabus concepts in ${st.name}.`,
-            });
-          } else {
-            // MIXED
-            generatedQuestions.push({
-              id: `q-mix-mcq-${idx}`,
-              type: "MCQ",
-              q: `Which concept is a core component of "${st.name}"?`,
-              options: [
-                sub,
-                `Inverted logic of ${st.name}`,
-                `Unrelated legacy protocol`,
-                `None of the above`,
-              ],
-              answer: 0,
-              correctAnswerText: sub,
-              explain: `Based on your course syllabus for ${st.name}.`,
-            });
-            generatedQuestions.push({
-              id: `q-mix-tf-${idx}`,
-              type: "TRUE_FALSE",
-              q: `True or False: In ${st.name}, ${sub} is an active concept.`,
-              options: ["True", "False"],
-              answer: 0,
-              correctAnswerText: "True",
-              explain: `Directly covered in ${st.name}.`,
-            });
-            generatedQuestions.push({
-              id: `q-mix-sa-${idx}`,
-              type: "SHORT_ANSWER",
-              q: `What primary subject is covered in "${st.name}" alongside ${sub}?`,
-              options: [],
-              answer: 0,
-              correctAnswerText: sub2,
-              explain: `Identified directly from syllabus outline for ${st.name}.`,
-            });
-          }
         });
       }
 
       if (generatedQuestions.length === 0) {
-        toast.error("Could not generate quiz questions from selected chapters.");
+        toast.error("Could not generate quiz questions from the course syllabus. Please check your syllabus content and try again.");
         return;
       }
 
       const prefix = getUserStoragePrefix();
       saveActiveCourse(course);
-      localStorage.setItem("sg-active-course-id", course.id);
-      localStorage.setItem("sg-active-course-name", course.name);
-      localStorage.setItem(`sg-${prefix}-active-course-id`, course.id);
-      localStorage.setItem(`sg-${prefix}-active-course-name`, course.name);
-      localStorage.setItem("sg-active-quiz", JSON.stringify(generatedQuestions));
-      localStorage.setItem(`sg-${prefix}-active-quiz`, JSON.stringify(generatedQuestions));
+      localStorage.setItem(`sg-${prefix}-selected-quiz-course-id`, String(course.id));
+      localStorage.setItem("sg-active-kit-lang", kitLanguage);
+      localStorage.setItem(`sg-${prefix}-active-kit-lang`, kitLanguage);
+
+      const courseQuizEntry = {
+        kitId,
+        courseId: course.id,
+        courseName: course.name,
+        chapterTitle: selectedTopics.map((t) => t.name).join(", "),
+        language: kitLanguage,
+        questions: generatedQuestions,
+      };
+      localStorage.setItem(`sg-${prefix}-course-quiz-${course.id}`, JSON.stringify(courseQuizEntry));
       if (kitId) {
+        localStorage.setItem(`sg-${prefix}-course-kit-${course.id}`, kitId);
         localStorage.setItem("sg-active-kit", kitId);
         localStorage.setItem(`sg-${prefix}-active-kit`, kitId);
       }
@@ -2212,7 +2101,7 @@ function JoinChallenge({
       toast.success(`Generated ${generatedQuestions.length} ${typeLabel} questions! ✨`);
       nav({ to: "/quiz" });
     } catch (err: any) {
-      toast.error(err?.message || "Failed to generate quiz.");
+      toast.error(err?.message || "Failed to generate quiz from syllabus. Please try again.");
     } finally {
       setLoadingQuiz(false);
     }
@@ -2227,75 +2116,73 @@ function JoinChallenge({
     setLoadingCards(true);
     try {
       const payload = {
+        course_id: typeof course.id === "number" ? course.id : undefined,
         course_name: course.name,
-        language: "en",
-        topics: selectedTopics.map((t, idx) => ({
-          ref: String(t.id || idx + 1),
-          chapter_title: t.name,
-          subtopics: t.subtopics && t.subtopics.length > 0 ? t.subtopics : [t.name],
-          source_excerpt: t.contentExcerpt || (t.subtopics ? t.subtopics.join(". ") : undefined),
-        })),
+        language: kitLanguage,
+        topics: selectedTopics.map((t, idx) => {
+          const extracted = extractTopicSubtopics(t, idx);
+          const subLabels =
+            t.subtopics && t.subtopics.length > 0
+              ? t.subtopics.map((s: any) => (typeof s === "object" && s?.title ? s.title : String(s)))
+              : extracted.map((s) => s.title);
+          const richExcerpt =
+            t.contentExcerpt ||
+            extracted.map((s) => `${s.title}: ${s.explanation}`).join("\n\n") ||
+            undefined;
+          return {
+            ref: String(t.id || idx + 1),
+            chapter_title: t.name,
+            subtopics: subLabels.length > 0 ? subLabels : [t.name],
+            source_excerpt: richExcerpt,
+            is_heavily_tested: false,
+            is_hard: false,
+          };
+        }),
         flashcards_per_topic: Math.min(5, Math.max(2, Math.ceil(12 / selectedTopics.length))),
         questions_per_topic: 1,
+        quiz_type: "MIXED",
       };
 
-      let generatedCards: any[] = [];
-      try {
-        const res = await fetchApi<any>("/api/v1/study-kits/generate", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        if (res?.data?.topics) {
-          res.data.topics.forEach((tk: any) => {
-            (tk.flashcards || []).forEach((fc: any, fcIdx: number) => {
-              generatedCards.push({
-                id: fc.cardId || `fc-${Date.now()}-${fcIdx}`,
-                q: fc.front || fc.question || fc.q,
-                a: fc.back || fc.answer || fc.a,
-                chapter: tk.ref || course.name,
-              });
+      const res = await fetchApi<any>("/api/v1/study-kits/generate", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const serverKitId: string | null = res?.data?.kitId || null;
+      const generatedCards: any[] = [];
+      if (res?.data?.topics) {
+        res.data.topics.forEach((tk: any) => {
+          (tk.flashcards || []).forEach((fc: any, fcIdx: number) => {
+            generatedCards.push({
+              id: fc.cardId || `fc-${Date.now()}-${fcIdx}`,
+              q: fc.front || fc.question || fc.q,
+              a: fc.back || fc.answer || fc.a,
+              chapter: tk.chapterTitle || tk.ref || course.name,
             });
           });
-        }
-      } catch (e) {
-        console.warn("Backend study-kits call failed:", e);
-      }
-
-      if (generatedCards.length === 0) {
-        selectedTopics.forEach((st, idx) => {
-          if (st.subtopics && st.subtopics.length > 0) {
-            st.subtopics.forEach((sub, subIdx) => {
-              generatedCards.push({
-                id: `fc-gen-${idx}-${subIdx}`,
-                q: `What is the key principle of: ${sub}?`,
-                a: `A core concept covered in ${st.name} focusing on foundational application and theory.`,
-                chapter: st.name,
-              });
-            });
-          } else {
-            generatedCards.push({
-              id: `fc-gen-${idx}-0`,
-              q: `What is the primary objective of studying "${st.name}"?`,
-              a: `Mastering the theoretical principles and practical application as outlined in the course syllabus.`,
-              chapter: st.name,
-            });
-          }
         });
       }
 
       if (generatedCards.length === 0) {
-        toast.error("Could not generate flashcards from selected chapters.");
+        toast.error("Could not generate flashcards from the course syllabus. Please check your syllabus content and try again.");
         return;
       }
 
       const prefix = getUserStoragePrefix();
-      localStorage.setItem(`sg-${prefix}-active-cards`, JSON.stringify(generatedCards));
-      localStorage.setItem("sg-active-cards", JSON.stringify(generatedCards));
+      saveActiveCourse(course);
+      localStorage.setItem("sg-active-kit-lang", kitLanguage);
+      localStorage.setItem(`sg-${prefix}-active-kit-lang`, kitLanguage);
+      if (serverKitId) {
+        localStorage.setItem(`sg-${prefix}-course-kit-${course.id}`, serverKitId);
+        localStorage.setItem(`sg-${prefix}-active-kit`, serverKitId);
+        localStorage.setItem("sg-active-kit", serverKitId);
+      }
 
       const allKits = getUserTaskKits();
-      const kitKey = course.name.toLowerCase().trim();
+      const kitKey = `course-${String(course.id)}`;
       allKits[kitKey] = {
-        kitId: `kit-${Date.now()}`,
+        kitId: serverKitId,
+        courseId: course.id,
+        language: kitLanguage,
         flashcards: generatedCards,
         quiz: [],
       };
@@ -2304,7 +2191,7 @@ function JoinChallenge({
       toast.success(`Generated ${generatedCards.length} flashcards from ${selectedTopics.length} chapters! ✨`);
       nav({ to: "/flashcards" });
     } catch (err: any) {
-      toast.error(err?.message || "Failed to generate flashcards.");
+      toast.error(err?.message || "Failed to generate flashcards from syllabus. Please try again.");
     } finally {
       setLoadingCards(false);
     }
@@ -3296,6 +3183,29 @@ function JoinChallenge({
             Generate Plan ({selectedChapterIds.size})
           </Button>
 
+          <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/40 p-0.5 text-xs font-bold" role="group" aria-label="Study kit language">
+            <button
+              type="button"
+              onClick={() => setKitLanguage("en")}
+              className={cn(
+                "rounded-md px-2 py-1 transition",
+                kitLanguage === "en" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setKitLanguage("ar")}
+              className={cn(
+                "rounded-md px-2 py-1 transition",
+                kitLanguage === "ar" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              AR العربية
+            </button>
+          </div>
+
           <Button
             size="sm"
             variant="outline"
@@ -4207,9 +4117,35 @@ function JoinChallenge({
               <Sparkles className="h-5 w-5 text-amber-500" /> Choose Quiz Format
             </DialogTitle>
             <DialogDescription>
-              Select the question format to practice for {selectedChapterIds.size} selected chapter{selectedChapterIds.size > 1 ? "s" : ""}.
+              Select the question format and language to practice for {selectedChapterIds.size} selected chapter{selectedChapterIds.size > 1 ? "s" : ""}.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 px-3 py-2">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Output Language</span>
+            <div className="inline-flex items-center rounded-lg border border-border/70 bg-background p-0.5 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setKitLanguage("en")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 transition",
+                  kitLanguage === "en" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                English
+              </button>
+              <button
+                type="button"
+                onClick={() => setKitLanguage("ar")}
+                className={cn(
+                  "rounded-md px-2.5 py-1 transition",
+                  kitLanguage === "ar" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                العربية (Arabic)
+              </button>
+            </div>
+          </div>
 
           <div className="grid gap-2.5 py-2">
             <button

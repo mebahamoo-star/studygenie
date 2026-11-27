@@ -103,6 +103,26 @@ public class StudySessionController {
         return ResponseEntity.ok(ApiResponse.ok("Progress retrieved", response));
     }
 
+    @Operation(summary = "Get quiz questions", description = "Fetches quiz questions for a study kit without revealing correct answers before submission.")
+    @GetMapping("/quiz")
+    public ResponseEntity<ApiResponse<List<ClientQuizQuestion>>> getQuizQuestions(@PathVariable String kitId) {
+        List<ClientQuizQuestion> questions = studySessionService.getQuizQuestions(getUserId(), kitId);
+        return ResponseEntity.ok(ApiResponse.ok("Quiz questions retrieved", questions));
+    }
+
+    @Operation(summary = "Check single quiz answer", description = "Grades a single quiz answer on the server and returns correctness with explanation.")
+    @PostMapping("/quiz-check")
+    public ResponseEntity<ApiResponse<QuizSubmissionResponse.QuestionResult>> checkQuizAnswer(
+            @PathVariable String kitId,
+            @Valid @RequestBody QuizSubmissionRequest.QuizAnswer answer) {
+        try {
+            QuizSubmissionResponse.QuestionResult result = studySessionService.checkQuestion(getUserId(), kitId, answer);
+            return ResponseEntity.ok(ApiResponse.ok("Question graded", result));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
     private Long getUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null) {

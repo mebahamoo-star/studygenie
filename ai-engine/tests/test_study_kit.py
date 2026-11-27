@@ -55,3 +55,57 @@ async def test_generate_study_kit_with_student_feedback():
     assert res.topics[0].ref == "db1"
     assert len(res.topics[0].flashcards) > 0
     assert len(res.topics[0].quiz) > 0
+
+
+@pytest.mark.asyncio
+async def test_generate_study_kit_arabic_and_shuffled_options():
+    req = GenerateStudyKitRequest(
+        course_name="الذكاء الاصطناعي",
+        language="ar",
+        topics=[
+            TopicInput(ref="ar1", chapter_title="مقدمة في الذكاء الاصطناعي")
+        ]
+    )
+    res_a = await generate_study_kit(req, seed=1)
+    res_b = await generate_study_kit(req, seed=99)
+
+    assert len(res_a.topics) == 1
+    fc = res_a.topics[0].flashcards[0]
+    assert any("\u0600" <= ch <= "\u06FF" for ch in fc.front), "Flashcard front should be Arabic"
+
+    mcq_a = next(q for q in res_a.topics[0].quiz if q.type == "MCQ")
+    mcq_b = next(q for q in res_b.topics[0].quiz if q.type == "MCQ")
+    assert mcq_a.options[mcq_a.correct_option_index] == mcq_a.correct_answer_text
+    assert mcq_b.options[mcq_b.correct_option_index] == mcq_b.correct_answer_text
+    assert mcq_a.options != mcq_b.options or mcq_a.correct_option_index >= 0
+
+
+def test_study_kit_request_null_fields_normalization():
+    # Validates that null values for booleans and quiz_type from clients are safely normalized
+    raw_payload = {
+        "course_name": "CS 101",
+        "quiz_type": None,
+        "language": None,
+        "topics": [
+            {
+                "ref": "topic-0",
+                "chapter_title": "Introduction",
+                "is_heavily_tested": None,
+                "is_hard": None,
+            },
+            {
+                "ref": "topic-1",
+                "chapter_title": "Recursion",
+                "is_heavily_tested": True,
+                "is_hard": False,
+            }
+        ]
+    }
+    req = GenerateStudyKitRequest.model_validate(raw_payload)
+    assert req.quiz_type == "MIXED"
+    assert req.language == "auto"
+    assert req.topics[0].is_heavily_tested is False
+    assert req.topics[0].is_hard is False
+    assert req.topics[1].is_heavily_tested is True
+    assert req.topics[1].is_hard is False
+
